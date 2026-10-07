@@ -437,7 +437,8 @@ resolve_auto_phases() {
       --fallback-path .github/workflows/backend-e2e.yml \
       --fallback-path .github/workflows/frontend-e2e.yml \
       --fallback-path docs/development-runbook.md \
-      --fallback-path compose.full.yml
+      --fallback-path compose.full.yml \
+      --fallback-path compose.pilot.yml
   )"
   printf '%s\n' "${collect_output}"
   changed_files_resolve_source="$(printf '%s\n' "${collect_output}" | awk -F= '$1=="resolve_source"{print $2}')"
@@ -452,7 +453,7 @@ resolve_auto_phases() {
     return 0
   fi
 
-  if grep -Eq '^(scripts/|\.github/workflows/|docs/development-runbook\.md$|compose\.full\.yml$)' "${changed_files_path}"; then
+  if grep -Eq '^(scripts/|\.github/workflows/|docs/development-runbook\.md$|compose\.(full|pilot)\.yml$)' "${changed_files_path}"; then
     RESOLVED_PHASES=(backend frontend tooling hygiene)
     resolved_phase_csv="$(join_resolved_phases)"
     echo "resolved_phases=${resolved_phase_csv}"

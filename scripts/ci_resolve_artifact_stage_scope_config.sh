@@ -51,7 +51,7 @@ fi
 case "${scope}" in
   backend)
     changed_files_path="${prefix}.github/backend-e2e-changed-files.txt"
-    path_regex='^(backend/|compose\.full\.yml$|\.github/workflows/backend-e2e\.yml$)'
+    path_regex='^(backend/|compose\.(full|pilot)\.yml$|\.github/workflows/backend-e2e\.yml$)'
     pr_ref_regex='^(refs/pull/[0-9]+/merge)$'
     guard_label='backend-e2e-artifact-stage'
     summary_heading='### backend-e2e artifact strict policy'
@@ -60,12 +60,13 @@ case "${scope}" in
     fallback_paths=(
       "backend/"
       "compose.full.yml"
+      "compose.pilot.yml"
       ".github/workflows/backend-e2e.yml"
     )
     ;;
   frontend)
     changed_files_path="${prefix}.github/frontend-e2e-changed-files.txt"
-    path_regex='^(frontend/|backend/|compose\.full\.yml$|\.github/workflows/frontend-e2e\.yml$)'
+    path_regex='^(frontend/|backend/|compose\.(full|pilot)\.yml$|\.github/workflows/frontend-e2e\.yml$)'
     pr_ref_regex='^(refs/pull/[0-9]+/merge)$'
     guard_label='frontend-e2e-artifact-stage'
     summary_heading='### frontend-e2e artifact strict policy'
@@ -75,6 +76,7 @@ case "${scope}" in
       "frontend/"
       "backend/"
       "compose.full.yml"
+      "compose.pilot.yml"
       ".github/workflows/frontend-e2e.yml"
     )
     ;;

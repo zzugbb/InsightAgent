@@ -25,7 +25,7 @@ expect_fail() {
 main() {
   out=$(bash "$SCRIPT" --scope backend --repo-root /tmp/workspace)
   assert_contains "$out" "changed_files_path=/tmp/workspace/.github/backend-e2e-changed-files.txt"
-  assert_contains "$out" "path_regex=^(backend/|compose\\.full\\.yml$|\\.github/workflows/backend-e2e\\.yml$)"
+  assert_contains "$out" "path_regex=^(backend/|compose\\.(full|pilot)\\.yml$|\\.github/workflows/backend-e2e\\.yml$)"
   assert_contains "$out" "pr_ref_regex=^(refs/pull/[0-9]+/merge)$"
   assert_contains "$out" "guard_label=backend-e2e-artifact-stage"
   assert_contains "$out" "summary_heading=### backend-e2e artifact strict policy"
@@ -33,11 +33,12 @@ main() {
   assert_contains "$out" "guard_json_out=/tmp/backend-e2e-artifact-guard-summary.json"
   assert_contains "$out" "fallback_path=backend/"
   assert_contains "$out" "fallback_path=compose.full.yml"
+  assert_contains "$out" "fallback_path=compose.pilot.yml"
   assert_contains "$out" "fallback_path=.github/workflows/backend-e2e.yml"
 
   out=$(bash "$SCRIPT" --scope frontend)
   assert_contains "$out" "changed_files_path=.github/frontend-e2e-changed-files.txt"
-  assert_contains "$out" "path_regex=^(frontend/|backend/|compose\\.full\\.yml$|\\.github/workflows/frontend-e2e\\.yml$)"
+  assert_contains "$out" "path_regex=^(frontend/|backend/|compose\\.(full|pilot)\\.yml$|\\.github/workflows/frontend-e2e\\.yml$)"
   assert_contains "$out" "pr_ref_regex=^(refs/pull/[0-9]+/merge)$"
   assert_contains "$out" "guard_label=frontend-e2e-artifact-stage"
   assert_contains "$out" "summary_heading=### frontend-e2e artifact strict policy"
@@ -46,6 +47,7 @@ main() {
   assert_contains "$out" "fallback_path=frontend/"
   assert_contains "$out" "fallback_path=backend/"
   assert_contains "$out" "fallback_path=compose.full.yml"
+  assert_contains "$out" "fallback_path=compose.pilot.yml"
   assert_contains "$out" "fallback_path=.github/workflows/frontend-e2e.yml"
 
   expect_fail bash "$SCRIPT"

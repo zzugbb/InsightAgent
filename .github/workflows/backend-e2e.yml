@@ -29,6 +29,7 @@ on:
       - "backend/**"
       - ".github/workflows/backend-e2e.yml"
       - "compose.full.yml"
+      - "compose.pilot.yml"
   push:
     branches:
       - main
@@ -36,6 +37,7 @@ on:
       - "backend/**"
       - ".github/workflows/backend-e2e.yml"
       - "compose.full.yml"
+      - "compose.pilot.yml"
 
 env:
   BACKEND_EXPORT_DIAG_STRICT_LEVEL_DEFAULT: "p0"

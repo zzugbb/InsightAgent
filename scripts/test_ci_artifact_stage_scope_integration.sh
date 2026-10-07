@@ -60,6 +60,18 @@ TXT
   assert_contains "${out}" "strict_level=warn"
   assert_contains "${out}" "policy_source=path_miss"
 
+  printf 'compose.pilot.yml\n' > "${tmp}/pilot-changed.txt"
+  for scope in backend frontend; do
+    cfg=$(bash "${SCOPE_SCRIPT}" --scope "${scope}")
+    regex=$(extract_value "${cfg}" "path_regex")
+    out=$(bash "${PATH_LEVEL_SCRIPT}" --scope "${scope}" \
+      --changed-files "${tmp}/pilot-changed.txt" --event-name pull_request \
+      --ref refs/pull/6/merge --pr-level fail-on-empty \
+      --pr-ref-regex '^refs/pull/[0-9]+/merge$' --path-regex "${regex}" --fallback-level warn)
+    assert_contains "${out}" "strict_level=fail-on-empty"
+    assert_contains "${out}" "policy_source=path_match"
+  done
+
   echo "ci_artifact_stage_scope_integration tests passed"
 }
 

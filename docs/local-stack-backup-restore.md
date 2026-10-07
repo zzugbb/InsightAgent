@@ -4,7 +4,7 @@ This procedure covers the **development Compose stack** in `compose.full.yml`. I
 
 ## Persistence path and existing data
 
-The current `chromadb/chroma:latest` image reports `persist_path: "/data"`. Both repository Compose files now mount `chroma_data:/data`. The former `/chroma/chroma` mount could leave writes in the container's writable layer, outside the named volume. Before recreating any **existing** Chroma container that used the former mount, inspect its logs and preserve its actual `/data` contents. Do not assume an old `chroma_data` volume contains those records. A removed container's writable layer is not recoverable from that empty volume.
+The current `chromadb/chroma:latest` image reports `persist_path: "/data"`. The development files `compose.full.yml` and `docker-compose.yml` now mount `chroma_data:/data`; the new `compose.pilot.yml` uses the same Chroma path, but this snapshot procedure has not been validated against a target pilot deployment. The former `/chroma/chroma` mount could leave writes in the container's writable layer, outside the named volume. Before recreating any **existing** Chroma container that used the former mount, inspect its logs and preserve its actual `/data` contents. Do not assume an old `chroma_data` volume contains those records. A removed container's writable layer is not recoverable from that empty volume.
 
 The image tag `latest` and default development credentials in these Compose files are unsuitable as a production backup policy. Use a fixed image version, separate credentials, storage retention, and access controls in a target deployment.
 

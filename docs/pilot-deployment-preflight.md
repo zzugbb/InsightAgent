@@ -1,6 +1,6 @@
 # 试点部署配置预检
 
-此流程用于准备 A2 试点部署证据。仓库中的 `compose.full.yml` 是开发栈，包含 `--reload`、`npm run dev`、启动时安装依赖及默认 PostgreSQL 密码，不作为试点部署文件。
+此流程用于准备 A2 试点部署证据。仓库中的 `compose.full.yml` 是开发栈，包含 `--reload`、`npm run dev`、启动时安装依赖及默认 PostgreSQL 密码，不作为试点部署文件。单机试点使用 `compose.pilot.yml` 和 `scripts/pilot_compose.py`；目标主机需要另行提供 HTTPS 代理、证书及访问控制。
 
 ## 配置文件
 
@@ -75,6 +75,61 @@ backend/.venv/bin/python scripts/smoke_pilot_images.py \
 前端检查使用本机 Node/Playwright，在浏览器中注入一次性假 token 并拦截外网请求，核对认证请求的实际 API 地址及 HTML/CSS；配置不一致即失败。结束时核验清理。默认 PostgreSQL/Chroma 镜像仅用于本地联调，可通过参数指定；此项不证明目标 API 可达、真实跨域调用、模型质量或 TLS。默认 embedding 的单文档召回也不代表真实资料质量/吞吐验收。
 
 仅复核 Dockerfile 静态规则可运行 `docker build --check --build-arg PYTHON_BASE_IMAGE=python:3.14-slim -f backend/Dockerfile.pilot backend` 与对应的前端命令（`NODE_BASE_IMAGE=node:24-bookworm-slim`、`NEXT_PUBLIC_API_BASE_URL=https://api.example.com`）。此检查不会执行依赖安装或验证最终镜像；真正构建仍必须传入摘要固定的基础镜像。
+
+## 单机试点 Compose
+
+`compose.pilot.yml` 运行四个已构建镜像，不挂载源码、不覆盖镜像启动命令、不在启动时安装依赖。PostgreSQL 16 使用 `pg_data:/var/lib/postgresql/data`，Chroma 使用 `chroma_data:/data`；镜像必须与这两个持久路径兼容。数据库和 Chroma 不发布主机端口，backend/frontend 仅绑定主机 `127.0.0.1:8000` / `127.0.0.1:3001`，由同机 HTTPS 代理转发。远程或容器化代理需要单独设计网络，不能直接使用其容器内的 `127.0.0.1`。没有 TLS 入口时，该清单还不能交付外部用户。
+
+PostgreSQL 通过健康检查后才启动 backend；backend 的健康检查包含 Chroma 可达性，frontend 等 backend 健康后启动。服务配置 `unless-stopped` 重启策略；`up --wait` 等待有健康检查的服务就绪。Chroma 本身没有额外容器健康检查，其可达性由 backend 验证。健康检查不调用真实模型，也不证明模型账号可用。此等待语义遵循 [Docker Compose 启动顺序文档](https://docs.docker.com/compose/how-tos/startup-order/)。
+
+在前面的外部环境文件中补充以下值；`INSIGHT_AGENT_DATABASE_URL` 必须指向服务名 `postgres:5432`，用户名、解码后的密码和数据库名须与下面三项一致，URL 中的保留字符须 percent-encode。固定 PostgreSQL 16 镜像及摘要后再启动，不能直接换大版本并复用原卷。
+
+```dotenv
+PILOT_POSTGRES_USER=pilot
+PILOT_POSTGRES_PASSWORD='<独立数据库密码>'
+PILOT_POSTGRES_DB=insightagent
+INSIGHT_AGENT_MODE=remote
+INSIGHT_AGENT_PROVIDER=<实际兼容提供方名称>
+INSIGHT_AGENT_MODEL=<实际模型名称>
+INSIGHT_AGENT_BASE_URL=https://<实际提供方>/v1
+INSIGHT_AGENT_API_KEY='<有效密钥，仅存仓库外>'
+# 可选；必须为不同的 1–65535 主机端口，绑定地址始终为 127.0.0.1
+PILOT_BACKEND_PORT=8000
+PILOT_FRONTEND_PORT=3001
+```
+
+环境文件仍须仅操作员可读。`pilot_compose.py` 使用已有只读解析器，把单行值作为字面量传给 Compose；不执行 shell 展开或转义解码，`$` 可放在单引号内，不支持多行值。入口屏蔽环境中已有的 `PILOT_`、`INSIGHT_AGENT_`、`NEXT_PUBLIC_` 和 `COMPOSE_` 覆盖，并显式禁用开发 `.env`，使预检与启动使用同一组值。直接调用 Compose 的环境变量有不同的[优先级及插值规则](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/)，试点操作统一使用下方入口。
+
+```bash
+# check 只验证配置和 Compose 解析，不启动容器、不请求模型
+backend/.venv/bin/python scripts/pilot_compose.py check \
+  --env-file /安全路径/pilot.env --project insightagent-pilot
+# 环境、镜像和 HTTPS 代理准备后再启动；等待健康检查
+backend/.venv/bin/python scripts/pilot_compose.py up \
+  --env-file /安全路径/pilot.env --project insightagent-pilot
+# 停止或移除容器时保留持久卷
+backend/.venv/bin/python scripts/pilot_compose.py stop \
+  --env-file /安全路径/pilot.env --project insightagent-pilot
+backend/.venv/bin/python scripts/pilot_compose.py down \
+  --env-file /安全路径/pilot.env --project insightagent-pilot
+```
+
+入口先检查六个镜像摘要、HTTPS/CORS、独立密钥、Compose 数据库一致性、模型配置是否齐全和主机端口，再解析清单。未配置真实 key 时会拒绝启动，不用 mock 代替正式试点。输出只有固定码与 action，不输出 Compose 解析结果、Docker stdout/stderr 或配置值；不要额外运行 `docker compose config` 并把包含密钥的输出写入公开日志。`check` 的 PASS 仅证明配置/语法；`up` 的 PASS 证明容器健康等待成功。`restart` 仅重启现有容器，不应用新的配置；配置或镜像变更用 `up`，并保持相同 project 名称。`stop`/`down` 的 PASS 表示命令成功，不表示备份已完成。
+
+升级/回滚仍须先备份、记录固定新旧镜像摘要并进行数据兼容检查。`down` 保留两份卷；更换 project 名称会创建另一组数据卷，不能把这种启动当作恢复。当前[快照工具](local-stack-backup-restore.md)的已验证范围仍是开发栈，本轮容器重建读回不替代备份恢复或 RPO/RTO 验收。
+
+### Compose 隔离验证
+
+```bash
+backend/.venv/bin/python scripts/smoke_pilot_compose.py \
+  --backend-image insightagent-backend:pilot-79490ea-cache-fix \
+  --frontend-image insightagent-frontend:pilot-79490ea \
+  --expected-api-base-url https://api.pilot.example.com
+```
+
+脚本先解析原生产清单并核对 remote、前端无密钥、无源码挂载/启动命令覆盖；随后仅在随机命名 fixture 项目中覆盖为 mock、本地镜像 tag 和随机 loopback 端口，不发出真实模型请求。实际验证健康启动、前端 API 地址、后台导入/检索、任务/Trace/导出、步骤恢复与取消；然后移除全部容器、保留卷并重新创建，核对登录、会话、任务/Trace/messages 和知识召回保留。结束时仅删除自己的测试容器、网络和卷，检查清理后才报告 PASS，摘要 scope 为 `local_compose_mock_recreate`。
+
+2026-10-07 上述候选实际验证通过；原始记录为 `/tmp/insightagent-pilot-compose-smoke.log`。无服务配置/低敏自测 `scripts/test_pilot_compose.py` 7/7 已纳入 tooling；`compose.pilot.yml` 的变更触发 release-gate/backend-e2e/frontend-e2e，release gate auto 保守选择全部阶段。本轮 full release gate 10/10 来源为 `/tmp/insightagent-pilot-compose-release.md` 与 `.json`，包含后端 2129/2129、module boundary 9/9、前端 184/184、lint 0 error/2 个既有 warning 与 Turbopack/webpack 双构建；Compose 联调不是全浏览器回归，完整 Chromium 77 passed/1 skipped 沿用已有功能基线。目标镜像拉取、TLS、真实模型、升级回滚及备份恢复仍未验证。
 
 ## 目标环境演练记录
 

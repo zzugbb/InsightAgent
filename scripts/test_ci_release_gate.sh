@@ -218,6 +218,15 @@ SH
   assert_contains "backend full slice" "${TMP_DIR}/auto-workflow.txt"
   assert_contains "frontend node tests" "${TMP_DIR}/auto-workflow.txt"
 
+  printf 'services: {}\n' > "${TMP_DIR}/repo/compose.pilot.yml"
+  git -C "${TMP_DIR}/repo" add compose.pilot.yml
+  git -C "${TMP_DIR}/repo" commit -m "pilot" >/dev/null
+  pilot_sha="$(git -C "${TMP_DIR}/repo" rev-parse HEAD)"
+  bash "${SCRIPT}" --dry-run --phase auto --repo-root "${TMP_DIR}/repo" \
+    --event-name pull_request --base-sha "${workflow_sha}" --head-sha "${pilot_sha}" \
+    > "${TMP_DIR}/auto-pilot.txt"
+  assert_contains "resolved_phases=backend,frontend,tooling,hygiene" "${TMP_DIR}/auto-pilot.txt"
+
   expect_fail bash "${SCRIPT}" --phase unknown --dry-run
 
   echo "ci_release_gate tests passed"

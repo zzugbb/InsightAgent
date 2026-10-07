@@ -5,8 +5,8 @@
 - 更新日期：2026-10-07。当前主线是 `project-completion-audit`，进度 **1/3（约 33%）**：仓库静态盘点完成、真实提供方证据核对已开始，本地离线恢复 fixture 与试点镜像隔离联调已通过；限定步骤恢复纳入、写入并行及 HTTP/DAG checkpoint 延期的范围已按用户授权确定；当前成功调用、目标环境验证和用户签收尚未完成。这不是项目总完成百分比。
 - 审计目标：回答“InsightAgent 距离真正收尾还有什么”，不以已封板主线数量推算整体完成度。先以“可交给外部试点用户使用”为临时验收目标；正式生产运行需要额外的部署、恢复和运营证据。
 - 证据等级：`已验证` 表示有本地测试或代码证据；`待实证` 表示实现或配置存在，但缺少目标环境的实际运行记录；`待定范围` 表示原始计划有要求，但是否仍纳入收尾须明确决策。
-- 功能基线（上一轮）：full release gate 10/10、后端 2129/2129、module boundary 9/9、前端 184/184、Turbopack/webpack 双构建；步骤恢复 PostgreSQL 9/9、内建并发回归 6/6、隔离 mock 完整 Chromium 77 passed / 1 skipped。完整重跑回归 PostgreSQL 11/11 上一轮通过；既有 HTTP/依赖 PostgreSQL 各 7/7、RAG 21/21 与 400 切块实写沿用此前基线。
-- 本轮新增本地证据：当前 ARM64 生产镜像以显式 mock 模型完成 1 次后台导入、1 条召回、2 个任务、2 个工具步骤复用及 1 个排队取消；禁网 embedding 与旧镜像负向检查通过。tooling 门禁与 hygiene 3/3 通过，新增 smoke 自测 5/5（含 6 种失败注入）。镜像来源与固定摘要见[试点记录](pilot-deployment-preflight.md)，这些证据不能关闭目标部署或真实模型验收。
+- 当前静态门禁：full release gate 10/10、后端 2129/2129、module boundary 9/9、前端 184/184、Turbopack/webpack 双构建；步骤恢复 PostgreSQL 9/9、内建并发回归 6/6、隔离 mock 完整 Chromium 77 passed / 1 skipped。完整重跑回归 PostgreSQL 11/11 沿用既有基线；既有 HTTP/依赖 PostgreSQL 各 7/7、RAG 21/21 与 400 切块实写沿用此前基线。
+- 镜像/Compose 本地证据：ARM64 生产镜像禁网 embedding、真实 PostgreSQL/Chroma 导入/检索、任务/Trace/导出、步骤恢复和取消通过；新增生产清单与低敏预检入口，隔离 mock 下健康启动并重建所有容器后，登录/会话/任务/Trace/messages/Chroma 读回通过。预检自测 7/7，CI 触发/auto 阶段/artifact guard 纳入清单路径。来源见[试点记录](pilot-deployment-preflight.md)；不关闭目标部署或模型验收。
 - 用户 2026-10-07 再次确认「目前没有部署的环境和真实key」，并授权剩余范围「按你的理解」。当前主线**未封板，暂不具备试点交付封板条件**；本地能力完成不能替代 A1/A2/A3/A5 外部证据。
 
 ## 历史提供方证据
@@ -26,7 +26,7 @@
 | ID | 优先级 | 发现与证据 | 关闭条件 |
 | --- | --- | --- | --- |
 | A1 | 试点前必须，当前外部阻塞 | 历史 10 条 GLM provider-usage 成功任务证明模型、工具与 RAG 路径曾工作；一条历史任务的当前 JSON/Markdown 导出构建通过。此前最小实时请求返回 HTTP 429，用户确认 GLM 服务已到期；当前成功流式调用、前端交互质量与失败恢复尚未验收。 | 续用 GLM 或换有效的兼容账号后，只补缺失的当前成功流式链路、前端交互与质量/成本记录；到期期间保持 `未验证`，不反复请求。密钥不提交仓库。 |
-| A2 | 试点前必须 | `compose.full.yml` 仍是本地开发栈。[试点镜像配方、配置预检与演练记录](pilot-deployment-preflight.md)已准备；后端试点镜像的 84 个依赖版本已锁定并在本机 ARM64 重建核验。当前应用源码 79490ea 的前后端镜像已重建，后端加入非 root 主目录与构建期默认 embedding 缓存；禁网 embedding、真实 PostgreSQL/Chroma 后台导入/检索、任务 SSE/Trace/delta/导出、步骤恢复、排队取消及前端浏览器 API 地址联调通过；旧镜像负向被拒绝，临时资源已清理。预检核验 HTTPS/CORS、凭据及六个镜像摘要；尚无目标环境、TLS 或升级回滚实证。 | 明确试点目标环境；用固定版本、非默认凭据、生产构建、HTTPS/访问边界完成一次部署、升级及回滚演练，并保存非敏感记录。在环境具备前保持 `未验证`。 |
+| A2 | 试点前必须 | `compose.full.yml` 仍是本地开发栈。[试点镜像配方、配置预检与演练记录](pilot-deployment-preflight.md)已准备；后端试点镜像的 84 个依赖版本已锁定并在本机 ARM64 重建核验。当前应用源码 79490ea 的前后端镜像已重建，后端加入非 root 主目录与构建期默认 embedding 缓存；禁网 embedding、真实 PostgreSQL/Chroma 后台导入/检索、任务 SSE/Trace/delta/导出、步骤恢复、排队取消及前端浏览器 API 地址联调通过；旧镜像负向被拒绝，临时资源已清理。新增 compose.pilot.yml 与低敏预检/操作入口，校验数据库一致性和模型配置；隔离 mock 健康启动、容器重建后的登录/会话/任务/知识保留通过。预检核验 HTTPS/CORS、凭据及六个镜像摘要；尚无目标环境、TLS 或升级回滚实证。 | 明确试点目标环境；用固定版本、非默认凭据、生产构建、HTTPS/访问边界完成一次部署、升级及回滚演练，并保存非敏感记录。在环境具备前保持 `未验证`。 |
 | A3 | 生产前必须，试点需决定风险接受 | 已新增[本地离线备份/隔离恢复流程](local-stack-backup-restore.md)，用独立 fixture 验证 PostgreSQL 行与 Chroma 向量恢复；同时发现并修正旧 Compose 的 Chroma 卷挂载路径错误。目标环境尚无真实恢复记录。 | 对目标环境实际备份并从备份恢复 PostgreSQL 与 Chroma；验证会话、Trace、知识库和登录，记录 RPO/RTO、责任人及失败回退。 |
 | A4 | 范围决策与实现 | [后台 RAG 导入](rag-background-ingest.md)已具备持久化、幂等、取消、权限、多 worker 与恢复；分批写入、确认进度、每批角色复核及 5000 切块预算已验证，40 文档 / 400 切块隔离实写通过。[完整任务分支重跑](task-reruns.md)已支持输入编辑、独立会话、幂等与来源分页；[任务内工具并发](task-tool-parallel.md)已支持内建独立检索/计算、串行回退、顺序 Trace 合并及取消/超时协调；[工具依赖与结果引用](tool-dependencies.md)已支持显式 DAG、重复工具、稳定拓扑波次和公开预览标量绑定；[HTTP 读取并发](http-read-parallel.md)已支持固定 GET/无请求体显式只读声明、配置冻结和生命周期协调；[实验性步骤恢复](task-checkpoints.md)完成内建顺序计划的成功前缀复用、失败重试、独立分支、幂等及取消/超时闭环；写入并行及 HTTP/DAG checkpoint 明确延期。请求与 LLM 尝试低敏观测已落地；OpenAPI 51 操作 / 88 组件进入门禁。 | 本地实现与限定范围已明确；真实资料与目标环境仍需验证规模、等待体验和观测/调用方流程，fixture 耗时不等于吞吐承诺。写入并行及 HTTP/DAG checkpoint 不作为小规模试点阻塞项。 |
 | A5 | 试点前必须 | 现有 e2e 证明预设路径可自动跑通，但本轮没有目标用户、真实任务样本、可用性反馈或签收标准的证据。full Chromium 的 1 个 skip 是低并发队列专用场景，另有独立 queue e2e 路径，不直接视为产品缺陷。 | 选 2–3 个真实任务和目标用户，完成端到端走查；记录完成率、失败点、可理解性和签收结论。 |
@@ -48,7 +48,7 @@
 
 1. **真实环境证据（第 2/3 阶段）**：A1 等有效账号后补当前成功流式/前端质量与成本证据；A2/A3 等目标环境后运行部署预检、TLS/访问边界、升级回滚及真实双存储恢复，记录责任人/RPO/RTO。当前均为未验证，不反复请求到期账号。
 2. **范围与签收（第 3/3 阶段）**：A4 限定范围已确定且本地功能闭环；目标运行/观测与 A5 的 2–3 个真实任务、目标用户走查仍缺证据。最终必须给出“试点可交付 / 带风险试点 / 暂不可交付”结论。
-3. 功能验证沿用 `/tmp/insightagent-checkpoint-release.md`、`.json`、checkpoint PostgreSQL 日志及完整 Chromium 日志；本轮新增以试点镜像记录及 `/tmp/insightagent-pilot-tooling.md`、`.json` 为准。不把 fixture 性能、镜像本地通过或历史 GLM 成功计作目标验收。ESLint 10 保持非阻塞候选。
+3. 静态最终门禁为 `/tmp/insightagent-pilot-compose-release.md` 与 `.json`，本轮 Compose 联调为 `/tmp/insightagent-pilot-compose-smoke.log`；专项 PostgreSQL 与完整 Chromium 沿用既有日志，镜像来源与边界见试点记录。不把 fixture 性能、镜像本地通过或历史 GLM 成功计作目标验收。ESLint 10 保持非阻塞候选。
 
 ## 维护规则
 

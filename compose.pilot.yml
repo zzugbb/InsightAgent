@@ -1,0 +1,74 @@
+# Single-host pilot behind an operator-managed HTTPS proxy on this host.
+services:
+  postgres:
+    image: ${PILOT_POSTGRES_IMAGE:?PILOT_POSTGRES_IMAGE required}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PILOT_POSTGRES_USER:?PILOT_POSTGRES_USER required}
+      POSTGRES_PASSWORD: ${PILOT_POSTGRES_PASSWORD:?PILOT_POSTGRES_PASSWORD required}
+      POSTGRES_DB: ${PILOT_POSTGRES_DB:?PILOT_POSTGRES_DB required}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  chroma:
+    image: ${PILOT_CHROMA_IMAGE:?PILOT_CHROMA_IMAGE required}
+    restart: unless-stopped
+    environment:
+      IS_PERSISTENT: "TRUE"
+      ANONYMIZED_TELEMETRY: "FALSE"
+    volumes:
+      - chroma_data:/data
+
+  backend:
+    image: ${PILOT_BACKEND_IMAGE:?PILOT_BACKEND_IMAGE required}
+    restart: unless-stopped
+    environment:
+      INSIGHT_AGENT_ENV: production
+      INSIGHT_AGENT_MODE: remote
+      INSIGHT_AGENT_PROVIDER: ${INSIGHT_AGENT_PROVIDER:?INSIGHT_AGENT_PROVIDER required}
+      INSIGHT_AGENT_MODEL: ${INSIGHT_AGENT_MODEL:?INSIGHT_AGENT_MODEL required}
+      INSIGHT_AGENT_BASE_URL: ${INSIGHT_AGENT_BASE_URL:?INSIGHT_AGENT_BASE_URL required}
+      INSIGHT_AGENT_API_KEY: ${INSIGHT_AGENT_API_KEY:?INSIGHT_AGENT_API_KEY required}
+      INSIGHT_AGENT_DATABASE_URL: ${INSIGHT_AGENT_DATABASE_URL:?INSIGHT_AGENT_DATABASE_URL required}
+      INSIGHT_AGENT_JWT_SECRET: ${INSIGHT_AGENT_JWT_SECRET:?INSIGHT_AGENT_JWT_SECRET required}
+      INSIGHT_AGENT_SECRET_KEY: ${INSIGHT_AGENT_SECRET_KEY:?INSIGHT_AGENT_SECRET_KEY required}
+      INSIGHT_AGENT_CORS_ORIGINS: ${INSIGHT_AGENT_CORS_ORIGINS:?INSIGHT_AGENT_CORS_ORIGINS required}
+      CHROMA_HOST: chroma
+      CHROMA_PORT: "8000"
+      ANONYMIZED_TELEMETRY: "FALSE"
+    ports:
+      - "127.0.0.1:${PILOT_BACKEND_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      chroma:
+        condition: service_started
+    healthcheck:
+      test: [CMD, python, -c, 'import json, urllib.request; h = json.load(urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=3)); assert h["status"] == "ok" and h["chroma"]["reachable"] is True']
+      interval: 5s
+      timeout: 4s
+      retries: 20
+      start_period: 10s
+
+  frontend:
+    image: ${PILOT_FRONTEND_IMAGE:?PILOT_FRONTEND_IMAGE required}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${PILOT_FRONTEND_PORT:-3001}:3001"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, node, -e, 'fetch("http://127.0.0.1:3001").then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))']
+      interval: 5s
+      timeout: 4s
+      retries: 20
+
+volumes:
+  pg_data:
+  chroma_data:

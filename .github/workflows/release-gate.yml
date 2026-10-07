@@ -23,6 +23,7 @@ on:
       - ".github/workflows/**"
       - "docs/development-runbook.md"
       - "compose.full.yml"
+      - "compose.pilot.yml"
   push:
     branches:
       - main
@@ -33,6 +34,7 @@ on:
       - ".github/workflows/**"
       - "docs/development-runbook.md"
       - "compose.full.yml"
+      - "compose.pilot.yml"
 
 concurrency:
   group: release-gate-${{ github.ref }}
