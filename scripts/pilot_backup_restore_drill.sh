@@ -41,8 +41,11 @@ fi
 
 if [ "${dry_run}" = "1" ]; then
   echo "[dry-run] docker compose -f ${COMPOSE_FILE} -p ${project} up -d postgres chroma"
+  echo "[dry-run] docker compose -f ${COMPOSE_FILE} -p ${project} stop"
   echo "[dry-run] ${PYTHON} scripts/local_stack_snapshot.py backup --project ${project} --snapshot ${snapshot_dir}"
-  echo "[dry-run] ${PYTHON} scripts/local_stack_snapshot.py restore --project ${project}_restored --snapshot ${snapshot_dir}"
+  echo "[dry-run] ${PYTHON} scripts/local_stack_snapshot.py restore --project ${project}-restored --snapshot ${snapshot_dir}"
+  echo "[dry-run] docker compose -f ${COMPOSE_FILE} -p ${project} down -v"
+  echo "[dry-run] docker compose -f ${COMPOSE_FILE} -p ${project}-restored down -v"
   exit 0
 fi
 
