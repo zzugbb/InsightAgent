@@ -1566,6 +1566,8 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         apiBanner={currentQueryBanner.banner}
         onDismissBanner={() => setBannerError(null)}
         sessionMessages={sessionMessages}
+        recentTasks={recentTasks}
+        activeTraceSteps={scopedSseTraceSteps}
         pendingUserInput={scopedIsStreaming ? lastSentPrompt : ""}
         pendingUserTaskId={scopedSseTaskId}
         messagesLoading={messagesLoading}

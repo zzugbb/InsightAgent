@@ -79,6 +79,16 @@ export const zh: Messages = {
     assistantName: "InsightAgent",
   },
   chat: {
+    answerNotices: {
+      max_rounds: "工具执行已达到轮次上限，回答仅基于已取得的结果，部分需求可能尚未完成。",
+      max_tool_calls: "工具调用已达到本次任务的上限，部分检查或操作可能尚未完成。",
+      observation_limit: "工具结果已达到处理容量上限，回答可能没有覆盖全部所需证据。",
+      repeated_action: "后续工具计划重复了已执行的操作，执行已停止，部分需求可能尚未完成。",
+      invalid_decision: "未能生成有效的后续工具计划，回答仅基于现有结果。",
+      length: "模型输出达到长度限制，回答可能被截断。",
+      content_filter: "模型因内容过滤停止输出，回答可能不完整。",
+      tool_calls: "模型在请求工具调用时结束输出，当前回答可能不完整。",
+    },
     kicker: "对话",
     newChatTitle: "新对话",
     updatedAt: (ts: string) => `最近更新 ${ts}`,

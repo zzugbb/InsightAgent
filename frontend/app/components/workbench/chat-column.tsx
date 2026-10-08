@@ -18,15 +18,19 @@ import {
   usePreferences,
 } from "../../../lib/preferences-context";
 
-import type { SessionMessage, SessionSummary } from "./types";
+import type { SessionMessage, SessionSummary, TaskSummary } from "./types";
 import {
   formatTimestamp,
   getRoleLabel,
   getSessionLabel,
+  parseTaskTraceJson,
   shortenId,
 } from "./utils";
 import { Composer } from "./composer";
 import { MessageBody } from "./message-body";
+import { AnswerNoticeView } from "./answer-notice-view";
+import { resolveLatestAnswerNotices } from "./answer-notices";
+import type { TraceStepPayload } from "../../../lib/types/trace";
 
 type SettingsSummaryLite = {
   mode: string;
@@ -45,6 +49,8 @@ type ChatColumnProps = {
   apiBanner: string | null;
   onDismissBanner: () => void;
   sessionMessages: SessionMessage[];
+  recentTasks: TaskSummary[];
+  activeTraceSteps: TraceStepPayload[];
   pendingUserInput: string;
   pendingUserTaskId: string | null;
   messagesLoading: boolean;
@@ -90,6 +96,8 @@ export function ChatColumn({
   apiBanner,
   onDismissBanner,
   sessionMessages,
+  recentTasks,
+  activeTraceSteps,
   pendingUserInput,
   pendingUserTaskId,
   messagesLoading,
@@ -244,6 +252,16 @@ export function ChatColumn({
     !showSessionLoading && (hasHistory || showPendingUser || showLiveAssistant);
   const showScrollFab = hasScrollableFeed && !pinnedToBottom;
   const scrollFabLive = isStreaming || pendingJumpCount > 0;
+  const storedTraces = useMemo(
+    () => new Map(recentTasks.map((task) => [task.id, parseTaskTraceJson(task.trace_json)])),
+    [recentTasks],
+  );
+  const noticesByTask = useMemo(() => {
+    const traces = new Map(storedTraces);
+    if (pendingUserTaskId && !traces.has(pendingUserTaskId)) traces.set(pendingUserTaskId, []);
+    return new Map([...traces].map(([id, stored]) => [id, resolveLatestAnswerNotices(stored, id === pendingUserTaskId ? activeTraceSteps : [])]));
+  }, [storedTraces, pendingUserTaskId, activeTraceSteps]);
+
   function renderMessageRow(message: SessionMessage, index: number) {
     const prev = index > 0 ? sessionMessages[index - 1] : undefined;
     const showTaskRef =
@@ -263,6 +281,7 @@ export function ChatColumn({
             : t.roles.assistantShort}
         </div>
         <div className="message-card">
+          {message.role === "assistant" && message.task_id ? <AnswerNoticeView codes={noticesByTask.get(message.task_id) ?? []} /> : null}
           <div className="message-card-body">
             {message.role === "user" ? (
               <p className="message-plain">{message.content}</p>
@@ -487,6 +506,7 @@ export function ChatColumn({
                       {t.workbench.streamFailedBadge}
                     </p>
                   ) : null}
+                  <AnswerNoticeView codes={pendingUserTaskId ? noticesByTask.get(pendingUserTaskId) ?? [] : []} />
                   <div className="message-card-body">
                     <MessageBody text={sseTokens} />
                   </div>

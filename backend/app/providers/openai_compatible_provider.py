@@ -8,6 +8,7 @@ from urllib.request import Request, urlopen
 
 from app.providers.base import ProviderCallError, ProviderResponse, ProviderUsage
 from app.providers.call_observability import record_provider_attempt
+from app.providers.completion_signals import extract_finish_reason
 from app.providers.response_utils import (
     coerce_provider_usage,
     extract_response_delta_text,
@@ -34,6 +35,7 @@ class OpenAICompatibleLLMProvider:
         self.api_key = api_key.strip()
         self.timeout_sec = timeout_sec
         self._last_usage: ProviderUsage | None = None
+        self._last_finish_reason: str | None = None
 
     @property
     def _endpoint(self) -> str:
@@ -212,12 +214,14 @@ class OpenAICompatibleLLMProvider:
         return coerce_provider_usage(raw_usage)
 
     def generate(self, prompt: str) -> ProviderResponse:
+        self._last_finish_reason = None
         payload = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
             "stream": False,
         }
         response_obj = self._request_json(payload)
+        self._last_finish_reason = extract_finish_reason(response_obj)
         usage = self._extract_usage(response_obj)
         self._last_usage = usage
         content = self._extract_message_content(response_obj) or extract_response_text(
@@ -235,10 +239,12 @@ class OpenAICompatibleLLMProvider:
             model=self.model,
             provider=self.provider,
             usage=usage,
+            finish_reason=self._last_finish_reason,
         )
 
     def stream_generate(self, prompt: str) -> Iterator[str]:
         self._last_usage = None
+        self._last_finish_reason = None
         base_payload = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
@@ -282,13 +288,11 @@ class OpenAICompatibleLLMProvider:
                         usage = self._extract_usage(event)
                         if usage is not None:
                             self._last_usage = usage
-                        choices = event.get("choices") if isinstance(event, dict) else None
-                        if isinstance(choices, list) and choices and isinstance(choices[0], dict):
-                            reason = choices[0].get("finish_reason")
-                            if isinstance(reason, str) and reason in {
-                                "stop", "length", "tool_calls", "content_filter", "function_call",
-                            }:
-                                finish_seen = True
+                        reason = extract_finish_reason(event)
+                        if reason is not None:
+                            finish_seen = True
+                            if self._last_finish_reason is None:
+                                self._last_finish_reason = reason
                         delta = self._extract_delta_content(event)
                         if delta:
                             yielded_chunks += 1
@@ -345,3 +349,6 @@ class OpenAICompatibleLLMProvider:
 
     def get_last_usage(self) -> ProviderUsage | None:
         return self._last_usage
+
+    def get_last_finish_reason(self) -> str | None:
+        return self._last_finish_reason

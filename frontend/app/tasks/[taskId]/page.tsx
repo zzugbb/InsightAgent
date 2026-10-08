@@ -12,6 +12,8 @@ import { downloadAuthenticatedExport } from "../../../lib/export-download";
 import { toUserFacingError } from "../../../lib/errors";
 import { useMessages, usePreferences } from "../../../lib/preferences-context";
 import type { TraceStepPayload } from "../../../lib/types/trace";
+import { AnswerNoticeView } from "../../components/workbench/answer-notice-view";
+import { resolveAnswerNotices } from "../../components/workbench/answer-notices";
 import { TraceFlowView } from "../../components/workbench/trace-flow-view";
 import type { TaskSummary } from "../../components/workbench/types";
 import {
@@ -333,6 +335,7 @@ export default function TaskDetailPage() {
           </div>
         ) : task ? (
           <>
+            <AnswerNoticeView codes={resolveAnswerNotices(traceSteps)} />
             <TaskRerunPanel key={task.id} task={task} />
             <TaskCheckpointPanel key={`checkpoint-${task.id}`} task={task} />
             <section className="task-detail-kpi-grid">

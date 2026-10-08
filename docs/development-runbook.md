@@ -76,6 +76,7 @@ node --test --experimental-strip-types \
   app/components/workbench/task-queue-diagnostics-contract.type.test.ts \
   app/components/workbench/utils.node.test.ts \
   app/components/workbench/usage-accounting.node.test.ts \
+  app/components/workbench/answer-notices.node.test.ts \
   app/components/workbench/trace-flow-layout.node.test.ts \
   app/components/workbench/knowledge-base-governance-modal-utils.node.test.ts \
   app/components/workbench/knowledge-import-utils.node.test.ts \
@@ -116,6 +117,8 @@ curl -I http://127.0.0.1:3001
 如果提权审批因为审核通道连接中断被拒，不要绕路用等价命令规避；重新发起同一必要命令的明确审批。
 
 ## e2e 路径
+
+[回答完整性提示](answer-completion.md)：静态 `-k answer_completion`（6 个）、独立数据库 `backend/scripts/test_answer_completion_postgres.py`（6 个；Docker/本机 HTTP 提权并自动清理）；前端 `answer-notices.node.test.ts`（5 个）。浏览器用 `npx playwright test e2e/answer-completion.spec.ts --project=chromium --workers=1 --reporter=list --output=/tmp/insightagent-answer-completion-e2e-results`，需要本机服务/浏览器提权；1440px 英文/390px 中文，Enter 发送、刷新、详情与返回聊天，仅业务 API fixture。
 
 [任务终态边界](task-completion.md)：静态 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task_terminal_usage`（5 个）；集成 `backend/.venv/bin/python backend/scripts/test_task_terminal_postgres.py`（10 个，需要 Docker/本机随机端口提权，自动清理）。覆盖生成结束/回退/保存跨时限、迟到决策、取消竞争、失败已知用量与汇总/导出；前端仅规划记录用 `usage-accounting.node.test.ts` 验证。仅本地模型替身，已接入 backend-e2e。
 

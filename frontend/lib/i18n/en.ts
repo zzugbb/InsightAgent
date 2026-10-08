@@ -80,6 +80,16 @@ export const en: Messages = {
     assistantName: "InsightAgent",
   },
   chat: {
+    answerNotices: {
+      max_rounds: "The tool round limit was reached. This answer uses the available results; some requirements may remain unresolved.",
+      max_tool_calls: "The tool call limit was reached. Some checks or actions may remain unfinished.",
+      observation_limit: "The tool result limit was reached. The answer may not cover all required evidence.",
+      repeated_action: "The next tool plan repeated a completed action. Execution stopped and some requirements may remain unresolved.",
+      invalid_decision: "A valid follow-up tool plan could not be generated. The answer uses the available results.",
+      length: "The model reached its output length limit. The answer may be truncated.",
+      content_filter: "The model stopped due to content filtering. The answer may be incomplete.",
+      tool_calls: "The model ended its response with a tool request. The current answer may be incomplete.",
+    },
     kicker: "Chat",
     newChatTitle: "New chat",
     updatedAt: (ts: string) => `Updated ${ts}`,

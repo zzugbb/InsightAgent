@@ -26,6 +26,7 @@ FRONTEND_NODE_TESTS=(
   "app/components/workbench/task-queue-diagnostics-contract.type.test.ts"
   "app/components/workbench/utils.node.test.ts"
   "app/components/workbench/usage-accounting.node.test.ts"
+  "app/components/workbench/answer-notices.node.test.ts"
   "app/components/workbench/trace-flow-layout.node.test.ts"
   "app/components/workbench/knowledge-base-governance-modal-utils.node.test.ts"
   "app/components/workbench/knowledge-import-utils.node.test.ts"

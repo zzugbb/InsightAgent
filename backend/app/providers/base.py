@@ -15,6 +15,7 @@ class ProviderResponse:
     model: str
     provider: str
     usage: ProviderUsage | None = None
+    finish_reason: str | None = None
 
 
 class ProviderCallError(RuntimeError):

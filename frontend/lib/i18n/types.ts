@@ -78,6 +78,7 @@ export type Messages = {
     assistantName: string;
   };
   chat: {
+    answerNotices: Record<"max_rounds" | "max_tool_calls" | "observation_limit" | "repeated_action" | "invalid_decision" | "length" | "content_filter" | "tool_calls", string>;
     kicker: string;
     newChatTitle: string;
     updatedAt: (ts: string) => string;

@@ -32,7 +32,8 @@ def local_provider(mode):
             calls.append(streaming)
             status, content_type = 200, "application/json"
             if not streaming:
-                body = json.dumps({"choices": [{"message": {"content": '{"tools": []}'}}]})
+                body = json.dumps({"choices": [{"message": {"content": '{"tools": []}'},
+                    **({"finish_reason": "length"} if mode == "planner_length_done" else {})}]})
             elif mode == "compat_partial" and "stream_options" in payload:
                 status, body = 400, '{"error": {"message": "stream_options unsupported"}}'
             else:
@@ -42,11 +43,15 @@ def local_provider(mode):
                     body += event(choices=[{"delta": {"content": "x"}, "finish_reason": None}]) * 10
                 elif mode != "empty":
                     body += event(choices=[{"delta": {"content": "partial fixture answer"}, "finish_reason": None}])
-                if mode == "finish":
-                    body += event(choices=[{"delta": {}, "finish_reason": "stop"}])
-                if mode in {"finish", "done", "partial_usage"}:
+                reason = {"finish": "stop", "finish_length": "length", "finish_filter": "content_filter",
+                          "finish_tool": "tool_calls", "finish_invalid_json": "length"}.get(mode)
+                if reason:
+                    body += event(choices=[{"delta": {}, "finish_reason": reason}])
+                if mode in {"finish", "done", "partial_usage", "planner_length_done", "finish_length", "finish_filter", "finish_tool"}:
                     body += event(choices=[], usage={"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7})
-                if mode in {"done", "empty"}:
+                if mode == "finish_invalid_json":
+                    body += "data: invalid JSON\n\n"
+                if mode in {"done", "empty", "planner_length_done"}:
                     body += "data: [DONE]\n\n"
             encoded = body.encode()
             self.send_response(status)

@@ -11,6 +11,8 @@ OpenAI-compatible `/chat/completions` 流有文本输出且收到以下任一信
 
 只有 EOF、usage、空 choices、空 delta、null/未知 finish reason 均不能证明完成；空 role/结束/usage 帧不产生文字，也不能触发递归解析。已收到 finish reason 后的实际传输或解析异常仍按失败处理。
 
+已知首 choice 结束原因现保留在最终回答 Trace 的可选 `provider_finish_reason`，每次调用重置；仅 DONE 不推断 stop。长度/过滤/工具请求结束在聊天及详情提示，停止后传输/解析失败仍保持失败。详见[回答完整性契约](answer-completion.md)。
+
 ## 失败与持久化
 
 - 无结束信号的空流或部分流返回既有 `remote_provider_stream_interrupted`；正常结束却无文字返回 `remote_provider_empty_response`。

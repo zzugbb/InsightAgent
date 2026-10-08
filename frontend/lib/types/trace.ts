@@ -18,6 +18,8 @@ export type TraceStepMeta = {
   parallel_group_size?: number;
   agent_round?: number;
   agent_decision?: string;
+  agent_stop_reason?: string;
+  provider_finish_reason?: string;
   agent_from_step_ids?: string[];
   model?: string;
   step_type?: string;

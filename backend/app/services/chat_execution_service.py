@@ -8,6 +8,8 @@ from uuid import uuid4
 
 from app.config import get_settings
 from app.providers.base import ProviderCallError, ProviderUsage
+from app.providers.completion_signals import normalize_finish_reason
+from app.services.answer_completion import with_tool_stop_context
 from app.services.audit_service import safe_record_audit_event
 from app.services.chat_persistence_service import (
     complete_task,
@@ -469,6 +471,22 @@ def stream_task_execution(
     final_usage_payload = None
     provider = None
     final_call_started = False
+    agent_stop_reason = None
+
+    def capture_final_finish_reason(response_reason=None):
+        if not final_call_started or not trace_steps or (trace_steps[-1].get("meta") or {}).get("step_type") != "final_answer":
+            return
+        reason = normalize_finish_reason(response_reason)
+        getter = getattr(provider, "get_last_finish_reason", None)
+        if reason is None and callable(getter):
+            try:
+                reason = normalize_finish_reason(getter())
+            except Exception:
+                return
+        if reason is not None and (trace_steps[-1].get("meta") or {}).get("provider_finish_reason") != reason:
+            step = trace_steps[-1]
+            trace_steps[-1] = {**step, "seq": int(step["seq"]) + 1,
+                              "meta": {**step.get("meta", {}), "provider_finish_reason": reason}}
 
     def terminal_usage():
         captured = None
@@ -626,6 +644,7 @@ def stream_task_execution(
     def persist_abort_terminal_status(
         exc: TaskExecutionAbortError,
     ) -> TaskExecutionAbortError:
+        capture_final_finish_reason()
         completed_count = complete_task(
             task_id=task_id,
             trace_steps=trace_steps,
@@ -703,6 +722,7 @@ def stream_task_execution(
                 f"Task timed out after {TASK_TIMEOUT_SEC:.1f}s. "
                 "Please retry with a shorter request or cancel earlier."
             )
+            capture_final_finish_reason()
             complete_task(
                 task_id=task_id,
                 trace_steps=trace_steps,
@@ -1048,6 +1068,7 @@ def stream_task_execution(
             yield sse_event("trace", {"task_id": task_id, "step_id": decision_step["id"], "step": decision_step})
             persist_trace(force=True)
             if not decision.plan:
+                agent_stop_reason = decision.reason
                 break
             agent_round = feedback_loop.round
             tool_plan = decision.plan
@@ -1064,6 +1085,7 @@ def stream_task_execution(
             "meta": {
                 "model": provider_model,
                 "step_type": "final_answer",
+                **({"agent_stop_reason": agent_stop_reason} if agent_stop_reason is not None else {}),
                 "tokens": None,
                 "cost_estimate": None,
             },
@@ -1093,6 +1115,7 @@ def stream_task_execution(
             tool_observations=(with_model_observations(tool_observations, trace_steps)
                                if provider_name != "mock" else tool_observations),
         )
+        provider_prompt = with_tool_stop_context(provider_prompt, agent_stop_reason)
         stream_chunk_count = 0
         provider_usage: ProviderUsage | None = None
         get_last_usage = getattr(provider, "get_last_usage", None)
@@ -1135,6 +1158,7 @@ def stream_task_execution(
             if should_persist:
                 persist_trace()
 
+        fallback_finish_reason = None
         final_content = streamed_content
         if callable(get_last_usage):
             latest_usage = get_last_usage()
@@ -1145,6 +1169,7 @@ def stream_task_execution(
             raise_if_should_abort(force_status_probe=True)
             fallback = provider.generate(provider_prompt)
             final_content = fallback.content
+            fallback_finish_reason = getattr(fallback, "finish_reason", None)
             if isinstance(getattr(fallback, "usage", None), ProviderUsage):
                 provider_usage = fallback.usage
             elif callable(get_last_usage):
@@ -1168,6 +1193,7 @@ def stream_task_execution(
                 "cost_estimate": final_usage_payload["cost_estimate"],
             },
         }
+        capture_final_finish_reason(fallback_finish_reason)
         raise_if_should_abort(force_status_probe=True)
         persist_trace(force=True)
 
@@ -1202,6 +1228,7 @@ def stream_task_execution(
         )
 
         release_task_slot()
+        yield sse_event("trace", {"task_id": task_id, "step_id": final_step_id, "step": trace_steps[-1]})
         yield sse_event(
             "done",
             {
@@ -1255,6 +1282,7 @@ def stream_task_execution(
             ),
         )
     except ProviderCallError as exc:
+        capture_final_finish_reason()
         release_task_slot()
         completed_count = complete_task(
             task_id=task_id,
@@ -1298,6 +1326,7 @@ def stream_task_execution(
             ),
         )
     except Exception as exc:
+        capture_final_finish_reason()
         release_task_slot()
         completed_count = complete_task(
             task_id=task_id,
