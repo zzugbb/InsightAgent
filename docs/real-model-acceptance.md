@@ -52,3 +52,17 @@
 新增执行证据静态 **7/7**（先记录 5 个失败测试再实现）、独立 PostgreSQL/Chroma 核心 **11/11**；后端门禁 **2/2**，full slice **2217/2217**、模块边界 **9/9**。来源 `/tmp/insightagent-execution-evidence-{red,static,postgres,release}.log` 及 release `.md` / `.json`。本轮 hygiene 3/3 PASS，来源 `/tmp/insightagent-execution-evidence-hygiene.md` / `.json`；本机后端已重启加载修复，健康检查与前端访问 HTTP 200。前端未修改，保留上一门禁基线。本次修复已进入后端 `pilot-0209651`，配对未变的前端 `pilot-218f94d` 完成生产模式/禁网 embedding 与 Agent 协议联调；源码摘要相等、测试资源清理通过，来源 `/tmp/insightagent-pilot-0209651-{backend-retry,source-proof,smoke}.log`。本机真实模型实测与镜像本地替身验证分别保留范围，完整候选来源见[试点记录](pilot-deployment-preflight.md)。
 
 真实供应商曾两次首轮规划约 60 秒超时，当前样本不足以证明稳定性、延迟或吞吐承诺。验收会话与独立合成知识库保留供复核；未知消耗与供应商账单仍需核对，不将合成资料计为业务用户签收。
+
+## 规划等待排查（2026-10-08）
+
+本轮只读复核前后两份真实 RAG 日志，未新增供应商请求。`summarize_provider_attempts.py` 现按 `request` / `stream` 输出有效耗时的 count/min/max/mean（毫秒）；缺失、负数、布尔、非数值及非有限耗时不参与统计，单独计数，原有尝试数仍保留。无样本的耗时为 null，不写零。汇总不输出原始字段或正文。
+
+| 日志样本 | 非流式请求数 | 请求 min / mean / max（秒） | 流式请求数 | 流 min / mean / max（秒） | outcome 为 unexpected_error |
+| --- | ---: | --- | ---: | --- | ---: |
+| 修复前真实 RAG | 4 | 3.096 / 33.304 / 60.081 | 2 | 10.280 / 15.519 / 20.758 | 1 |
+| 修复后真实 RAG | 7 | 4.156 / 21.307 / 60.075 | 3 | 22.946 / 27.185 / 32.979 | 1 |
+
+- 源日志 `/tmp/insightagent-real-rag-acceptance{,-fixed}.log`，低敏汇总 `/tmp/insightagent-provider-latency-{before,fixed}.json`；这些数字是 HTTP 尝试耗时，包含错误/回退请求，不是任务延迟、首 token 时间或供应商生成时间。两组任务/规划轮数不同，不能据均值下降宣称修复提升性能。该表作为持久证据，临时日志消失不会推翻既有验收。
+- 代码核对：兼容 Provider 默认 `timeout_sec=60.0`；非流式 `urlopen` 与响应读取没有通用重试循环，首轮规划异常进入既有规则回退。两次异常约 60 秒、未返回 status family/usage，与超时记录一致；另一次成功请求耗时 59.094 秒。现有日志不能区分连接等待、读取等待或供应商推理慢，也没有请求/任务关联字段；`unexpected_error` 本身不能确诊 TimeoutError。不能推断总任务数、失败率、账单消耗或供应商根因。
+- 当前决策：不延长超时、不新增自动重试；保留首轮回退及未知用量口径。约一分钟规划等待仍是 A1 风险，恢复体验与目标用户可接受等待尚未验收；后续以真实业务任务复核等待、回退可理解性和分支重跑，供应商账单另行核对。
+- 本轮修改仅离线工具和测试/文档，应用实现、服务配置与候选镜像不变。耗时专项 `-k provider_attempt` 11/11（新增 3 个），来源 `/tmp/insightagent-provider-latency-static.log`；后端门禁 2/2 PASS（full slice 2220/2220、模块 9/9），hygiene 3/3 PASS，来源 `/tmp/insightagent-provider-latency-{release,hygiene}.md` / `.json`；前端与数据库/镜像专项保留既有验证范围。

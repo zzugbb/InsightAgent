@@ -138,3 +138,38 @@ class ProviderCallObservabilityMixin:
         self.assertEqual(summary["total_attempts"], 1)
         self.assertEqual(summary["malformed_lines"], 1)
         self.assertNotIn("private", json.dumps(summary))
+
+    def test_provider_attempt_summary_duration_separates_request_and_stream(self):
+        events = [
+            {"event": "llm_http_attempt", "mode": mode, "outcome": outcome,
+             "duration_ms": duration}
+            for mode, outcome, duration in [
+                ("request", "http_response", 100),
+                ("request", "unexpected_error", 60000),
+                ("stream", "success", 900),
+            ]
+        ]
+        summary = summarize(map(json.dumps, events))
+        self.assertEqual(summary["duration_ms_by_mode"]["request"],
+                         {"count": 2, "min": 100, "max": 60000, "mean": 30050})
+        self.assertEqual(summary["duration_ms_by_mode"]["stream"],
+                         {"count": 1, "min": 900, "max": 900, "mean": 900})
+        self.assertEqual(summary["invalid_duration_attempts"], 0)
+
+    def test_provider_attempt_summary_invalid_duration_keeps_attempt_counts(self):
+        events = [
+            {"event": "llm_http_attempt", "mode": "request", "outcome": "http_response",
+             "duration_ms": duration, "prompt": "private"}
+            for duration in [None, True, -1, "60000", float("nan"), float("inf")]
+        ]
+        summary = summarize(map(json.dumps, events))
+        self.assertEqual(summary["total_attempts"], 6)
+        self.assertEqual(summary["invalid_duration_attempts"], 6)
+        self.assertEqual(summary["duration_ms_by_mode"]["request"],
+                         {"count": 0, "min": None, "max": None, "mean": None})
+        self.assertNotIn("private", json.dumps(summary, allow_nan=False))
+
+    def test_provider_attempt_summary_empty_duration_is_unknown(self):
+        summary = summarize([])
+        self.assertEqual(summary["total_attempts"], 0)
+        self.assertEqual(summary["duration_ms_by_mode"]["stream"]["mean"], None)

@@ -65,7 +65,8 @@ stable_contracts:
   - Next 16.3.5 与 eslint-config-next 精确对齐，React / React DOM 固定 19.2.8；React Compiler refs / set-state-in-effect 无例外；ESLint 9.39.5 在 React/import/jsx-a11y 插件正式兼容 ESLint 10 前保持锁定
   - data/insightagent.plan.back.md 是只读备份计划，永远不修改
 validation_baseline:
-  source: 2026-10-08 当前后端 gate 2/2、full slice 2217/2217、模块 9/9，上一 planning-call-usage full gate 10/10、提供方静态 8/8、反馈 PostgreSQL 20/20、用量 3/3、终态 10/10、远端流 6/6；真实模型基础链路与合成 RAG 已验证，业务资料/目标部署待验
+  provider_latency_audit: 只读既有真实 RAG 日志，两次约 60 秒异常；离线耗时专项 11/11，根因/任务延迟/账单/恢复体验未验证；应用和镜像不变
+  source: 2026-10-08 当前后端 gate 2/2、full slice 2220/2220、模块 9/9，上一 planning-call-usage full gate 10/10、提供方静态 8/8、反馈 PostgreSQL 20/20、用量 3/3、终态 10/10、远端流 6/6；真实模型基础链路与合成 RAG 已验证，业务资料/目标部署待验
   real_rag_current: 两种正文预算驱动真实检索/计算 14 与 10，来源/版本及 Trace/delta/export 一致；真实最终回答在注入规划超时下明确未执行 Calculator，模型提示约束不保证所有回答绝不误述；详情 docs/real-model-acceptance.md
   current_audit: 2026-10-08 智谱 glm-5.3 真实流式连通与任务 3/3 通过；两条后端服务任务及一条登录浏览器发送，Trace/delta/export/usage 一致；6530 tokens 含连通验证，详情 docs/real-model-acceptance.md；合成 RAG 已补验证，业务质量及目标部署待验
   backup_restore_fixture: scripts/local_stack_snapshot.py 安全测试通过；修正 Compose Chroma /data 挂载后，隔离 fixture 的 PostgreSQL 测试行与 Chroma 测试文档均从新项目卷恢复读回；目标环境 RPO/RTO 未验证
@@ -79,11 +80,11 @@ validation_baseline:
   task_tool_parallel: 默认 1（串行），1–4 配置仅并发内建与明确声明的 HTTP 读取；15 个专项与 6 个 PostgreSQL 场景通过，进程最多 8 个读取线程；取消/超时丢弃迟到结果
   task_checkpoints: 实验性内建顺序计划，成功前缀复用、独立分支与失败重试；6 个静态专项、9/9 PostgreSQL，HTTP/DAG checkpoint 延期；新 Trace 标注来源且复用 token/cost 归零
   task_reruns: 完整任务分支支持编辑输入、独立会话、幂等与来源分页；7 个既有专项进入门禁，11/11 PostgreSQL 既有回归通过；原任务/Trace/usage 不变
-  backend_current: full slice 2217/2217、module boundary 9/9；规划调用失败/回退实际用量、参数边界及回答增量已验证，OpenAPI 51 操作/89 组件与 SSE/Trace/export 兼容
-  release_gate: 当前后端 /tmp/insightagent-execution-evidence-release.md 与 .json，2/2 PASS；full slice 2217/2217、module 9/9；前端保留上一完整门禁 10/10 的 node 217/217 与双构建，本轮未重跑前端
+  backend_current: full slice 2220/2220、module boundary 9/9，来源 /tmp/insightagent-provider-latency-release.md 与 .json；规划调用失败/回退实际用量、参数边界及回答增量已验证，OpenAPI 51 操作/89 组件与 SSE/Trace/export 兼容
+  release_gate: 当前后端 /tmp/insightagent-provider-latency-release.md 与 .json，2/2 PASS；full slice 2220/2220、module 9/9；前端保留上一完整门禁 10/10 的 node 217/217 与双构建，本轮未重跑前端
   frontend: node 217/217、lint 0 error/2 既有 warning；本轮无前端实现改动，保留历史提示 Chromium 1440px 英文/390px 中文 2/2
   e2e_current: 保留反馈/规划 PostgreSQL 20/20、用量汇总 3/3、终态 10/10、远端流 6/6；真实本机 HTTP 空正文错误/429 与请求间用量隔离通过，其他范围保留历史基线
-  hygiene: 本轮镜像/文档 hygiene 3/3 PASS，来源 /tmp/insightagent-pilot-0209651-hygiene.md 与 .json；compileall、diff whitespace 与 backup plan untouched；提交前继续核对 cached diff
+  hygiene: 本轮工具/文档 hygiene 3/3 PASS，来源 /tmp/insightagent-provider-latency-hygiene.md 与 .json；compileall、diff whitespace 与 backup plan untouched；提交前继续核对 cached diff
 completed_mainlines:
   - agent-core-alignment：本地实现/契约封板；有界对话上下文、模型 RAG 证据、Observation 决策、Trace 关系和文件导入，真实模型基础链路与合成 RAG 已验证，业务质量仍待验
   - provider-tool-expansion：provider search 归一化、planner 多协议 tool call、JSON 字符串参数、reconnect 错误码
@@ -133,7 +134,8 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 当前验证基线
 
-- 当前后端门禁 **2/2 PASS**，来源 `/tmp/insightagent-execution-evidence-release.md` / `.json`：full slice **2217/2217**、module boundary **9/9**；执行证据专项 **7/7**、独立 PostgreSQL/Chroma 核心场景 **11/11**，来源 `/tmp/insightagent-execution-evidence-{static,postgres}.log`。前端未变，保留上一完整门禁 **10/10 PASS** 的前端 node **217/217**、lint **0 error / 2 个既有 warning**与双构建基线（`/tmp/insightagent-planning-call-usage-release.md` / `.json`）；本轮未重跑全量前端。
+- 本轮收尾：[规划等待排查](../../docs/real-model-acceptance.md)已核对两次约 60 秒异常，补齐离线请求/流耗时统计；不增加超时或重试，根因与恢复体验仍待实证。仅工具/测试/文档变化，候选镜像及应用实现不变；专项 **11/11**，新增 3 个耗时边界测试，来源 `/tmp/insightagent-provider-latency-static.log`。本轮后端门禁 **2/2 PASS**（full slice **2220/2220**、模块 **9/9**），来源 `/tmp/insightagent-provider-latency-release.md` / `.json`；前端/数据库/镜像范围保留原基线。
+- 前轮执行证据后端门禁 **2/2 PASS**，来源 `/tmp/insightagent-execution-evidence-release.md` / `.json`：full slice **2217/2217**、module boundary **9/9**；执行证据专项 **7/7**、独立 PostgreSQL/Chroma 核心场景 **11/11**，来源 `/tmp/insightagent-execution-evidence-{static,postgres}.log`。前端未变，保留上一完整门禁 **10/10 PASS** 的前端 node **217/217**、lint **0 error / 2 个既有 warning**与双构建基线（`/tmp/insightagent-planning-call-usage-release.md` / `.json`）；本轮未重跑全量前端。
 - 规划调用用量专项基线：提供方静态 **8/8**、独立 PostgreSQL 反馈/规划 **20/20**、用量汇总 **3/3**、终态 **10/10**、远端流 **6/6**；来源 `/tmp/insightagent-planning-call-usage-{static,postgres,accounting-regression,terminal-regression,stream-regression}.log`。覆盖真实本机 HTTP 空正文/429、完整/部分/缺失用量、首轮回退与后续失败、Trace/delta/export 和请求隔离；模型仅协议替身。该专项为前轮验证，保留其范围；当前后端修复门禁见本节首项。
 - 保留空流回退回答 **14/14**、终态 **10/10**、成功保存 **6/6**，来源 `/tmp/insightagent-fallback-trace-*.log`；历史消息/会话静态 **9/11**、前端提示计算 **9/9** 与 Chromium 桌面英文/手机中文 **2/2** 保留 `/tmp/insightagent-message-completion-*.log` 基线。会话/Chroma 核心 **9/9** 保留；本轮未重跑这些交互或模型专项。
 - 保留用量计算后端 **8/8** / 前端 **6/6**（`/tmp/insightagent-usage-accounting-{static,frontend}.log`）及公开工具证据 **3/3**、HTTP 并发 **7/7**（`/tmp/insightagent-tool-evidence-{postgres,http-regression}.log`）；本轮未重跑这些专项。

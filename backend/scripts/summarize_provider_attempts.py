@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from collections import Counter
 from pathlib import Path
@@ -25,6 +26,8 @@ def summarize(lines: Iterable[str]) -> dict[str, object]:
     by_status_family: Counter[str] = Counter()
     malformed_lines = 0
     usage_available = 0
+    durations: dict[str, list[float]] = {mode: [] for mode in sorted(MODES)}
+    invalid_durations = 0
     for line in lines:
         try:
             event = json.loads(line)
@@ -43,6 +46,14 @@ def summarize(lines: Iterable[str]) -> dict[str, object]:
         ):
             malformed_lines += 1
             continue
+        duration = event.get("duration_ms")
+        if (
+            isinstance(duration, (int, float)) and not isinstance(duration, bool)
+            and math.isfinite(duration) and duration >= 0
+        ):
+            durations[mode].append(float(duration))
+        else:
+            invalid_durations += 1
         by_mode[mode] += 1
         by_outcome[outcome] += 1
         if family is not None:
@@ -57,6 +68,16 @@ def summarize(lines: Iterable[str]) -> dict[str, object]:
         "by_status_family": dict(sorted(by_status_family.items())),
         "usage_available_attempts": usage_available,
         "malformed_lines": malformed_lines,
+        "invalid_duration_attempts": invalid_durations,
+        "duration_ms_by_mode": {
+            mode: {
+                "count": len(values),
+                "min": round(min(values), 3) if values else None,
+                "max": round(max(values), 3) if values else None,
+                "mean": round(sum(values) / len(values), 3) if values else None,
+            }
+            for mode, values in durations.items()
+        },
     }
 
 
