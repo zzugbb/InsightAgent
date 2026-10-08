@@ -17,8 +17,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 当前验证基线
 
-- 本轮收尾：修复 GitHub `frontend-e2e` #194/#195 中 `composer-keyboard.spec.ts` 在生产构建下的误失败（`nextjs-portal` 在 `CI=1` 生产启动时不存在，`not.toContainText` 误报）。断言改为 `nextjs-portal [data-nextjs-dialog]` 计数为 0，与同仓库其它 e2e 一致。云端 VM 生产模式 Chromium **2/2**；控制台 `errors` 断言在生产构建下通过。原先输入法三浏览器 **6/6** 为用户本机 `npm run dev` 结果，修复后 dev 三浏览器复验**待用户 Mac**；候选镜像未重建。
-- 上轮收尾：[规划等待排查](../docs/real-model-acceptance.md)离线耗时专项 **11/11**；后端门禁 **2/2**（**2220/2220**、模块 **9/9**），来源 `/tmp/insightagent-provider-latency-release.md` / `.json`。
+- 本轮收尾：`thinking` 阶段收到 SSE `heartbeat` 时展示「正在等待模型生成工具规划（连接正常）」；SSE 形状不变，叠在后端规划等待修复上。输入法生产 e2e 修复仍在 PR #1；本机 dev 三浏览器复验**待用户 Mac**。
+- 上轮收尾：`composer-keyboard` 生产构建覆盖层断言修复；[规划等待排查](../docs/real-model-acceptance.md)离线耗时 **11/11**。
 - 前轮执行证据后端门禁 **2/2 PASS**，来源 `/tmp/insightagent-execution-evidence-release.md` / `.json`：full slice **2217/2217**、module boundary **9/9**；执行证据专项 **7/7**、独立 PostgreSQL/Chroma 核心场景 **11/11**，来源 `/tmp/insightagent-execution-evidence-{static,postgres}.log`。前端未变，保留上一完整门禁 **10/10 PASS** 的前端 node **217/217**、lint **0 error / 2 个既有 warning**与双构建基线（`/tmp/insightagent-planning-call-usage-release.md` / `.json`）；本轮未重跑全量前端。
 - 规划调用用量专项基线：提供方静态 **8/8**、独立 PostgreSQL 反馈/规划 **20/20**、用量汇总 **3/3**、终态 **10/10**、远端流 **6/6**；来源 `/tmp/insightagent-planning-call-usage-{static,postgres,accounting-regression,terminal-regression,stream-regression}.log`。覆盖真实本机 HTTP 空正文/429、完整/部分/缺失用量、首轮回退与后续失败、Trace/delta/export 和请求隔离；模型仅协议替身。该专项为前轮验证，保留其范围；当前后端修复门禁见本节首项。
 - 保留空流回退回答 **14/14**、终态 **10/10**、成功保存 **6/6**，来源 `/tmp/insightagent-fallback-trace-*.log`；历史消息/会话静态 **9/11**、前端提示计算 **9/9** 与 Chromium 桌面英文/手机中文 **2/2** 保留 `/tmp/insightagent-message-completion-*.log` 基线。会话/Chroma 核心 **9/9** 保留；本轮未重跑这些交互或模型专项。
