@@ -16,7 +16,8 @@
 
 ## 当前验证基线
 
-- 本轮收尾（项 D）：[目标环境部署与恢复演练工具包](docs/pilot-environment-drill.md)（`pilot_https_probe.sh`、`pilot_backup_restore_drill.sh`）；`test_pilot_drill_scripts.sh` 通过。**待外部验收（缺目标环境）**。
+- 本轮收尾（项 E）：统一本机验收 `scripts/local_acceptance.sh` 与 [local-acceptance-checklist.md](docs/local-acceptance-checklist.md)；干跑自测通过。
+- 上轮收尾（项 D）：[目标环境部署与恢复演练工具包](docs/pilot-environment-drill.md)（`pilot_https_probe.sh`、`pilot_backup_restore_drill.sh`）；`test_pilot_drill_scripts.sh` 通过。**待外部验收（缺目标环境）**。
 - 上轮收尾（项 C）：[目标业务端到端验收模板](docs/target-task-acceptance.md)与 `scripts/export_acceptance_evidence.py`（单会话低敏证据包）；静态自测 **1/1**。**待外部验收（缺目标任务与用户）**。
 - 上轮收尾（项 B）：新增 [真实业务 RAG 验收工具包](docs/business-rag-acceptance.md)（`scripts/business_rag_acceptance_runner.py` + 合成 fixture）；VM 静态自测 **2/2**，Docker 隔离自测待本机/CI 有 daemon 时执行。状态 **待外部验收（缺真实业务资料）**。
 - 本轮收尾：加固 `frontend-e2e`/`backend-e2e` workflow——主 e2e 失败后仍 `if: always()` 跑 tooling 自测，避免 artifact guard 摘要缺失混入 `missing_count` 噪音；诊断重跑改用 `scripts/ci_rerun_frontend_e2e_diagnostics.sh`（同目录 `--last-failed`、摘要如实标 `diagnostic_gate_result`，不 `continue-on-error` 伪装成功）。VM tooling 自测通过（含 `test_ci_rerun_frontend_e2e_diagnostics.sh`、`test_ci_workflow_guards.sh`、`ci_run_release_gate.sh --phase tooling`）。

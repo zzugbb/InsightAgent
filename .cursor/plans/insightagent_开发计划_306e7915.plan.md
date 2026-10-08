@@ -4,7 +4,11 @@ overview: 持续推进项目收尾；核心本地实现/契约已封板，执行
 current_focus:
   mainline: project-completion-audit
   status: 持续收尾中；核心本地契约已封板，基础真实模型/合成 RAG 已验证，本次新后端候选配对联调通过；业务质量/目标部署待验
+<<<<<<< HEAD
+  latest_change: 2026-10-08 local_acceptance.sh 统一本机验收入口；dry-run 自测通过
+=======
   latest_change: 2026-10-08 试点部署/恢复演练工具包；目标任务验收模板与 export 静态 1/1；真实业务 RAG 静态 2/2；e2e workflow 健壮性；规划等待 5/5；composer-keyboard/runbook node 217/217；真实 glm/镜像待 Mac
+>>>>>>> cursor/pilot-drill-kit-11df
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
