@@ -805,7 +805,7 @@ class TaskUsageTopTaskRow(BaseModel):
     source_kind: str = "legacy"
     failure_hint: str | None = None
     failure_source: str | None = None
-    governance: TaskGovernanceSummary | None = None
+    governance: "TaskGovernanceSummary | None" = None
 
 
 class TaskUsageDashboardResponse(BaseModel):

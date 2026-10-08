@@ -1,9 +1,11 @@
 import json
 import re
 from asyncio import CancelledError
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime
 from time import monotonic, sleep
+from typing import TypeVar
 from uuid import uuid4
 
 from app.config import get_settings
@@ -369,6 +371,58 @@ def _resolve_provider_identity(
         or "mock-gpt"
     ).strip()
     return (provider_name or "mock", model_name or "mock-gpt")
+
+
+_PLANNING_WAIT_POLL_INTERVAL_SEC = 0.05
+TBlocking = TypeVar("TBlocking")
+
+
+def _yield_planning_wait_ticks(
+    future: Future[TBlocking],
+    *,
+    task_id: str,
+    stream_heartbeat_interval_sec: float,
+    raise_if_should_abort,
+    maybe_touch_execution_heartbeat,
+) -> Iterator[str]:
+    last_heartbeat_ts = monotonic()
+    while not future.done():
+        raise_if_should_abort(force_status_probe=True)
+        maybe_touch_execution_heartbeat()
+        now = monotonic()
+        if now - last_heartbeat_ts >= stream_heartbeat_interval_sec:
+            yield sse_event(
+                "heartbeat",
+                {
+                    "task_id": task_id,
+                    "ts": datetime.now().isoformat(),
+                },
+            )
+            last_heartbeat_ts = now
+        sleep(_PLANNING_WAIT_POLL_INTERVAL_SEC)
+
+
+def _run_blocking_planning_step(
+    work: Callable[[], TBlocking],
+    *,
+    task_id: str,
+    stream_heartbeat_interval_sec: float,
+    raise_if_should_abort,
+    maybe_touch_execution_heartbeat,
+) -> Iterator[str | TBlocking]:
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="task-planning")
+    future = executor.submit(work)
+    try:
+        yield from _yield_planning_wait_ticks(
+            future,
+            task_id=task_id,
+            stream_heartbeat_interval_sec=stream_heartbeat_interval_sec,
+            raise_if_should_abort=raise_if_should_abort,
+            maybe_touch_execution_heartbeat=maybe_touch_execution_heartbeat,
+        )
+        yield future.result()
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 def stream_task_execution(
@@ -830,10 +884,29 @@ def stream_task_execution(
         if checkpoint_seed is not None:
             tool_plan = validate_resume(checkpoint_seed, planning_registry_provider)
         else:
-            tool_plan_artifacts = build_tool_plan_artifacts(
-                prompt, provider=provider, registry_provider=planning_registry_provider,
-                **({"planning_prompt": model_prompt} if conversation.messages else {}),
+            planning_step = _run_blocking_planning_step(
+                lambda: build_tool_plan_artifacts(
+                    prompt,
+                    provider=provider,
+                    registry_provider=planning_registry_provider,
+                    **(
+                        {"planning_prompt": model_prompt}
+                        if conversation.messages
+                        else {}
+                    ),
+                ),
+                task_id=task_id,
+                stream_heartbeat_interval_sec=STREAM_HEARTBEAT_INTERVAL_SEC,
+                raise_if_should_abort=raise_if_should_abort,
+                maybe_touch_execution_heartbeat=maybe_touch_execution_heartbeat,
             )
+            tool_plan_artifacts = None
+            for planning_event in planning_step:
+                if isinstance(planning_event, str):
+                    yield planning_event
+                else:
+                    tool_plan_artifacts = planning_event
+            assert tool_plan_artifacts is not None
             tool_plan = tool_plan_artifacts.tool_plan
         plan_content = build_tool_plan_summary(
             tool_plan,
@@ -1007,9 +1080,29 @@ def stream_task_execution(
             source_steps = [step["id"] for step in trace_steps
                             if (step.get("meta") or {}).get("agent_round") == agent_round
                             and step.get("type") == "action"]
-            decision = (FeedbackDecision([], "repeated_action") if tool_result.get("stop_reason") == "repeated_action"
-                        else feedback_loop.decide(prompt=model_prompt,
-                            observations=with_model_observations(tool_observations, trace_steps), provider=provider))
+            if tool_result.get("stop_reason") == "repeated_action":
+                decision = FeedbackDecision([], "repeated_action")
+            else:
+                decision_step = _run_blocking_planning_step(
+                    lambda: feedback_loop.decide(
+                        prompt=model_prompt,
+                        observations=with_model_observations(
+                            tool_observations, trace_steps
+                        ),
+                        provider=provider,
+                    ),
+                    task_id=task_id,
+                    stream_heartbeat_interval_sec=STREAM_HEARTBEAT_INTERVAL_SEC,
+                    raise_if_should_abort=raise_if_should_abort,
+                    maybe_touch_execution_heartbeat=maybe_touch_execution_heartbeat,
+                )
+                decision = None
+                for planning_event in decision_step:
+                    if isinstance(planning_event, str):
+                        yield planning_event
+                    else:
+                        decision = planning_event
+                assert decision is not None
             decision_content = build_tool_plan_summary(decision.plan, registry_provider=tool_registry_provider) if decision.plan else f"Agent tools stopped: {decision.reason}. Generate answer from available observations."
             decision_meta = {"model": provider_model, "step_type": "planning", "label": "agent_decision",
                              "agent_round": feedback_loop.round, "agent_decision": decision.reason,

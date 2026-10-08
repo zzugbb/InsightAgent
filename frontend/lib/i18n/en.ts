@@ -172,6 +172,7 @@ export const en: Messages = {
     streamCancelled: "Task was cancelled.",
     streamTimeout: "Task timed out.",
     streamHeartbeat: "Receiving task stream (heartbeat ok).",
+    streamPlanningWait: "Waiting for tool planning from the model (connection ok).",
     loadingPersistedTrace: "Loading persisted trace...",
     persistedTraceLoaded: "Persisted trace loaded.",
     persistedTraceEmpty: "Persisted trace is empty for this task.",

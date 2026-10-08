@@ -169,6 +169,7 @@ export const zh: Messages = {
     streamCancelled: "任务已取消。",
     streamTimeout: "任务已超时。",
     streamHeartbeat: "任务流连接正常（heartbeat）。",
+    streamPlanningWait: "正在等待模型生成工具规划（连接正常）。",
     loadingPersistedTrace: "正在加载持久化轨迹…",
     persistedTraceLoaded: "已加载持久化轨迹。",
     persistedTraceEmpty: "该任务暂无持久化轨迹。",
