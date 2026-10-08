@@ -25,6 +25,47 @@ class FixtureProvider:
 
 
 class AgentFeedbackMixin:
+    def test_agent_feedback_missing_required_input_never_falls_back_to_the_prompt(self):
+        for node in ({"name": "calc_eval", "input": {}}, {"name": "task_retrieve", "input": {}},
+                     calc(""), {"name": "task_retrieve", "input": {"query": "  "}},
+                     {"name": "task_retrieve", "input": {"query": ["not text"]}}):
+            with self.subTest(node=node):
+                loop, provider = self.feedback_fixture(json.dumps({"tools": [node]}))
+                result = loop.decide(prompt="user request [calc:5*2]", observations=["actual result 5"], provider=provider)
+                self.assertEqual(result.reason, "invalid_decision")
+                self.assertEqual(result.plan, [])
+                self.assertEqual(result.artifacts.provider_usage.total_tokens, 12)
+
+    def test_agent_feedback_bound_query_can_omit_a_literal_without_using_prompt_defaults(self):
+        from app.services.tool_plan_dependencies import bind_node_input
+
+        graph = [{**calc("3+4"), "id": "root", "depends_on": []},
+                 {"name": "task_retrieve", "id": "search", "input": {},
+                  "input_bindings": {"query": {"node": "root", "path": ["result"], "template": "result {value}"}}}]
+        loop, provider = self.feedback_fixture(json.dumps({"tools": graph}))
+        result = loop.decide(prompt="user request", observations=[], provider=provider)
+        self.assertEqual(result.reason, "continue")
+        self.assertEqual(bind_node_input(result.plan[-1], {"root": {"result": 7.0}})["input"]["query"], "result 7.0")
+
+    def test_agent_feedback_initial_planning_keeps_legacy_missing_input_defaults(self):
+        from app.services.tool_runtime_planning import _build_provider_tool_plan
+
+        provider = FixtureProvider(json.dumps({"tools": [{"name": "calc_eval"}, {"name": "task_retrieve"}]}))
+        result = _build_provider_tool_plan("rag [calc:5*2]", provider=provider)
+        self.assertTrue(result.planning_provider_used)
+        self.assertEqual(result.tool_plan[1]["input"]["expression"], "5*2")
+        self.assertEqual(result.tool_plan[2]["input"]["query"], "rag [calc:5*2]")
+
+    def test_agent_feedback_graph_missing_input_keeps_graph_error_and_returned_usage(self):
+        from app.services.tool_plan_dependencies import ToolDependencyError
+
+        graph = [{"name": "calc_eval", "id": "incomplete", "depends_on": [], "input": {}}]
+        loop, provider = self.feedback_fixture(json.dumps({"tools": graph}))
+        with self.assertRaises(ToolDependencyError) as caught:
+            loop.decide(prompt="request [calc:5*2]", observations=[], provider=provider)
+        self.assertEqual(caught.exception.code, "tool_dependency_plan_invalid")
+        self.assertEqual(caught.exception.planning_provider_usage.total_tokens, 12)
+
     def test_agent_feedback_resolved_binding_is_remembered_for_a_later_flat_plan(self):
         loop, provider = self.feedback_fixture(json.dumps({"tools": [calc("5.0*2")]}))
         self.assertTrue(loop.allow_resolved_input(calc("5.0*2")))

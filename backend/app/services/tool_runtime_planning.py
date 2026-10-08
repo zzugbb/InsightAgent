@@ -793,17 +793,18 @@ def _normalize_provider_tool_plan(
     *,
     prompt: str,
     registry_provider: ToolRegistryProvider | None = None,
+    strict: bool = False,
 ) -> list[dict[str, object]] | None:
     if has_dependencies(raw_items):
         def normalize_node(raw):
-            plan = _normalize_provider_tool_plan([raw], prompt=prompt, registry_provider=registry_provider)
+            plan = _normalize_provider_tool_plan([raw], prompt=prompt, registry_provider=registry_provider, strict=strict)
             optional = [item for item in (plan or []) if get_tool_semantic_kind(
                 name=str(item["name"]), registry_provider=registry_provider,
             ) != "task_planner"]
             return optional[0] if len(optional) == 1 else None
         return normalize_dependency_plan(
             raw_items, normalize_node=normalize_node,
-            planner_prefix=_normalize_provider_tool_plan([], prompt=prompt, registry_provider=registry_provider) or [],
+            planner_prefix=_normalize_provider_tool_plan([], prompt=prompt, registry_provider=registry_provider, strict=strict) or [],
         )
     settings = get_settings()
     prompt_preview = prompt.strip()[:120]
@@ -860,12 +861,15 @@ def _normalize_provider_tool_plan(
             saw_planner_tool = True
             continue
         if tool_kind == "knowledge_retrieval":
+            query = _coerce_tool_execution_string_like_value(tool_input.get("query"))
+            if strict and (not isinstance(query, str) or not query.strip()):
+                continue
             top_k = tool_input.get("top_k")
             if isinstance(top_k, bool):
                 top_k = None
             if not isinstance(top_k, int) or top_k <= 0:
                 top_k = settings.rag_default_top_k
-            query = str(tool_input.get("query") or default_query)
+            query = query if strict else str(tool_input.get("query") or default_query)
             knowledge_base_id = str(
                 tool_input.get("knowledge_base_id") or default_kb_id
             )
@@ -885,7 +889,7 @@ def _normalize_provider_tool_plan(
             expression = _coerce_tool_execution_string_like_value(
                 tool_input.get("expression")
             )
-            if not isinstance(expression, str) or not expression.strip():
+            if not strict and (not isinstance(expression, str) or not expression.strip()):
                 expression = fallback_calc_expression
             if not isinstance(expression, str) or not expression.strip():
                 continue
@@ -965,6 +969,7 @@ def _build_provider_tool_plan(
             items,
             prompt=prompt,
             registry_provider=registry_provider,
+            strict=strict,
         )
     except ToolDependencyError as exc:
         # The model call completed even though its graph cannot be executed.

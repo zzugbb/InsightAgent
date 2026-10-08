@@ -111,6 +111,9 @@ def normalize_dependency_plan(raw_items, *, normalize_node, planner_prefix):
         if "expression" in bindings:
             # Static input validation still runs; the real value is validated again by the tool after binding.
             clean["input"] = {**(clean.get("input") if isinstance(clean.get("input"), dict) else {}), "expression": "0"}
+        if "query" in bindings:
+            # A binding supplies the required query at runtime; never substitute prompt text.
+            clean["input"] = {**(clean.get("input") if isinstance(clean.get("input"), dict) else {}), "query": "bound query"}
         normalized = normalize_node(clean)
         if normalized is None:
             raise ToolDependencyError()

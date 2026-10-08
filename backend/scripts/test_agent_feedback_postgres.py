@@ -178,9 +178,41 @@ class AgentFeedbackPostgresTests(unittest.TestCase):
             self.assertEqual(client.get(f"/api/tasks/{task}/export/markdown").status_code, 200)
             usage = json.loads(self.task(client, task)["usage_json"])
             self.assertEqual(usage["planning_total_tokens"], decision_calls * 12)
+            return steps
 
     def test_bound_action_cannot_be_replayed_as_flat_input(self):
         self.assert_graph_feedback([bound_graph("2+3"), [calc("5.0*2")]], ["2+3", "5.0*2"], "repeated_action")
+
+    def test_missing_feedback_expression_does_not_execute_the_original_user_expression(self):
+        self.assert_graph_feedback([[calc("3+4")], [{"name": "calc_eval", "input": {}}]],
+                                   ["3+4"], "invalid_decision")
+
+    def test_missing_feedback_query_does_not_search_the_prompt_or_execute_valid_siblings(self):
+        provider = GraphFeedbackProvider([[calc("3+4")], [calc("5*2"), {"name": "task_retrieve", "input": {}}]])
+        from app.services import tool_runtime as runtime
+
+        with patch.object(runtime, "run_tool", wraps=runtime.run_tool) as runner, self.client(provider) as client:
+            task = self.create(client)
+            self.assertIn("event: done", client.get(f"/api/tasks/{task}/stream").text)
+            business = [call.kwargs["name"] for call in runner.call_args_list if call.kwargs["name"] != "task_plan"]
+            self.assertEqual(business, ["calc_eval"])
+            steps = self.steps(client, task)
+            self.assertEqual(steps[-1]["meta"]["agent_stop_reason"], "invalid_decision")
+            self.assertIn("Runtime tool-stage stop reason: invalid_decision", provider.answer_prompts[-1])
+            self.assertEqual(json.loads(self.task(client, task)["usage_json"])["planning_total_tokens"], 24)
+            self.assertEqual(client.get(f"/api/tasks/{task}/trace/delta?after_seq=0&limit=100").json()["steps"], steps)
+            self.assertEqual(client.get(f"/api/tasks/{task}/export/json").json()["trace"]["steps"], steps)
+
+    def test_feedback_bound_query_uses_resolved_result_when_literal_query_is_omitted(self):
+        graph = [{**calc("3+4"), "id": "root", "depends_on": []},
+                 {"name": "task_retrieve", "id": "search", "input": {"knowledge_base_id": "default"},
+                  "input_bindings": {"query": {"node": "root", "path": ["result"], "template": "result {value}"}}}]
+        steps = self.assert_graph_feedback([[calc("2+3")], graph, []], ["2+3", "3+4"],
+                                           "no_tools", decision_calls=3)
+        searches = [step for step in steps if (step["meta"].get("tool") or {}).get("name") == "task_retrieve"]
+        self.assertEqual(len(searches), 1)
+        self.assertEqual(searches[0]["meta"]["tool"]["input"]["query"], "result 7.0")
+        self.assertEqual(searches[0]["meta"]["tool"]["input"]["knowledge_base_id"], "default")
 
     def test_bound_action_is_checked_after_new_root_without_an_extra_provider_decision(self):
         self.assert_graph_feedback([[calc("5.0*2")], bound_graph("3+2")], ["5.0*2", "3+2"], "repeated_action")

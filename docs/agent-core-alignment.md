@@ -24,7 +24,7 @@
 - `AGENT_MAX_ROUNDS=3`，包含首轮，范围 1–8；设为 1 保持旧单轮行为。每任务最多 32 个业务工具节点，不计首轮 planner 工具。
 - 只有首轮模型规划有效且包含业务工具时才启动反馈。canonical Mock、首轮规则回退、无业务工具和 checkpoint 分支保持单轮；不将 Mock 规则输出宣称为自主模型决策。
 - 反馈使用任务启动时的工具注册表快照；各轮仍由现有执行器校验工具与用户资源权限。
-- 后续规划只接受完整有效的工具列表，不把非法/部分有效响应回退成原始计划。决策阶段 Provider 异常沿用任务失败处理。
+- 后续规划只接受完整有效的工具列表；query/expression 必须明确给出非空文本，或由合法 input_bindings 提供，不从原请求或反馈提示补齐缺失参数。普通不完整决策整批拒绝为 invalid_decision；非法依赖图保留 tool_dependency_plan_invalid 与失败状态，不回退执行。首轮兼容默认值、检索可选 top_k/knowledge_base_id 及合法绑定保持可用。决策阶段 Provider 异常沿用任务失败处理。
 - 首次/后续规划模型已返回但依赖图非法时，保持原图错误和失败状态，保存该次实际规划用量；部分/缺失字段不估算，详见[用量口径](usage-accounting.md)。
 - 各轮 DAG 独立；依赖与标量绑定仅引用本轮节点。跨轮通过安全 Observation 传递信息，不能引用上一轮 DAG 节点 ID。
 - 跨轮防重复按工具名与实际输入比较；静态参数在决策时检查，绑定节点在结果替换后、启动工具/事件/并发工作线程前再检查。绑定占位值与节点 ID 不作为执行身份；相同模板得到不同参数可继续，同轮 DAG 重复节点和工具内部重试保持原行为。
@@ -53,7 +53,7 @@
 
 ## 最终验证与实现位置
 
-当前失败规划用量维护：反馈静态 **11/11**、依赖图静态 **26/26**、独立 PostgreSQL 反馈 **13/13**，DAG **7/7** 与成功保存/终态竞争 **6/6** 回归；来源 `/tmp/insightagent-invalid-plan-usage-{static,dependency-static,postgres,dag-regression,terminal-regression}.log`。覆盖首次/后续非法图的完整、部分、缺失用量，保留跨轮实际输入防重复、Trace/delta/export 与停止提示场景；均为本地模型替身。完整门禁 `/tmp/insightagent-invalid-plan-usage-release.md` / `.json`：**10/10 PASS**，后端 **2204/2204**、模块边界 **9/9**、前端 **217/217**、双构建和 lint 通过（两个既有 warning）。本轮未修改前端或重跑浏览器。
+当前反馈参数维护：反馈静态 **15/15**、依赖图静态 **26/26**、独立 PostgreSQL 反馈 **16/16** 与 DAG **7/7**，来源 `/tmp/insightagent-feedback-required-input-{static,dependency-static,postgres,dag-regression}.log`。覆盖缺失/空白/非文本输入、普通决策整批拒绝、合法结果绑定、首轮兼容，继续验证失败规划用量与实际输入防重复、Trace/delta/export 和停止提示；均为本地模型替身。完整门禁 `/tmp/insightagent-feedback-required-input-release.md` / `.json`：**10/10 PASS**，后端 **2208/2208**、模块边界 **9/9**、前端 **217/217**、双构建和 lint 通过（两个既有 warning）。本轮未修改前端或重跑浏览器。
 
 后续维护验证来源：`/tmp/insightagent-tool-evidence-release.md` / `.json`，full gate **10/10**（后端 **2155/2155**、前端 **200/200**）；`/tmp/insightagent-tool-evidence-postgres.log` 公开 HTTP 证据 **3/3**，实际请求/持久化验证相同命中数不同正文的分支、单轮回答、来源与脱敏。反馈 **6/6**、HTTP 并发 **7/7**、会话/Chroma 核心 **9/9** 回归日志均为 `/tmp/insightagent-tool-evidence-*-regression.log`；本地替身不能证明真实模型效果。
 
