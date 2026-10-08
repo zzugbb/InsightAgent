@@ -60,7 +60,7 @@ docker build -f frontend/Dockerfile.pilot \
 - 新配对隔离联调 PASS：禁网 embedding 384 维；生产模式、真实 PostgreSQL/Chroma 下后台幂等导入/召回、任务 SSE/Trace/delta/JSON v1.0/Markdown、步骤恢复与 2 个工具结果复用/usage 清零、排队取消、前端 HTML/CSS/浏览器 API 地址均通过。Agent HTTP 协议专项 7 场景：5 完成/2 失败、13 规划/5 回答请求，历史/会话隔离、两种正文驱动反馈与来源/版本、空正文/429 用量隔离和导出一致。资源清理后才报告成功，scope `local_production_protocol_fixture`；模型仅本地替身，不消耗真实 Key。
 - 当前来源 `/tmp/insightagent-pilot-0209651-backend-retry.log`、`/tmp/insightagent-pilot-0209651-source-proof.log` / `.json`、`/tmp/insightagent-pilot-0209651-smoke.log`；首次 embedding HTTPS 握手超时后相同配方重试成功，模型下载/hash/预热保留原校验。测试依赖摘要继续使用下方命令中的固定值。
 - 本轮镜像/文档 hygiene 3/3 PASS，来源 `/tmp/insightagent-pilot-0209651-hygiene.md` / `.json`；备份计划未修改。
-- Compose 全容器重建持久化保留旧 `218f94d` 双镜像基线，来源 `/tmp/insightagent-pilot-218f94d-compose-smoke.log`；本轮无数据库/持久化/Compose/前端应用变化，未重跑该专项。当前后端门禁 2/2：2217/2217、模块 9/9；核心 PostgreSQL/Chroma 11/11，前端保留上一 node 217/217/lint/双构建基线。本机真实模型的合成验收范围单独见[验收记录](real-model-acceptance.md)。
+- Compose 全容器重建持久化保留旧 `218f94d` 双镜像基线，来源 `/tmp/insightagent-pilot-218f94d-compose-smoke.log`；本轮无数据库/持久化/Compose/前端应用变化，未重跑该专项。当前后端门禁 2/2：**2220/2220**、模块 9/9；核心 PostgreSQL/Chroma 11/11，前端保留上一 node 217/217/lint/双构建基线。本机真实模型的合成验收范围单独见[验收记录](real-model-acceptance.md)。
 
 本地镜像 ID 不能充当目标仓库摘要。候选未推送或部署；跨架构、真实模型质量、TLS/访问边界和升级回滚仍未验证。
 
