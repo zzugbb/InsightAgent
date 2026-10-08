@@ -11,6 +11,7 @@
 - 普通非 canonical mock 任务在执行开始时读取同用户、同会话中本任务创建前已完成的问答配对，按最近任务选取并恢复时间顺序。失败、取消、未配对、跨用户/会话内容，以及在本任务创建后才完成的答案均排除。
 - 最多 6 轮，单消息最多 4,000 字符，历史 JSON 最多 16,000 字符；按完整配对裁剪，最新一对即使 JSON 转义膨胀也会缩短到预算内。SQL 读取同样限制条数和每条内容大小。
 - 首轮规划、后续决策与最终回答共享同一快照。规则回退、实际工具执行、当前 task.prompt/message 与 Memory 追加仍使用本次原始输入，避免历史工具标记重放；完整分支重跑的新会话不复制父会话，checkpoint 分支与 canonical mock 演示保持原行为。
+- 历史 assistant 上下文可选携带最终回答步骤的白名单 `completion` 原因，计入上述 JSON 预算；模型收到截断/执行限制及“结束不代表目标完成”的提示，损坏或缺失记录不推断。见[回答完整性](answer-completion.md)。
 - 首轮 Trace.meta 可选追加 `conversation_context` 的 `turn_count`、`character_count` 与 `truncated`，不持久化整份模型历史提示词。
 - 模型额外接收已脱敏 RAG Trace 的正文与知识库、来源、文档 ID、版本/hash，优先最近检索；最多 6 片段、单片段 1,200 字符、证据 JSON 8,000 字符，标记为不可信数据，并指导引用提供的来源/版本。计数型 Observation 和已有 Trace/导出保持原形状；证据提供不保证真实模型一定正确引用。
 - 后续维护补齐公开 HTTP 工具结果：成功 action 的公开结果字段进入模型反馈与最终回答，补足计数摘要丢失的搜索条目等内容。只读取 `effective_result_output_keys` 并复用脱敏；最多 6 项、单项 JSON 3,000/总 JSON 8,000 字符，最多三层容器、每容器最多 6 项、单字符串最多 1,200 字符，并可进一步收缩以满足 JSON 预算；裁剪标记 `truncated`。失败结果、原始响应/输入/注册表配置不进入新增证据，原 Observation/Trace/export 与 canonical mock 保持原行为。

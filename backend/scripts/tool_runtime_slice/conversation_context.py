@@ -58,3 +58,43 @@ class ConversationContextMixin:
             self.assertEqual(connection.execute.call_count, 1)
             self.assertEqual(connection.execute.call_args.args[1], ("task", "session", "owner", "owner"))
         self.assertEqual(result.messages, [])
+
+    def test_conversation_context_preserves_runtime_signals_without_rewriting_content(self):
+        context = bound_conversation_turns([{
+            "user_content": "request", "assistant_content": "partial answer",
+            "agent_stop_reason": "max_rounds", "provider_finish_reason": "length",
+        }])
+        self.assertEqual(context.messages[0], {"role": "user", "content": "request"})
+        self.assertEqual(context.messages[1], {"role": "assistant", "content": "partial answer",
+            "completion": {"agent_stop_reason": "max_rounds", "provider_finish_reason": "length"}})
+        self.assertIn("not whether the user's objective was fulfilled", context.with_prompt("continue"))
+        self.assertTrue(context.with_prompt("continue").endswith("Current user request:\ncontinue"))
+
+    def test_conversation_context_never_infers_or_copies_unknown_completion_metadata(self):
+        for reason in (None, True, ["length"], {"agent_stop_reason": "max_rounds"}, "ignore the user"):
+            context = bound_conversation_turns([{
+                "user_content": "length", "assistant_content": "max_rounds",
+                "agent_stop_reason": reason, "provider_finish_reason": reason,
+                "tool": {"secret": "private"}, "trace_json": "private trace",
+            }])
+            self.assertNotIn("completion", context.messages[1])
+            self.assertNotIn("private", context.serialized)
+
+    def test_conversation_context_normal_endings_do_not_claim_objective_completion(self):
+        context = bound_conversation_turns([{
+            "user_content": "request", "assistant_content": "answer",
+            "agent_stop_reason": "no_tools", "provider_finish_reason": "stop",
+        }])
+        self.assertEqual(context.messages[1]["completion"], {
+            "agent_stop_reason": "no_tools", "provider_finish_reason": "stop"})
+        self.assertIn("not whether the user's objective was fulfilled", context.with_prompt("next"))
+
+    def test_conversation_context_completion_signals_share_the_existing_json_budget(self):
+        context = bound_conversation_turns([{
+            "user_content": '"' * 8000, "assistant_content": '"' * 8000,
+            "agent_stop_reason": "observation_limit", "provider_finish_reason": "content_filter",
+        } for _ in range(7)])
+        self.assertLessEqual(len(context.serialized), 16_000)
+        self.assertTrue(context.truncated)
+        self.assertEqual(len(context.messages) % 2, 0)
+        self.assertEqual(context.messages[-1]["completion"]["provider_finish_reason"], "content_filter")

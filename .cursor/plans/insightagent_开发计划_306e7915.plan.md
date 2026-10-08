@@ -109,7 +109,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization` 与 `next-major-upgrade-readiness` 均已 100% 封板。
 - 最近封板：`agent-core-alignment` 的本地实现与契约验证已封板：有界对话上下文、工具反馈决策、RAG 正文/来源证据、Trace 关系与知识文件导入均完成。可进入后续维护或下一条按实际需求选定的主线；真实模型效果验收仍属于外部待验项。
 - 当前阶段：[Agent 核心对齐](../../docs/agent-core-alignment.md)本地实现/契约已封板；后续按实际使用问题维护，真实模型质量与目标部署验收待资源具备。
-- 当前维护完成：[回答完整性提示](../../docs/answer-completion.md)将工具停止原因传给最终回答，保留已知模型结束原因；聊天和任务详情显示限额/截断提示，支持刷新回放与导出。终态复核、失败已知用量和成功原子保存沿用现有契约。
+- 当前维护完成：[回答完整性提示](../../docs/answer-completion.md)记录并展示工具停止与模型结束原因；连续对话将历史回答的白名单结束原因传给后续规划、决策及最终回答，提醒识别截断或未完成检查。会话隔离、上下文预算、原始正文及外部接口沿用现有契约。
 - A2 [试点镜像与部署入口](../../docs/pilot-deployment-preflight.md)已准备：84 个后端依赖版本锁定、非 root 默认 embedding 构建缓存通过禁网验证；新增生产 `compose.pilot.yml`、低敏预检/操作入口与健康启动顺序。隔离 mock 下重建全部容器后，登录、会话、任务/Trace 与 Chroma 知识保留；目标部署、TLS、真实模型与升级回滚仍待实测。
 - A4 [后台 RAG 导入](../../docs/rag-background-ingest.md)的持久化/分批进度与[完整任务分支重跑](../../docs/task-reruns.md)已完成本地闭环；[任务内工具并发](../../docs/task-tool-parallel.md)支持内建检索/计算有界并发；[工具依赖与结果引用](../../docs/tool-dependencies.md)支持显式 DAG、重复工具、拓扑波次与公开预览标量绑定；[HTTP 读取并发](../../docs/http-read-parallel.md)支持明确声明只读的固定 GET、配置冻结和生命周期协调。[实验性步骤恢复](../../docs/task-checkpoints.md)已实现内建顺序计划的独立分支、成功前缀复用与当前设置复核。OpenAPI 为 51 操作 / 88 组件；写入工具并行及 HTTP/DAG checkpoint 明确延期，目标运行与用户验收待完成。
 - 非阻塞维护候选：`eslint-10-adoption` 的 React/import/jsx-a11y 三个插件 peer 范围均排除 ESLint 10；React 官方修复尚未发布，预检的 1 个外部兼容动作概括这组约束，不强制覆盖 peer。
@@ -127,10 +127,11 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 当前验证基线
 
-- 2026-10-08 full release gate **10/10 PASS**，来源 `/tmp/insightagent-answer-completion-release.md` / `.json`；后端 full slice **2191/2191**、module boundary **9/9**；前端 node **213/213**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建通过。
-- 本轮回答完整性静态 **6/6**、独立 PostgreSQL **6/6**、前端计算 **5/5**；来源 `/tmp/insightagent-answer-completion-{static,postgres,frontend}.log`。Chromium 桌面英文/手机中文 **2/2**，验证发送、提示、刷新、任务详情与返回聊天；来源 `/tmp/insightagent-answer-completion-e2e.log`。终态 **10/10**、反馈 **6/6** 回归来源 `/tmp/insightagent-answer-completion-{terminal,feedback}-regression.log`；仅本地模型/API 替身。
-- 保留用量计算后端 **8/8** / 前端 **6/6**（`/tmp/insightagent-usage-accounting-{static,frontend}.log`）、反馈/并发生命周期各 **6/6**（`/tmp/insightagent-stream-completion-{feedback,parallel}.log`）及公开工具证据 **3/3**、HTTP 并发 **7/7**、会话/Chroma **9/9**（`/tmp/insightagent-tool-evidence-{postgres,http-regression,core-regression}.log`）；本轮未重跑这些专项。
-- 已验证前端基线：输入法/键盘三浏览器桌面/手机 **6/6**、知识导入 Chromium **7/7**、布局复核 **2/2**、Trace **2/2**；来源 `/tmp/insightagent-composer-keyboard-e2e.log`、`/tmp/insightagent-knowledge-import-e2e.log`、`/tmp/insightagent-knowledge-import-layout.log`、`/tmp/insightagent-trace-flow-e2e.log`。本轮浏览器仅复验回答完整性提示；其余专项保留原基线；输入法事件 fixture 不代替操作系统人工验收。
+- 2026-10-08 full release gate **10/10 PASS**，来源 `/tmp/insightagent-history-completion-release.md` / `.json`；后端 full slice **2195/2195**、module boundary **9/9**；前端 node **213/213**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建通过。
+- 本轮历史回答 completion：会话静态 **11/11**、回答完整性 PostgreSQL **10/10**、会话/Chroma 核心回归 **9/9**；来源 `/tmp/insightagent-history-completion-{static,postgres,core-regression}.log`。覆盖规划/决策/最终回答传递、预算、最新步骤、损坏记录及用户/会话/截止隔离；仅本地模型替身。
+- 回答提示 UI 保留静态 **6/6**、前端计算 **5/5**、Chromium 桌面英文/手机中文 **2/2** 与终态 **10/10**、反馈 **6/6** 原基线；来源 `/tmp/insightagent-answer-completion-*.log`。本轮无 UI 改动，未重跑浏览器专项。
+- 保留用量计算后端 **8/8** / 前端 **6/6**（`/tmp/insightagent-usage-accounting-{static,frontend}.log`）、反馈/并发生命周期各 **6/6**（`/tmp/insightagent-stream-completion-{feedback,parallel}.log`）及公开工具证据 **3/3**、HTTP 并发 **7/7**（`/tmp/insightagent-tool-evidence-{postgres,http-regression}.log`）；本轮未重跑这些专项。
+- 已验证前端基线：输入法/键盘三浏览器桌面/手机 **6/6**、知识导入 Chromium **7/7**、布局复核 **2/2**、Trace **2/2**；来源 `/tmp/insightagent-composer-keyboard-e2e.log`、`/tmp/insightagent-knowledge-import-e2e.log`、`/tmp/insightagent-knowledge-import-layout.log`、`/tmp/insightagent-trace-flow-e2e.log`。本轮未重跑浏览器专项，保留原基线；输入法事件 fixture 不代替操作系统人工验收。
 - 历史 service-backed 基线：完整 Chromium **77 passed / 1 skipped**、完整重跑 PostgreSQL **11/11**、步骤恢复 **9/9**、内建并发 **6/6**、DAG **7/7**、RAG **21/21** 与 400 切块实写，均保留原验证范围。
 - 既有镜像/Compose 与备份恢复证据见试点部署和恢复文档；这些镜像不包含当前核心对齐改动，不代表目标部署验收。
 - 用户无真实 key/部署环境；未发起真实模型请求。决策/回答质量、试点 HTTPS/升级回滚、恢复 RPO/RTO 与签收均未验证；本地封板不代表外部验收完成，项目总完成度不估百分比。
