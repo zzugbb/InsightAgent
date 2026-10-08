@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "knowledge_base_id": "acceptance-synthetic",
+  "questions": [
+    {
+      "id": "budget-double",
+      "prompt": "请检索知识库并把预算数字加倍后告诉我结果。",
+      "checks": {
+        "auto": [
+          {"kind": "citation_source", "source": "star-sail-guide.md"},
+          {"kind": "answer_contains", "text": "14"},
+          {"kind": "tool_executed", "tool": "calc_eval"},
+          {"kind": "tool_executed", "tool": "task_retrieve"}
+        ]
+      }
+    },
+    {
+      "id": "launch-date-unknown",
+      "prompt": "资料里记载的上线日期是哪一天？",
+      "checks": {
+        "auto": [
+          {"kind": "answer_not_documented"},
+          {"kind": "citation_source", "source": "star-sail-guide.md"}
+        ],
+        "manual": ["规划是否在真实模型下超时回退需人工判断"]
+      }
+    }
+  ]
+}

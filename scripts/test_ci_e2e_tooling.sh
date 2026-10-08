@@ -42,6 +42,11 @@ run_common() {
   python3 "${ROOT_DIR}/scripts/test_pilot_task_smoke.py"
   python3 "${ROOT_DIR}/scripts/test_pilot_agent_smoke.py"
   python3 "${ROOT_DIR}/scripts/test_pilot_compose.py"
+  if [ -x "${ROOT_DIR}/backend/.venv/bin/python" ]; then
+    "${ROOT_DIR}/backend/.venv/bin/python" "${ROOT_DIR}/scripts/test_business_rag_acceptance.py"
+  else
+    python3 "${ROOT_DIR}/scripts/test_business_rag_acceptance.py"
+  fi
 }
 
 run_backend() {
