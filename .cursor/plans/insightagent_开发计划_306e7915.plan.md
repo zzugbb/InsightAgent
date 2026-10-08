@@ -65,8 +65,8 @@ stable_contracts:
   - Next 16.3.5 与 eslint-config-next 精确对齐，React / React DOM 固定 19.2.8；React Compiler refs / set-state-in-effect 无例外；ESLint 9.39.5 在 React/import/jsx-a11y 插件正式兼容 ESLint 10 前保持锁定
   - data/insightagent.plan.back.md 是只读备份计划，永远不修改
 validation_baseline:
-  source: 2026-10-08 planning-call-usage full gate 10/10、提供方静态 8/8、反馈 PostgreSQL 20/20、用量 3/3、终态 10/10、远端流 6/6；真实模型与目标部署待验
-  current_audit: 历史 glm-5.1 provider-usage 完成任务 10 条，含工具/RAG Trace；一条历史任务 JSON/Markdown 导出构建通过；此前最小 GLM 调用 HTTP 429，未重试；本轮无真实 key，不发起请求
+  source: 2026-10-08 planning-call-usage full gate 10/10、提供方静态 8/8、反馈 PostgreSQL 20/20、用量 3/3、终态 10/10、远端流 6/6；真实模型基础链路已验证，RAG/目标部署待验
+  current_audit: 2026-10-08 智谱 glm-5.3 真实流式连通与任务 3/3 通过；两条后端服务任务及一条登录浏览器发送，Trace/delta/export/usage 一致；6530 tokens 含连通验证，详情 docs/real-model-acceptance.md；真实 RAG/业务质量及目标部署待验
   backup_restore_fixture: scripts/local_stack_snapshot.py 安全测试通过；修正 Compose Chroma /data 挂载后，隔离 fixture 的 PostgreSQL 测试行与 Chroma 测试文档均从新项目卷恢复读回；目标环境 RPO/RTO 未验证
   tooling_current: 本轮 tooling 1/1 PASS，来源 /tmp/insightagent-pilot-agent-tooling.md 与 .json；新增协议自测 9/9、task smoke 6/6 含清理失败；保留生产 Compose 预检 7/7 及 CI 路径覆盖
   pilot_images_current: 应用提交 218f94d 的 ARM64 双镜像构建通过，84 个后端锁定版本核验通过，78 个 Python 文件源码摘要一致；禁网非 root 384 维 embedding 与生产/mock 任务/知识链路 PASS；完整 ID、配方与来源见 docs/pilot-deployment-preflight.md
@@ -82,9 +82,9 @@ validation_baseline:
   release_gate: /tmp/insightagent-planning-call-usage-release.md 与 .json，full 10/10 PASS；Turbopack/webpack 双构建通过
   frontend: node 217/217、lint 0 error/2 既有 warning；本轮无前端实现改动，保留历史提示 Chromium 1440px 英文/390px 中文 2/2
   e2e_current: 保留反馈/规划 PostgreSQL 20/20、用量汇总 3/3、终态 10/10、远端流 6/6；真实本机 HTTP 空正文错误/429 与请求间用量隔离通过，其他范围保留历史基线
-  hygiene: 本轮 hygiene 3/3 PASS，来源 /tmp/insightagent-pilot-agent-hygiene.md 与 .json；compileall、diff whitespace 与 backup plan untouched；提交前继续核对 cached diff
+  hygiene: 本轮文档验收 hygiene 3/3 PASS，来源 /tmp/insightagent-real-model-acceptance-hygiene.md 与 .json；compileall、diff whitespace 与 backup plan untouched；提交前继续核对 cached diff
 completed_mainlines:
-  - agent-core-alignment：本地实现/契约封板；有界对话上下文、模型 RAG 证据、Observation 决策、Trace 关系和文件导入，真实模型效果验收仍待 key
+  - agent-core-alignment：本地实现/契约封板；有界对话上下文、模型 RAG 证据、Observation 决策、Trace 关系和文件导入，真实模型基础链路已验证，RAG/业务质量仍待验
   - provider-tool-expansion：provider search 归一化、planner 多协议 tool call、JSON 字符串参数、reconnect 错误码
   - production-runtime-hardening：SSE/failure audit diagnostic、前端审计详情 reason、reconnect provider 错误消息映射，后续运维体验已补 /health.operations 与 release/artifact/trend operator-facing 摘要及契约门禁
   - source-size-maintenance：tool runtime/test slice、chat persistence 与 frontend globals.css 已拆分并纳入规模边界
@@ -102,7 +102,7 @@ next_candidate_mainlines:
 next_steps:
   - 终态、失败用量与回答完整性维护完成；按实际使用问题核对下一步
   - 当前候选镜像本地复验已完成，持续收尾目标保持进行中；按可复现的主链路问题维护，暂无必须新增的功能主线
-  - 真实 key/目标环境未具备时不重复请求，外部模型/部署/恢复/签收留作待验收项；写入并行及 HTTP/DAG checkpoint 继续延期
+  - 已配置真实模型并完成基础链路验收，后续补 RAG/业务质量；目标部署/恢复/签收待环境与真实样本具备；写入并行及 HTTP/DAG checkpoint 继续延期
 logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要、验证口径、维护规则和主线地图不应被整段删除。
 ---
 
@@ -113,9 +113,9 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - SSE、Trace、会话 Memory、RAG、鉴权与任务持久化等基础能力已具备；原计划中的 Observation 决策和 Trace 关系展示现纳入核心对齐，不能据此宣称原始完整版目标全部完成。
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization` 与 `next-major-upgrade-readiness` 均已 100% 封板。
 - 最近封板：`agent-core-alignment` 的本地实现与契约验证已封板：有界对话上下文、工具反馈决策、RAG 正文/来源证据、Trace 关系与知识文件导入均完成。可进入后续维护或下一条按实际需求选定的主线；真实模型效果验收仍属于外部待验项。
-- 当前阶段：持续推进[项目收尾](../../docs/project-completion-audit.md)，按现有定位修复主链路并核对交付证据；Agent 核心本地实现/契约已封板，真实模型质量与目标部署验收待资源具备。
+- 当前阶段：持续推进[项目收尾](../../docs/project-completion-audit.md)，按现有定位修复主链路并核对交付证据；Agent 核心本地实现/契约已封板，真实模型基础链路已验证，RAG/真实任务质量与目标部署验收继续收尾。
 - 当前维护完成：[规划调用用量](../../docs/usage-accounting.md)非流式空正文错误携带该次真实用量，首轮规则回退和后续失败都保存已发生消耗；新请求先清空旧用量，部分字段保持未知，成功/失败任务共用汇总规则。反馈必填输入、实际输入防重复与回答增量继续保留。
-- A2 [试点镜像与部署入口](../../docs/pilot-deployment-preflight.md)已准备：84 个后端依赖版本锁定、非 root 默认 embedding 构建缓存通过禁网验证；新增生产 `compose.pilot.yml`、低敏预检/操作入口与健康启动顺序。隔离 mock 下重建全部容器后，登录、会话、任务/Trace 与 Chroma 知识保留；目标部署、TLS、真实模型与升级回滚仍待实测。
+- A2 [试点镜像与部署入口](../../docs/pilot-deployment-preflight.md)已准备：84 个后端依赖版本锁定、非 root 默认 embedding 构建缓存通过禁网验证；新增生产 `compose.pilot.yml`、低敏预检/操作入口与健康启动顺序。隔离 mock 下重建全部容器后，登录、会话、任务/Trace 与 Chroma 知识保留；目标部署、TLS、候选镜像真实模型与升级回滚仍待实测。
 - A4 [后台 RAG 导入](../../docs/rag-background-ingest.md)的持久化/分批进度与[完整任务分支重跑](../../docs/task-reruns.md)已完成本地闭环；[任务内工具并发](../../docs/task-tool-parallel.md)支持内建检索/计算有界并发；[工具依赖与结果引用](../../docs/tool-dependencies.md)支持显式 DAG、重复工具、拓扑波次与公开预览标量绑定；[HTTP 读取并发](../../docs/http-read-parallel.md)支持明确声明只读的固定 GET、配置冻结和生命周期协调。[实验性步骤恢复](../../docs/task-checkpoints.md)已实现内建顺序计划的独立分支、成功前缀复用与当前设置复核。OpenAPI 为 51 操作 / 89 组件；写入工具并行及 HTTP/DAG checkpoint 明确延期，目标运行与用户验收待完成。
 - 非阻塞维护候选：`eslint-10-adoption` 的 React/import/jsx-a11y 三个插件 peer 范围均排除 ESLint 10；React 官方修复尚未发布，预检的 1 个外部兼容动作概括这组约束，不强制覆盖 peer。
 - 当前本机运行/提交路径以 `docs/development-runbook.md` 为准；代码规模治理保持 `backend/app`、`backend/scripts` 与 `frontend` 源码单文件 <= 3000 行。
@@ -140,11 +140,11 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - 历史 service-backed 基线：完整 Chromium **77 passed / 1 skipped**、完整重跑 PostgreSQL **11/11**、步骤恢复 **9/9**、内建并发 **6/6**、DAG **7/7**、RAG **21/21** 与 400 切块实写，均保留原验证范围。
 - 2026-10-08 当前候选镜像已刷新至应用提交 `218f94d`，覆盖核心对齐和近期修复；ARM64 双构建、禁网 384 维 embedding、生产配置/mock 任务与知识链路、Compose 全容器重建后持久数据读回均 PASS。来源 `/tmp/insightagent-pilot-218f94d-{backend-retry,frontend-build,source-proof,smoke,compose-smoke}.log`；完整镜像 ID/源码摘要见试点部署记录。两项基础联调的范围仍为 mock 任务与持久化；真实模型效果与目标部署验收仍待实证。
 - 镜像 Agent 协议专项 **7/7**：通过实际 HTTP Provider 核对历史传递/会话隔离、两种 RAG 正文驱动的反馈分支、来源/版本、空正文回退/失败及 429 请求间用量隔离；5 个任务完成、2 个失败，13 次规划/5 次回答请求，Trace/delta/导出/用量一致。来源 `/tmp/insightagent-pilot-agent-protocol.log`，仅本地协议替身；无服务自测 **9/9**、清理失败不输出 PASS 的回归已纳入 tooling，成功摘要在资源清理后输出；本轮 tooling **1/1**、hygiene **3/3** PASS，来源 `/tmp/insightagent-pilot-agent-{tooling,hygiene}.md` / `.json`。
-- 用户无真实 key/部署环境；未发起真实模型请求。决策/回答质量、试点 HTTPS/升级回滚、恢复 RPO/RTO 与签收均未验证；本地封板不代表外部验收完成，项目总完成度不估百分比。
+- 2026-10-08 [真实模型配置验收](../../docs/real-model-acceptance.md)部分通过：智谱 `glm-5.3` 极短流式请求成功，真实任务 **3/3**（计算、历史续算及登录工作台发送）完成；Trace/delta/导出/消息与提供方用量一致。三任务共 **6,405 tokens**，加连通验证共 **6,530 tokens**；本机开发服务实测，未计作候选镜像或目标部署验证。真实 RAG 引用质量、失败恢复体验与账单成本仍待验收；目标 HTTPS/升级回滚、恢复 RPO/RTO 与用户签收未验证，项目总完成度不估百分比。
 
 ## 当前主线
 
-- 当前阶段：持续推进[项目收尾](../../docs/project-completion-audit.md)，按现有定位修复主链路并核对交付证据；Agent 核心本地实现/契约已封板，真实模型质量与目标部署验收待资源具备。
+- 当前阶段：持续推进[项目收尾](../../docs/project-completion-audit.md)，按现有定位修复主链路并核对交付证据；Agent 核心本地实现/契约已封板，真实模型基础链路已验证，RAG/真实任务质量与目标部署验收继续收尾。
 - 非阻塞维护候选：`eslint-10-adoption` 等待 [eslint-plugin-react 官方兼容性议题](https://github.com/jsx-eslint/eslint-plugin-react/issues/3977) 与 [修复 PR](https://github.com/jsx-eslint/eslint-plugin-react/pull/4022) 对应的正式发布，并核对 import/jsx-a11y 兼容版本；届时补依赖红测后再受控升级。
 - 后续实现继续保持外部 SSE/trace/export/display/e2e 契约稳定。
 - 新 provider/source 协议仍按 `real-tool-execution` 与 `provider-tool-expansion` 封板基线增量补红测和局部归一化，不扩大外部契约。
