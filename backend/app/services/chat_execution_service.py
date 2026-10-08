@@ -1178,8 +1178,8 @@ def stream_task_execution(
                 latest_usage = get_last_usage()
                 if isinstance(latest_usage, ProviderUsage):
                     provider_usage = latest_usage
-        else:
-            final_step_seq += 1
+        # Final content/usage must advance beyond the last emitted snapshot, including empty streams.
+        final_step_seq += 1
         final_usage_payload = _build_usage_payload(
             prompt_text=provider_prompt,
             completion_text=final_content,

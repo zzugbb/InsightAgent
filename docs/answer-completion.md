@@ -8,7 +8,7 @@
 - 最终回答 Trace.meta 可选记录 `agent_stop_reason`：`no_tools`、`max_rounds`、`max_tool_calls`、`observation_limit`、`repeated_action`、`invalid_decision`。无反馈循环的单轮/mock/checkpoint 不推断停止原因。
 - OpenAI-compatible Provider 保留首 choice 已知 `finish_reason`，每次新调用重置；流式与非流式回答均支持。最终回答 Trace.meta 可选记录 `provider_finish_reason`：`stop`、`length`、`content_filter`、`tool_calls`、`function_call`。仅 `[DONE]` 不推断 `stop`，未知值/其他 choice 不进入记录。
 - 接收到结束原因后的传输/解析失败仍保持失败；已知原因可随失败 Trace 保存，不产生成功回答或 `done`。取消/执行实例竞争遵守原终态保护。
-- 成功提交后、`done` 前发送既有 `trace` 事件更新最终回答步骤；Trace ID 不变，新增 metadata 更新递增 seq，delta、回放和 JSON v1.0/Markdown 导出读取相同记录。SSE/Trace/delta/export 外层字段形状保持兼容。
+- 成功提交后、`done` 前发送既有 `trace` 事件更新最终回答步骤；Trace ID 不变，最终正文/用量及新增 metadata 更新递增 seq；空流转入非流式回答时也递增，不依赖结束原因，delta、回放和 JSON v1.0/Markdown 导出读取相同记录。SSE/Trace/delta/export 外层字段形状保持兼容。
 
 ## 连续对话中的历史回答
 
@@ -31,6 +31,8 @@
 
 ## 实现与验证
 
+当前回退增量维护：回答 PostgreSQL **14/14**、取消/超时/失败用量 **10/10**、原子保存/终态竞争 **6/6**，来源 `/tmp/insightagent-fallback-trace-{postgres,terminal-regression,completion-regression}.log`。先发出的空 final_answer 与最终正文保持同一 ID，最终 seq 更大；游标停在空回答时，delta 返回最终正文/用量，SSE、回放、消息与导出一致，回放不会再次调用模型。覆盖未知与 length 原因。完整门禁 `/tmp/insightagent-fallback-trace-release.md` / `.json` **10/10 PASS**，后端 **2204/2204**、前端 **217/217**、模块边界 **9/9**、双构建和 lint 通过（两个既有 warning）。模型为本地替身；本轮未改前端或重跑浏览器。
+
 - `backend/app/providers/completion_signals.py` / `openai_compatible_provider.py`：首 choice 原因白名单、调用间重置。
 - `backend/app/services/answer_completion.py` / `chat_execution_service.py`：停止上下文、最终步骤原因、终态/seq 与 SSE。
 - `backend/app/services/conversation_context.py` / `session_message_history.py`：复用最终回答安全投影与枚举归一化，分别提供模型快照和消息 completion；消息按任务一次提取，避免同任务重复消息重复解析。
@@ -45,8 +47,8 @@ node --test --experimental-strip-types app/components/workbench/answer-notices.n
 npx playwright test e2e/answer-completion.spec.ts --project=chromium --workers=1 --reporter=list --output=/tmp/insightagent-answer-completion-e2e-results
 ```
 
-当前专项：回答静态 **9/9**、会话静态 **11/11**、回答完整性 PostgreSQL **13/13**、前端计算 **9/9**；来源 `/tmp/insightagent-message-completion-{static,context,postgres,frontend}.log`。覆盖白名单/安全整数、超过 50 个任务的历史提示、筛选独立性、用户/会话/角色隔离、旧 Trace 容错、导出不变，以及连续对话信号传递。数据库/模型仅本机隔离 fixture。
+历史消息专项：回答静态 **9/9**、会话静态 **11/11**、回答完整性 PostgreSQL **13/13**、前端计算 **9/9**；来源 `/tmp/insightagent-message-completion-{static,context,postgres,frontend}.log`。覆盖白名单/安全整数、超过 50 个任务的历史提示、筛选独立性、用户/会话/角色隔离、旧 Trace 容错、导出不变，以及连续对话信号传递。数据库/模型仅本机隔离 fixture。
 
 Chromium **2/2**，1440×900 英文、390×900 中文；发送 → 任务列表首 50 条排除本任务 → 刷新 → 筛选为空 → 关闭任务中心 → 详情 → 返回聊天，提示一直存在。页面身份/非空/无错误 overlay、控制台与横向溢出检查通过；截图 `/tmp/insightagent-message-completion-{chat,detail}-{1440,390}.png`，已目视复核。Browser plugin not available，按前端调试技能使用项目 Playwright；仅业务 API fixture，未验证真实模型或其他浏览器。正常 Enter 发送，未屏蔽开发 overlay。
 
-完整发布门禁 `/tmp/insightagent-message-completion-release.md` / `.json`：**10/10 PASS**，后端 **2198/2198**、模块边界 **9/9**、前端 **217/217**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建通过；新增专项已进入 backend-e2e 和静态门禁，浏览器专项沿用 frontend Chromium 发现范围。会话/Chroma 历史核心回归 **9/9** 来源 `/tmp/insightagent-history-completion-core-regression.log`；终态/反馈历史专项范围见[任务完成契约](task-completion.md)。
+历史发布门禁 `/tmp/insightagent-message-completion-release.md` / `.json`：**10/10 PASS**，后端 **2198/2198**、模块边界 **9/9**、前端 **217/217**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建通过；新增专项已进入 backend-e2e 和静态门禁，浏览器专项沿用 frontend Chromium 发现范围。会话/Chroma 历史核心回归 **9/9** 来源 `/tmp/insightagent-history-completion-core-regression.log`；终态/反馈历史专项范围见[任务完成契约](task-completion.md)。

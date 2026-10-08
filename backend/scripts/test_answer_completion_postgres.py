@@ -117,6 +117,41 @@ class AnswerCompletionPostgresTests(unittest.TestCase):
             stream = client.get(f"/api/tasks/{task}/stream").text
             self.assert_metadata_views(client, task, stream, {"provider_finish_reason": "length", "agent_stop_reason": "no_tools"})
 
+    def test_empty_stream_fallback_answer_is_visible_after_the_empty_trace_cursor(self):
+        class FallbackProvider(ConditionalProvider):
+            def __init__(self, reason):
+                super().__init__()
+                self.reason, self.answer_calls = reason, 0
+
+            def stream_generate(self, prompt):
+                return iter(())
+
+            def generate(self, prompt):
+                result = super().generate(prompt)
+                if not prompt.startswith("You are the Task Planner for InsightAgent."):
+                    self.answer_calls += 1
+                    result.content = "fallback answer fixture"
+                    result.finish_reason = self.reason
+                return result
+
+        for reason in (None, "length"):
+            with self.subTest(reason=reason), self.client(provider := FallbackProvider(reason)) as client:
+                task = self.create(client)
+                stream = client.get(f"/api/tasks/{task}/stream").text
+                frames = [json.loads(block.split("data: ", 1)[1])["step"] for block in stream.split("\n\n")
+                          if block.startswith("event: trace\n")]
+                empty = next(step for step in frames if step["meta"].get("step_type") == "final_answer")
+                final = self.steps(client, task)[-1]
+                self.assertEqual(empty["content"], "")
+                self.assertGreater(final["seq"], empty["seq"])
+                delta = client.get(f"/api/tasks/{task}/trace/delta?after_seq={empty['seq']}&limit=100").json()
+                self.assertEqual(delta["steps"], [final])
+                self.assertEqual(final["content"], "fallback answer fixture")
+                self.assertEqual(provider.answer_calls, 1)
+                self.assertEqual(persistence.get_task_messages(task, "owner")[-1]["content"], final["content"])
+                self.assert_metadata_views(client, task, stream, {"provider_finish_reason": reason})
+                self.assertEqual(provider.answer_calls, 1)
+
     def test_failure_after_known_reason_keeps_failure_and_recorded_reason(self):
         with local_provider("finish_invalid_json") as (provider, calls), self.client(provider) as client:
             task = self.create(client)
