@@ -4,7 +4,7 @@ overview: 持续推进项目收尾；核心本地实现/契约已封板，执行
 current_focus:
   mainline: project-completion-audit
   status: 持续收尾中；核心本地契约已封板，基础真实模型/合成 RAG 已验证，本次新后端候选配对联调通过；业务质量/目标部署待验
-  latest_change: 2026-10-08 修复 frontend-e2e composer-keyboard 生产构建覆盖层断言（nextjs-portal 缺失误失败）；云端 VM CI=1 Chromium 2/2；dev 三浏览器复验待用户 Mac；候选镜像未重建
+  latest_change: 2026-10-08 修复 frontend-e2e composer-keyboard 生产构建覆盖层断言；runbook 补齐 FRONTEND_NODE_TESTS 漏列的 next-major-readiness（209→217 为少跑文件）；云端 VM node 217/217、CI=1 Chromium 2/2；dev 三浏览器复验待用户 Mac
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -82,7 +82,7 @@ validation_baseline:
   task_reruns: 完整任务分支支持编辑输入、独立会话、幂等与来源分页；7 个既有专项进入门禁，11/11 PostgreSQL 既有回归通过；原任务/Trace/usage 不变
   backend_current: full slice 2220/2220、module boundary 9/9，来源 /tmp/insightagent-provider-latency-release.md 与 .json；规划调用失败/回退实际用量、参数边界及回答增量已验证，OpenAPI 51 操作/89 组件与 SSE/Trace/export 兼容
   release_gate: 后端 2/2 PASS full slice 2220/2220、module 9/9；前端 node/lint/双构建保留上一完整门禁，本轮补 composer-keyboard CI=1 Chromium 2/2
-  frontend: node 217/217、lint 0 error/2 既有 warning；仅 e2e 断言修复，无应用实现改动
+  frontend: node 217/217（21 个 node.test.ts，与 ci_run_release_gate.sh 一致）、lint 0 error/2 既有 warning；e2e 断言与 runbook 列表修复，无应用实现改动
   e2e_current: composer-keyboard 生产构建 Chromium 2/2（云端 VM）；dev 三浏览器 6/6 为用户本机历史记录，修复后 dev 复验待 Mac；GitHub frontend-e2e PR 复验待跑
   e2e_ci_incident: frontend-e2e #194/#195 因 bare nextjs-portal not.toContainText 在生产构建误失败；已改为 data-nextjs-dialog 计数 0
   hygiene: 本轮工具/文档 hygiene 3/3 PASS，来源 /tmp/insightagent-provider-latency-hygiene.md 与 .json；compileall、diff whitespace 与 backup plan untouched；提交前继续核对 cached diff
