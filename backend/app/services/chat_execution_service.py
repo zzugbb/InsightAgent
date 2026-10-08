@@ -345,55 +345,11 @@ def _merge_usage_payloads(
     final_usage: dict[str, object],
     planning_usage: dict[str, object] | None,
 ) -> dict[str, object]:
-    usage_payload = dict(final_usage)
-    if planning_usage is None:
-        return usage_payload
-
-    planning_prompt_tokens = int(planning_usage.get("prompt_tokens", 0) or 0)
-    planning_completion_tokens = int(planning_usage.get("completion_tokens", 0) or 0)
-    planning_total_tokens = int(planning_usage.get("total_tokens", 0) or 0)
-    final_prompt_tokens = int(final_usage.get("prompt_tokens", 0) or 0)
-    final_completion_tokens = int(final_usage.get("completion_tokens", 0) or 0)
-    final_total_tokens = int(final_usage.get("total_tokens", 0) or 0)
-    planning_cost_estimate = planning_usage.get("cost_estimate")
-    final_cost_estimate = final_usage.get("cost_estimate")
-
-    usage_payload.update(
-        {
-            "planning_prompt_tokens": planning_prompt_tokens,
-            "planning_completion_tokens": planning_completion_tokens,
-            "planning_total_tokens": planning_total_tokens,
-            "planning_prompt_tokens_source": planning_usage.get("prompt_tokens_source"),
-            "planning_completion_tokens_source": planning_usage.get(
-                "completion_tokens_source"
-            ),
-            "planning_usage_source": planning_usage.get("usage_source"),
-            "planning_cost_estimate": planning_cost_estimate,
-            "overall_prompt_tokens": final_prompt_tokens + planning_prompt_tokens,
-            "overall_completion_tokens": final_completion_tokens
-            + planning_completion_tokens,
-            "overall_total_tokens": final_total_tokens + planning_total_tokens,
-        }
-    )
-    if isinstance(planning_usage.get("provider_total_tokens"), int):
-        usage_payload["planning_provider_total_tokens"] = planning_usage[
-            "provider_total_tokens"
-        ]
-    if (
-        isinstance(planning_cost_estimate, (int, float))
-        and isinstance(final_cost_estimate, (int, float))
-    ):
-        usage_payload["overall_cost_estimate"] = round(
-            float(planning_cost_estimate) + float(final_cost_estimate),
-            8,
-        )
-    elif isinstance(final_cost_estimate, (int, float)):
-        usage_payload["overall_cost_estimate"] = float(final_cost_estimate)
-    elif isinstance(planning_cost_estimate, (int, float)):
-        usage_payload["overall_cost_estimate"] = float(planning_cost_estimate)
-    else:
-        usage_payload["overall_cost_estimate"] = None
-    return usage_payload
+    # Reuse the recorded-field rules so partial failed planning stays unknown, not zero.
+    return build_terminal_usage(
+        planning_usage=planning_usage, final_usage=final_usage, provider_usage=None,
+        prompt_price=0, completion_price=0,
+    ) or dict(final_usage)
 
 
 def _resolve_provider_identity(
@@ -921,18 +877,26 @@ def stream_task_execution(
                 checkpoint_start_index=checkpoint_seed["start_index"],
             )
         if tool_plan_artifacts and tool_plan_artifacts.planning_provider_attempted:
-            planning_usage_payload = _build_usage_payload(
-                prompt_text=tool_plan_artifacts.planning_prompt or prompt,
-                completion_text=plan_content,
-                provider_usage=tool_plan_artifacts.provider_usage,
-            )
+            if tool_plan_artifacts.planning_provider_failed:
+                planning_usage_payload = build_terminal_usage(
+                    planning_usage=None, final_usage=None, provider_usage=tool_plan_artifacts.provider_usage,
+                    prompt_price=float(getattr(runtime_config, "usage_prompt_token_price_per_1k", 0)),
+                    completion_price=float(getattr(runtime_config, "usage_completion_token_price_per_1k", 0)),
+                )
+            else:
+                planning_usage_payload = _build_usage_payload(
+                    prompt_text=tool_plan_artifacts.planning_prompt or prompt,
+                    completion_text=plan_content,
+                    provider_usage=tool_plan_artifacts.provider_usage,
+                )
+            recorded_planning = planning_usage_payload or {}
             plan_meta.update(
                 {
-                    "tokens": planning_usage_payload["completion_tokens"],
-                    "cost_estimate": planning_usage_payload["cost_estimate"],
-                    "prompt_tokens": planning_usage_payload["prompt_tokens"],
-                    "completion_tokens": planning_usage_payload["completion_tokens"],
-                    "usage_source": planning_usage_payload["usage_source"],
+                    "tokens": recorded_planning.get("completion_tokens"),
+                    "cost_estimate": recorded_planning.get("cost_estimate"),
+                    "prompt_tokens": recorded_planning.get("prompt_tokens"),
+                    "completion_tokens": recorded_planning.get("completion_tokens"),
+                    "usage_source": recorded_planning.get("usage_source"),
                 }
             )
         plan_step = {

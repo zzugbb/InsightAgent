@@ -34,6 +34,20 @@ def local_provider(mode):
             if not streaming:
                 body = json.dumps({"choices": [{"message": {"content": '{"tools": []}'},
                     **({"finish_reason": "length"} if mode == "planner_length_done" else {})}]})
+                if mode.startswith("planning_"):
+                    first = calls.count(False) == 1
+                    usage = {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12}
+                    if mode in {"planning_empty_feedback", "planning_http_error_after_usage"} and first:
+                        text = json.dumps({"tools": [{"name": "calc_eval", "input": {"expression": "2+3"}}]})
+                    else:
+                        text = ""
+                    if mode == "planning_empty_partial":
+                        usage = {"prompt_tokens": 5, "total_tokens": 9}
+                    if mode == "planning_empty_unknown":
+                        usage = None
+                    body = json.dumps({"choices": [{"message": {"content": text}}], "usage": usage})
+                    if mode == "planning_http_error_after_usage" and not first:
+                        status, body = 429, '{"error":{"message":"fixture limited"}}'
             elif mode == "compat_partial" and "stream_options" in payload:
                 status, body = 400, '{"error": {"message": "stream_options unsupported"}}'
             else:
@@ -47,11 +61,11 @@ def local_provider(mode):
                           "finish_tool": "tool_calls", "finish_invalid_json": "length"}.get(mode)
                 if reason:
                     body += event(choices=[{"delta": {}, "finish_reason": reason}])
-                if mode in {"finish", "done", "partial_usage", "planner_length_done", "finish_length", "finish_filter", "finish_tool"}:
+                if mode in {"finish", "done", "partial_usage", "planner_length_done", "finish_length", "finish_filter", "finish_tool"} or mode.startswith("planning_"):
                     body += event(choices=[], usage={"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7})
                 if mode == "finish_invalid_json":
                     body += "data: invalid JSON\n\n"
-                if mode in {"done", "empty", "planner_length_done"}:
+                if mode in {"done", "empty", "planner_length_done"} or mode.startswith("planning_"):
                     body += "data: [DONE]\n\n"
             encoded = body.encode()
             self.send_response(status)

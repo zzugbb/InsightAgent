@@ -214,6 +214,7 @@ class OpenAICompatibleLLMProvider:
         return coerce_provider_usage(raw_usage)
 
     def generate(self, prompt: str) -> ProviderResponse:
+        self._last_usage = None
         self._last_finish_reason = None
         payload = {
             "model": self.model,
@@ -233,6 +234,7 @@ class OpenAICompatibleLLMProvider:
                 user_message="Remote provider returned empty text content.",
                 detail=None,
                 retryable=False,
+                provider_usage=usage,
             )
         return ProviderResponse(
             content=content,

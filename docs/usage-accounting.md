@@ -14,13 +14,15 @@
 
 首次或后续规划的模型响应已收到、但依赖图校验失败时，规划器仅随原图错误传递该次 ProviderUsage，执行器在失败保存前计入 planning。错误正文、原始计划不进入新增用量记录，也不回退执行非法图。只有 prompt/completion 都已知时才计算该次 total 和成本；多次规划任一字段未知时，该字段合计保持未知，上游 provider_total_tokens 仍独立累计。无有效用量仅保留此前已记录值；最终回答未启动时不生成 final 用量。
 
+非流式请求开始前重置 last_usage；空正文错误仅携带该次响应实际返回的用量，不读取上一请求残留。首轮失败保留原规则回退，Trace 与任务用量只保存有效字段；后续规划失败仍终结任务并计入当前消耗。最终成功汇总复用失败保存的字段规则，不把部分 planning 字段转成 0；overall 继续统计各阶段已知字段，不宣称未知消耗不存在。
+
 前端详情/Context Inspector 支持仅 planning/overall 的记录：规划与汇总可见，最终回答字段显示未知；会话聚合仍按已知字段计算。
 
 实现位置：后端 `app/services/usage_accounting.py` 提供统一读取规则，持久化 facade 与仪表盘复用；前端 `workbench/utils.ts` 的会话聚合使用同一读取顺序，当前任务仍展示 final/planning/overall 明细。
 
 ## 验证与维护
 
-当前失败规划维护：`/tmp/insightagent-invalid-plan-usage-{static,dependency-static,postgres,dag-regression,terminal-regression}.log`，反馈静态 **11/11**、依赖图静态 **26/26**、反馈 PostgreSQL **13/13**、DAG **7/7**、成功保存/终态竞争 **6/6**。首次及后续非法图在保留原错误/失败状态、已完成 Trace 与禁止最终回答的同时，持久化完整/部分用量，缺失字段不估算。完整门禁 `/tmp/insightagent-invalid-plan-usage-release.md` / `.json` **10/10 PASS**（后端 **2204/2204**、前端 **217/217**）；本轮未改前端或重跑浏览器，无真实模型调用。
+当前规划调用维护：`/tmp/insightagent-planning-call-usage-{static,postgres,accounting-regression,terminal-regression,stream-regression}.log`，提供方静态 **8/8**、反馈/规划 PostgreSQL **20/20**、用量汇总 **3/3**、终态 **10/10**、远端流 **6/6**。本机 HTTP 验证首轮/后续空正文的完整/部分/缺失用量，429 不复用上轮记录，保持原回退/失败、Trace/delta/export 与消息保存。完整门禁 `/tmp/insightagent-planning-call-usage-release.md` / `.json` **10/10 PASS**（后端 **2210/2210**、前端 **217/217**）；本轮未改前端或重跑浏览器，无真实模型调用。
 
 ```bash
 backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k usage_accounting

@@ -27,6 +27,7 @@ class ProviderCallError(RuntimeError):
         detail: str | None = None,
         status_code: int | None = None,
         retryable: bool = False,
+        provider_usage: ProviderUsage | None = None,
     ) -> None:
         super().__init__(user_message)
         self.code = code
@@ -34,6 +35,7 @@ class ProviderCallError(RuntimeError):
         self.detail = detail
         self.status_code = status_code
         self.retryable = retryable
+        self.provider_usage = provider_usage
 
 
 class LLMProvider(Protocol):

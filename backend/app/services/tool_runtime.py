@@ -135,6 +135,7 @@ class ToolPlanArtifacts:
     provider_usage: ProviderUsage | None = None
     planning_provider_attempted: bool = False
     planning_provider_used: bool = False
+    planning_provider_failed: bool = False
 
 
 @dataclass(frozen=True)

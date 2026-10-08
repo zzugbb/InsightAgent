@@ -15,6 +15,7 @@ from app.config import get_settings
 from app.providers.base import ProviderCallError, ProviderResponse, ProviderUsage
 from app.providers.mock_provider import MockLLMProvider
 from app.services import task_queue_service as queue
+from app.services import chat_persistence_service as persistence
 
 
 def calc(expression):
@@ -96,6 +97,56 @@ class AgentFeedbackPostgresTests(unittest.TestCase):
         with patch("app.services.chat_execution_service.get_llm_provider", return_value=provider), \
              TaskParallelPostgresTests.client(self) as client:
             yield client
+
+    def assert_http_planning_failure(self, mode, *, completed):
+        from test_provider_stream_postgres import local_provider
+
+        with local_provider(mode) as (provider, calls), self.client(provider) as client:
+            task = self.create(client)
+            stream = client.get(f"/api/tasks/{task}/stream").text
+            result = self.task(client, task)
+            self.assertEqual(result["status_normalized"], "completed" if completed else "failed")
+            self.assertEqual(calls, [False, True] if completed else [False, False])
+            self.assertEqual("event: done" in stream, completed)
+            self.assertEqual([msg["role"] for msg in persistence.get_task_messages(task, "owner")], ["user", "assistant"] if completed else ["user"])
+            steps = self.steps(client, task)
+            self.assertEqual(client.get(f"/api/tasks/{task}/trace/delta?after_seq=0&limit=100").json()["steps"], steps)
+            self.assertEqual(client.get(f"/api/tasks/{task}/export/json").json()["trace"]["steps"], steps)
+            self.assertEqual(queue.get_task_queue_snapshot(max_concurrent=32)["active_count"], 0)
+            return json.loads(result["usage_json"]), steps, provider.get_last_usage()
+
+    def test_initial_empty_http_planning_response_keeps_usage_through_rule_fallback(self):
+        usage, steps, _ = self.assert_http_planning_failure("planning_empty_initial", completed=True)
+        self.assertEqual(usage["planning_total_tokens"], 12)
+        self.assertEqual(usage["total_tokens"], 7)
+        self.assertEqual(usage["overall_total_tokens"], 19)
+        self.assertEqual(steps[0]["meta"]["completion_tokens"], 2)
+
+    def test_feedback_empty_http_response_keeps_both_planning_calls(self):
+        usage, _, _ = self.assert_http_planning_failure("planning_empty_feedback", completed=False)
+        self.assertEqual(usage["planning_total_tokens"], 24)
+        self.assertEqual(usage["planning_provider_total_tokens"], 24)
+        self.assertEqual(usage["overall_total_tokens"], 24)
+        self.assertNotIn("completion_tokens", usage)
+
+    def test_new_http_error_cannot_reuse_previous_planning_usage(self):
+        usage, _, last = self.assert_http_planning_failure("planning_http_error_after_usage", completed=False)
+        self.assertEqual(usage["planning_total_tokens"], 12)
+        self.assertEqual(usage["overall_total_tokens"], 12)
+        self.assertIsNone(last)
+
+    def test_initial_failed_planning_partial_or_missing_usage_stays_unknown(self):
+        usage, steps, _ = self.assert_http_planning_failure("planning_empty_partial", completed=True)
+        self.assertEqual(usage["planning_prompt_tokens"], 5)
+        self.assertEqual(usage["planning_provider_total_tokens"], 9)
+        for field in ("planning_completion_tokens", "planning_total_tokens", "planning_cost_estimate"):
+            self.assertIsNone(usage[field])
+        self.assertEqual(usage["overall_total_tokens"], 12)
+        self.assertIsNone(steps[0]["meta"]["completion_tokens"])
+        usage, steps, _ = self.assert_http_planning_failure("planning_empty_unknown", completed=True)
+        self.assertNotIn("planning_prompt_tokens", usage)
+        self.assertEqual(usage["total_tokens"], 7)
+        self.assertIsNone(steps[0]["meta"]["tokens"])
 
     def assert_invalid_graph_usage(self, *, followup=False, usage=ProviderUsage(10, 2, 12)):
         invalid = [{**calc("3*2"), "id": "broken", "depends_on": ["missing"]}]

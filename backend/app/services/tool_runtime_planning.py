@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import replace
 
 from app.config import get_settings
-from app.providers.base import ProviderUsage
+from app.providers.base import ProviderCallError, ProviderUsage
 from app.services.tool_plan_dependencies import (
     ToolDependencyError, has_dependencies, normalize_dependency_plan,
 )
@@ -933,7 +933,12 @@ def _build_provider_tool_plan(
         prompt,
         registry_provider=registry_provider,
     )
-    response = generate(planning_prompt)
+    try:
+        response = generate(planning_prompt)
+    except ProviderCallError as exc:
+        # Only this response's explicit usage qualifies; last_usage could belong to a previous call.
+        exc.planning_provider_usage = exc.provider_usage
+        raise
     raw_usage = (
         response.get("usage")
         if isinstance(response, dict)
@@ -1023,6 +1028,13 @@ def build_tool_plan_artifacts(
         )
     except ToolDependencyError:
         raise
+    except ProviderCallError as exc:
+        return ToolPlanArtifacts(
+            tool_plan=fallback_plan, allowed_tool_names=allowed_tool_names,
+            allowed_tool_labels=allowed_tool_labels,
+            provider_usage=exc.planning_provider_usage,
+            planning_provider_attempted=True, planning_provider_failed=True,
+        )
     except Exception:  # noqa: BLE001
         provider_plan = None
     if provider_plan is None:

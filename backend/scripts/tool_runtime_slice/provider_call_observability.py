@@ -32,6 +32,30 @@ class _Response:
 
 
 class ProviderCallObservabilityMixin:
+    def test_provider_attempt_new_nonstream_error_clears_previous_call_usage(self):
+        provider = OpenAICompatibleLLMProvider(model="fixture", provider="fixture",
+                                              base_url="https://example.test/v1", api_key="fixture")
+        body = b'{"choices":[{"message":{"content":"answer"}}],"usage":{"total_tokens":12}}'
+        with patch("app.providers.openai_compatible_provider.urlopen", return_value=_Response([body])):
+            provider.generate("first")
+        self.assertEqual(provider.get_last_usage().total_tokens, 12)
+        with patch.object(provider, "_request_json", side_effect=ProviderCallError(code="fixture", user_message="failed")):
+            with self.assertRaises(ProviderCallError):
+                provider.generate("second")
+        self.assertIsNone(provider.get_last_usage())
+
+    def test_provider_attempt_empty_nonstream_error_preserves_only_returned_usage(self):
+        provider = OpenAICompatibleLLMProvider(model="fixture", provider="fixture",
+                                              base_url="https://example.test/v1", api_key="fixture")
+        body = b'{"choices":[{"message":{"content":""}}],"usage":{"prompt_tokens":5,"total_tokens":9}}'
+        with patch("app.providers.openai_compatible_provider.urlopen", return_value=_Response([body])):
+            with self.assertRaises(ProviderCallError) as caught:
+                provider.generate("first")
+        self.assertEqual(caught.exception.code, "remote_provider_empty_response")
+        self.assertEqual(caught.exception.provider_usage.prompt_tokens, 5)
+        self.assertIsNone(caught.exception.provider_usage.completion_tokens)
+        self.assertEqual(caught.exception.provider_usage.total_tokens, 9)
+
     def test_provider_attempt_records_non_stream_usage_without_content(self) -> None:
         provider = OpenAICompatibleLLMProvider(
             model="private-model", provider="private-provider",
