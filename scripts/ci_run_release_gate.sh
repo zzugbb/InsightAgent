@@ -54,7 +54,7 @@ Phases:
   backend   Run backend full slice and module boundary checks.
   frontend  Run frontend node tests, lint, and production build.
   tooling   Run CI/e2e tooling self-tests without starting services.
-  hygiene   Run compileall, diff whitespace, and backup-plan diff checks.
+  hygiene   Run compileall, diff whitespace, backup-plan diff, and conflict-marker checks.
   all       Run every phase above.
   auto      Use PR changed files to choose backend/frontend phases, then always
             run tooling and hygiene. CI/workflow/script changes run all phases.
@@ -133,7 +133,7 @@ phase_from_step_label() {
     backend*) printf '%s\n' "backend" ;;
     frontend*) printf '%s\n' "frontend" ;;
     "ci tooling"*) printf '%s\n' "tooling" ;;
-    "backend compileall"|"diff whitespace"|"backup plan"*) printf '%s\n' "hygiene" ;;
+    "backend compileall"|"diff whitespace"|"backup plan"*|"conflict markers"*) printf '%s\n' "hygiene" ;;
     *) printf '%s\n' "" ;;
   esac
 }
@@ -410,6 +410,10 @@ run_hygiene() {
     "backup plan remains untouched" \
     "${ROOT_DIR}" \
     git diff -- data/insightagent.plan.back.md
+  run_step \
+    "conflict markers" \
+    "${ROOT_DIR}" \
+    bash scripts/check_conflict_markers.sh
 }
 
 join_resolved_phases() {
