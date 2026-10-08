@@ -34,6 +34,7 @@ import { useMessages, usePreferences } from "../../../lib/preferences-context";
 import { ModelSettingsModal } from "./model-settings-modal";
 import { AuditLogsModal } from "./audit-logs-modal";
 import { KnowledgeBaseGovernanceModal } from "./knowledge-base-governance-modal";
+import { KnowledgeImportModal } from "./knowledge-import-modal";
 import { RuntimeDebugModal } from "./runtime-debug-modal";
 import { UsageDashboardModal } from "./usage-dashboard-modal";
 
@@ -64,10 +65,12 @@ export function SidebarSettingsMenu({
   const [modelOpen, setModelOpen] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
   const [knowledgeBaseOpen, setKnowledgeBaseOpen] = useState(false);
+  const [knowledgeImportId, setKnowledgeImportId] = useState<string | null>(null);
   const [knowledgeBaseInitialReviewId, setKnowledgeBaseInitialReviewId] =
     useState<string | null>(null);
   const [usageOpen, setUsageOpen] = useState(false);
   const [runtimeDebugOpen, setRuntimeDebugOpen] = useState(false);
+  const [runtimeDebugInitialKnowledgeBaseId, setRuntimeDebugInitialKnowledgeBaseId] = useState<string | null>(null);
   const [runtimeDebugInitialFocus, setRuntimeDebugInitialFocus] = useState<
     "rag" | null
   >(null);
@@ -176,13 +179,15 @@ export function SidebarSettingsMenu({
   }
 
   function openRuntimeDebug() {
+    setRuntimeDebugInitialKnowledgeBaseId(null);
     setOpen(false);
     setExpanded(null);
     setRuntimeDebugInitialFocus(null);
     setRuntimeDebugOpen(true);
   }
 
-  function openRagFromKnowledgeBase() {
+  function openRagFromKnowledgeBase(knowledgeBaseId = "default") {
+    setRuntimeDebugInitialKnowledgeBaseId(knowledgeBaseId);
     setKnowledgeBaseOpen(false);
     setKnowledgeBaseInitialReviewId(null);
     setRuntimeDebugInitialFocus("rag");
@@ -190,6 +195,7 @@ export function SidebarSettingsMenu({
   }
 
   function reviewKnowledgeBase(knowledgeBaseId: string) {
+    setKnowledgeImportId(null);
     setRuntimeDebugOpen(false);
     setRuntimeDebugInitialFocus(null);
     setKnowledgeBaseInitialReviewId(knowledgeBaseId);
@@ -564,10 +570,20 @@ export function SidebarSettingsMenu({
         open={knowledgeBaseOpen}
         onClose={closeKnowledgeBase}
         onOpenRag={openRagFromKnowledgeBase}
+        onImport={(knowledgeBaseId) => {
+          setKnowledgeBaseOpen(false);
+          setKnowledgeImportId(knowledgeBaseId);
+        }}
         initialKnowledgeBaseId={knowledgeBaseInitialReviewId}
         currentUser={currentUser}
       />
+      {knowledgeImportId !== null ? <KnowledgeImportModal
+        key={`import-${knowledgeImportId}`} open initialKnowledgeBaseId={knowledgeImportId}
+        isAdmin={currentUser?.role?.toLowerCase() === "admin"}
+        onClose={reviewKnowledgeBase} onReview={reviewKnowledgeBase} /> : null}
       <RuntimeDebugModal
+        key={`runtime-debug-${runtimeDebugInitialKnowledgeBaseId ?? "default"}`}
+        initialKnowledgeBaseId={runtimeDebugInitialKnowledgeBaseId}
         open={runtimeDebugOpen}
         onClose={closeRuntimeDebug}
         activeSessionId={activeSessionId}

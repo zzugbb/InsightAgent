@@ -7,7 +7,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization`、`next-major-upgrade-readiness`。
 - `/health.operations` 保持非敏感运维摘要：readiness、readiness_level、operator_summary、warnings、warning_summary、risk_domains、readiness_checks、部署配置、SLO、备份恢复、runbook/值班、演练新鲜度、队列、执行实例、超时与 Chroma probe。
 - 最近封板：`next-major-upgrade-readiness` 已 100% 封板；前端 Next 16 / React 19.2、原生 flat ESLint 与 React Compiler 规则迁移完成，后端运行时及 SSE / trace / export 外部契约未修改。
-- 当前主线：`agent-core-alignment`，按项目定位补齐反馈决策与 Trace 真实性；[实现边界](../docs/agent-core-alignment.md)已落地，本地主链与桌面/手机验证通过。下一步为知识导入入口与核心场景核对，主线尚未整体封板。
+- 当前主线：`agent-core-alignment`，按项目定位补齐反馈决策与 Trace 真实性；[实现边界](../docs/agent-core-alignment.md)已落地，本地主链与桌面/手机验证通过。知识库内的 TXT/Markdown 导入、版本复核与目标库检索入口已落地；下一步核对多轮上下文、RAG 来源追溯和条件分支场景，主线尚未整体封板。
 - A2 [试点镜像与部署入口](../docs/pilot-deployment-preflight.md)已准备：84 个后端依赖版本锁定、非 root 默认 embedding 构建缓存通过禁网验证；新增生产 `compose.pilot.yml`、低敏预检/操作入口与健康启动顺序。隔离 mock 下重建全部容器后，登录、会话、任务/Trace 与 Chroma 知识保留；目标部署、TLS、真实模型与升级回滚仍待实测。
 - A3 本地恢复基础已落地：两份 Compose 的 Chroma 卷改挂当前镜像实际持久路径 `/data`；独立 fixture 经离线快照恢复后，PostgreSQL 行与 Chroma 向量均读回。旧容器重建前须保存原 `/data`；目标环境恢复待验证。
 - A4 [后台 RAG 导入](../docs/rag-background-ingest.md)的持久化/分批进度与[完整任务分支重跑](../docs/task-reruns.md)已完成本地闭环；[任务内工具并发](../docs/task-tool-parallel.md)支持内建检索/计算有界并发；[工具依赖与结果引用](../docs/tool-dependencies.md)支持显式 DAG、重复工具、拓扑波次与公开预览标量绑定；[HTTP 读取并发](../docs/http-read-parallel.md)支持明确声明只读的固定 GET、配置冻结和生命周期协调。[实验性步骤恢复](../docs/task-checkpoints.md)已实现内建顺序计划的独立分支、成功前缀复用与当前设置复核。OpenAPI 为 51 操作 / 88 组件；写入工具并行及 HTTP/DAG checkpoint 明确延期，目标运行与用户验收待完成。
@@ -16,19 +16,22 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 当前验证基线
 
-- 2026-10-07 full release gate **10/10 PASS**，来源 `/tmp/insightagent-agent-core-release.md` 与 `.json`；后端 full slice **2135/2135**、module boundary **9/9**，前端 node **190/190**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建通过。
-- 本轮隔离 PostgreSQL：Agent 反馈 **6/6**、步骤恢复回归 **9/9**、DAG 依赖回归 **7/7**；Trace 浏览器专项桌面/390px 手机 **2/2**，来源 `/tmp/insightagent-agent-feedback-postgres.log`、`/tmp/insightagent-agent-checkpoint-regression.log`、`/tmp/insightagent-agent-dependencies-regression.log`、`/tmp/insightagent-trace-flow-e2e.log`。临时资源清理；业务模型仅本地替身。
+- 2026-10-08 full release gate **10/10 PASS**，来源 `/tmp/insightagent-knowledge-import-release.md` 与 `.json`；后端 full slice **2135/2135**、module boundary **9/9**，前端 node **200/200**（含文件校验 10 个）、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建通过。
+- 本轮知识导入 Chromium **7/7**（1440px/390px、批量预览、进度/版本复核、目标库检索、原载荷重试、返回编辑、文件读取竞态和权限/连接边界）；来源 `/tmp/insightagent-knowledge-import-e2e.log`。截图布局复核 **2/2**，来源 `/tmp/insightagent-knowledge-import-layout.log`；业务 API 使用 fixture，未重新验证实际 Chroma 或真实模型。
+- 2026-10-07 隔离 PostgreSQL：Agent 反馈 **6/6**、步骤恢复回归 **9/9**、DAG 依赖回归 **7/7**；Trace 浏览器专项桌面/390px 手机 **2/2**，来源 `/tmp/insightagent-agent-feedback-postgres.log`、`/tmp/insightagent-agent-checkpoint-regression.log`、`/tmp/insightagent-agent-dependencies-regression.log`、`/tmp/insightagent-trace-flow-e2e.log`。临时资源清理；业务模型仅本地替身。
 - 历史 service-backed 基线：完整 Chromium **77 passed / 1 skipped**、完整重跑 PostgreSQL **11/11**、内建并发 **6/6**、HTTP **7/7**、RAG **21/21** 与 400 切块实写，本轮未把这些历史结果当作重新验证。
-- 既有镜像/Compose 与备份恢复 fixture 证据保留在[试点记录](../docs/pilot-deployment-preflight.md)和[恢复流程](../docs/local-stack-backup-restore.md)；这些既有镜像不包含本轮反馈循环改动，也不代表目标部署验收。
+- 既有镜像/Compose 与备份恢复 fixture 证据保留在[试点记录](../docs/pilot-deployment-preflight.md)和[恢复流程](../docs/local-stack-backup-restore.md)；这些既有镜像不包含当前反馈循环与知识文件导入改动，也不代表目标部署验收。
 - 用户无真实 key/部署环境；未发起真实模型请求。当前模型决策质量、试点 HTTPS/升级回滚、恢复 RPO/RTO 与签收均未验证，项目总完成度不估百分比。
 
 ## 下一步后端计划
 
-1. `agent-core-alignment`：完善已有 Agent 与 Trace 的核心契约；反馈决策、关系展示和完整节点详情已实现，下一步整理知识导入入口及三个核心场景。
+1. `agent-core-alignment`：完善已有 Agent 与 Trace 的核心契约；反馈决策、Trace 关系与知识文件导入已实现，下一步核对多轮上下文、RAG 来源追溯和工具条件分支三个核心场景。
 2. `project-completion-audit` 保留外部未验证项：有效 key、目标部署/恢复与用户验收待资源具备后继续；不阻止本地核心开发。写入并行及 HTTP/DAG checkpoint 继续延期。
 3. ESLint 10 保留为上游兼容后的维护候选，当前不强制覆盖 peer 约束。
 
 ## 稳定契约
+
+- 知识库提供 UTF-8 TXT/Markdown 文件预览与后台导入（每次 1–20 文件，单文件 256 KB / 64,000 字符，总大小 512 KB）；文件名作为来源和文档 ID，同名文件归为同一文档并保留内容版本。提交中和结果不确定时冻结输入，重试复用原载荷/幂等键；明确放弃结果后可返回编辑。复核自动定位版本，检索测试携带目标库；复用既有 API 与共享库管理员权限。
 
 - 反馈决策默认最多 3 轮（AGENT_MAX_ROUNDS=1 保持单轮），安全 Observation 驱动后续行动；多轮任务不生成单轮 checkpoint。Trace 记录轮次/决策来源并汇总所有规划用量；流程图虚线为记录顺序、实线为依赖/决策来源，详情不截断。
 

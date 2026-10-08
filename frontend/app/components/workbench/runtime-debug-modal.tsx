@@ -33,6 +33,7 @@ type RuntimeDebugModalProps = {
   onClose: () => void;
   activeSessionId?: string | null;
   initialFocus?: "rag" | null;
+  initialKnowledgeBaseId?: string | null;
   onReviewKnowledgeBase: (knowledgeBaseId: string) => void;
 };
 
@@ -41,14 +42,15 @@ export function RuntimeDebugModal({
   onClose,
   activeSessionId = null,
   initialFocus = null,
+  initialKnowledgeBaseId = null,
   onReviewKnowledgeBase,
 }: RuntimeDebugModalProps) {
   const t = useMessages();
   const queryClient = useQueryClient();
   const { message } = App.useApp();
-  const [ragKnowledgeBaseId, setRagKnowledgeBaseId] = useState("default");
+  const [ragKnowledgeBaseId, setRagKnowledgeBaseId] = useState(initialKnowledgeBaseId ?? "default");
   const [ragAppliedKnowledgeBaseId, setRagAppliedKnowledgeBaseId] =
-    useState("default");
+    useState(initialKnowledgeBaseId ?? "default");
   const [ragIngestDraft, setRagIngestDraft] = useState("");
   const [ragIngestSource, setRagIngestSource] = useState("");
   const [ragQueryDraft, setRagQueryDraft] = useState("");

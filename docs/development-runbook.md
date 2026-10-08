@@ -77,6 +77,7 @@ node --test --experimental-strip-types \
   app/components/workbench/utils.node.test.ts \
   app/components/workbench/trace-flow-layout.node.test.ts \
   app/components/workbench/knowledge-base-governance-modal-utils.node.test.ts \
+  app/components/workbench/knowledge-import-utils.node.test.ts \
   app/components/workbench/task-center-pagination.node.test.ts \
   app/components/workbench/workbench-runtime-notice.node.test.ts \
   app/components/workbench/workbench-ui-state.node.test.ts \
@@ -115,7 +116,7 @@ curl -I http://127.0.0.1:3001
 
 ## e2e 路径
 
-[Agent 核心对齐](agent-core-alignment.md)：静态反馈边界用 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k agent_feedback`；持久化/条件分支/用量/取消用 `backend/.venv/bin/python backend/scripts/test_agent_feedback_postgres.py`（需提权访问 Docker/随机本机端口，独立 PostgreSQL 与本地模型替身，自动清理）。前端专项为 `e2e/trace-flow.spec.ts`，业务 API 全部使用 fixture，需临时前端服务与浏览器权限。
+[Agent 核心对齐](agent-core-alignment.md)：静态反馈边界用 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k agent_feedback`；持久化/条件分支/用量/取消用 `backend/.venv/bin/python backend/scripts/test_agent_feedback_postgres.py`（需提权访问 Docker/随机本机端口，独立 PostgreSQL 与本地模型替身，自动清理）。前端专项为 `e2e/trace-flow.spec.ts` 和知识文件导入 `e2e/knowledge-import.spec.ts`，业务 API 全部使用 fixture，需临时前端服务与浏览器权限。文件解码/预算专项为 `knowledge-import-utils.node.test.ts`，已进入 frontend node 门禁。
 
 [步骤恢复（实验功能）](task-checkpoints.md)专项使用 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task_checkpoint`；实际快照复用、幂等、失败重试与取消/超时用 `backend/.venv/bin/python backend/scripts/test_task_checkpoint_postgres.py`，需提权访问 Docker/随机本机端口，独立 PostgreSQL/mock 自动清理，已接入 backend-e2e workflow。前端专项为 `e2e/task-checkpoints.spec.ts`，桌面/手机截图输出到 `/tmp`。
 

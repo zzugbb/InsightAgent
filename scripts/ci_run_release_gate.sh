@@ -27,6 +27,7 @@ FRONTEND_NODE_TESTS=(
   "app/components/workbench/utils.node.test.ts"
   "app/components/workbench/trace-flow-layout.node.test.ts"
   "app/components/workbench/knowledge-base-governance-modal-utils.node.test.ts"
+  "app/components/workbench/knowledge-import-utils.node.test.ts"
   "app/components/workbench/task-center-pagination.node.test.ts"
   "app/components/workbench/workbench-runtime-notice.node.test.ts"
   "app/components/workbench/workbench-ui-state.node.test.ts"

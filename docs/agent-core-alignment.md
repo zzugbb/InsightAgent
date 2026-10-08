@@ -4,8 +4,8 @@
 
 按项目“可视化、可解释、工具驱动的 Agent + Memory/RAG + 流式输出”定位补齐已有能力的缺口。
 
-- 已实现：工具结果驱动的有界反馈决策、Trace 依赖/并发/决策来源展示、完整节点内容与 metadata。
-- 当前主线未整体封板：下一步整理普通用户知识导入入口，并核对多轮上下文、知识库来源追溯和工具条件分支三个核心场景。
+- 已实现：工具结果驱动的有界反馈决策、Trace 依赖/并发/决策来源展示、完整节点内容与 metadata、知识库内 TXT/Markdown 文件导入与目标库检索入口。
+- 当前主线未整体封板：下一步核对多轮上下文、知识库来源追溯和工具条件分支三个核心场景。
 - 用户已结束上一阶段的持续收尾目标。`project-completion-audit` 留作外部验收记录；真实 key、目标部署与签收仍未验证，不阻止本地核心能力开发。
 - 模板中心、分支对比、扩大 checkpoint 和更多基础设施暂缓。只读备份计划不修改。
 
@@ -33,13 +33,20 @@
 - 节点展开显示完整内容和服务端返回的 metadata；节点内滚动，避免展开遮挡相邻节点。
 - 旧 Trace 继续显示记录顺序；不补造历史依赖、并发或决策信息。
 
+## 知识导入契约
+
+普通文件入口复用后台 RAG 任务，UTF-8、数量/大小和字符预算在浏览器校验；文件名保留为 source/document_id，同名文档新内容保留版本。预览后提交，结果不确定时冻结草稿并重试原载荷/幂等键。复核自动展开目标库，检索测试带入该库，共享写入仍限管理员。详情与使用边界见 [RAG 后台导入](rag-background-ingest.md)。
+
 ## 验证与实现位置
+
+2026-10-08：知识文件校验 10/10、Chromium 7/7（桌面/手机、原载荷重试、版本复核/目标库检索、权限、连接和读取竞态），布局复核 2/2；full release gate 10/10（后端 2135/2135、前端 200/200、双构建）。来源 `/tmp/insightagent-knowledge-import-release.md`、`/tmp/insightagent-knowledge-import-e2e.log` 与 `/tmp/insightagent-knowledge-import-layout.log`；本轮业务 API fixture 未代替实际 Chroma/模型验收。
 
 2026-10-07：反馈静态专项 6/6；隔离 PostgreSQL 专项 6/6（本地条件规划、用量、Trace/delta/导出、终止、取消）；前端布局专项 6/6。full release gate 10/10（后端 2135/2135、前端 190/190、双构建），Trace 桌面/390px 手机 Chromium 2/2；步骤恢复回归 9/9、DAG 回归 7/7。验证来源见四份活跃文档。
 
 - `backend/app/services/agent_feedback.py`：反馈协议、有界状态和规划用量汇总。
 - `backend/app/services/chat_execution_service.py`：任务生命周期与既有执行器接管。
 - `frontend/app/components/workbench/trace-flow-layout.ts` / `trace-flow-view.tsx`：关系派生、布局与完整详情。
+- `frontend/app/components/workbench/knowledge-import-modal.tsx` / `knowledge-import-utils.ts`：文件预览/校验；`rag-ingest-jobs.tsx` 复用后台任务与幂等请求，浏览器专项为 `e2e/knowledge-import.spec.ts`。
 - `backend/scripts/test_agent_feedback_postgres.py`：隔离数据库验证，无外部模型调用，自动清理容器；已纳入 backend-e2e workflow。
 - `frontend/e2e/trace-flow.spec.ts`：仅业务 API fixture 的桌面/手机浏览器交互。
 

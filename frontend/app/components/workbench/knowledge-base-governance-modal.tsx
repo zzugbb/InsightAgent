@@ -35,7 +35,8 @@ const EMPTY_KNOWLEDGE_BASE_ROWS: RagKnowledgeBaseSummary[] = [];
 type KnowledgeBaseGovernanceModalProps = {
   open: boolean;
   onClose: () => void;
-  onOpenRag: () => void;
+  onOpenRag: (knowledgeBaseId?: string) => void;
+  onImport: (knowledgeBaseId: string) => void;
   initialKnowledgeBaseId?: string | null;
   currentUser?: {
     id: string;
@@ -56,6 +57,7 @@ export function KnowledgeBaseGovernanceModal({
   open,
   onClose,
   onOpenRag,
+  onImport,
   initialKnowledgeBaseId = null,
   currentUser,
 }: KnowledgeBaseGovernanceModalProps) {
@@ -349,7 +351,7 @@ export function KnowledgeBaseGovernanceModal({
         const versionCount = row.unique_document_count ?? versions.length;
         const firstVersion = versions[0]?.document_version;
         return (
-          <Space direction="vertical" size={0}>
+          <Space orientation="vertical" size={0}>
             <span className="kb-count-cell">{versionCount.toLocaleString()}</span>
             {firstVersion ? (
               <Typography.Text
@@ -367,7 +369,7 @@ export function KnowledgeBaseGovernanceModal({
     {
       title: t.sidebar.knowledgeBase.tableActions,
       className: "kb-actions-col",
-      width: 118,
+      width: 170,
       render: (_, row) => {
         const accessHint = resolveAccessHint(row.knowledge_base_id);
         const clearBusy =
@@ -386,6 +388,12 @@ export function KnowledgeBaseGovernanceModal({
             : undefined;
         return (
           <div className="kb-row-actions">
+            <Button size="small" type="text" data-testid="kb-governance-action-query"
+              onClick={() => onOpenRag(row.knowledge_base_id)}>{t.sidebar.knowledgeImport.query}</Button>
+            <Button size="small" type="text" data-testid="kb-governance-action-import"
+              disabled={disabled} title={disabledReason} onClick={() => onImport(row.knowledge_base_id)}>
+              {t.sidebar.knowledgeImport.action}
+            </Button>
             <Popconfirm
               title={t.sidebar.knowledgeBase.clearConfirmTitle(row.knowledge_base_id)}
               description={t.sidebar.knowledgeBase.clearConfirmDescription}
@@ -454,6 +462,9 @@ export function KnowledgeBaseGovernanceModal({
 
       <div className="kb-governance-topline" data-testid="kb-governance-topline">
         <Space size={10} wrap>
+          <Button type="primary" size="small" data-testid="kb-governance-import"
+            disabled={mutationsBlocked || listState === "error" || listState === "loading"}
+            onClick={() => onImport("default")}>{t.sidebar.knowledgeImport.action}</Button>
           <Tag
             color={listQuery.data?.chroma_reachable ? "green" : "default"}
             className="kb-governance-status"
@@ -524,7 +535,7 @@ export function KnowledgeBaseGovernanceModal({
                 type="primary"
                 icon={<DatabaseZap size={14} aria-hidden />}
                 data-testid="kb-governance-open-rag"
-                onClick={onOpenRag}
+                onClick={() => onOpenRag()}
               >
                 {t.sidebar.knowledgeBase.operatorHintOpenRag}
               </Button>

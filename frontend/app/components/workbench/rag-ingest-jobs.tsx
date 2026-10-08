@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, App, Button, Progress, Space, Tag, Typography } from "antd";
+import { Alert, App, Button, Popconfirm, Progress, Space, Tag, Typography } from "antd";
 import { useEffect, useRef } from "react";
 
 import { apiJson, apiPostJson } from "../../../lib/api-client";
@@ -27,20 +27,22 @@ export type RagIngestJob = {
 type ImportPayload = {
   idempotency_key: string;
   knowledge_base_id: string;
-  documents: { text: string; source: string }[];
+  documents: { text: string; source: string; document_id?: string }[];
 };
 const statusColors: Record<ImportStatus, string> = {
   queued: "default", running: "processing", completed: "success",
   failed: "error", cancelled: "default",
 };
 
-export function RagIngestJobs({ open, knowledgeBaseId, text, source, disabled, onReview }: {
+export function RagIngestJobs({ open, knowledgeBaseId, text = "", source = "", documents, disabled, onReview, onSubmissionStateChange }: {
   open: boolean;
   knowledgeBaseId: string;
-  text: string;
-  source: string;
+  text?: string;
+  source?: string;
+  documents?: ImportPayload["documents"];
   disabled: boolean;
   onReview: (knowledgeBaseId: string) => void;
+  onSubmissionStateChange?: (locked: boolean) => void;
 }) {
   const t = useMessages();
   const copy = t.inspector.rag.jobs;
@@ -76,6 +78,10 @@ export function RagIngestJobs({ open, knowledgeBaseId, text, source, disabled, o
   });
 
   useEffect(() => {
+    onSubmissionStateChange?.(submit.isPending || submit.isError);
+  }, [onSubmissionStateChange, submit.isPending, submit.isError]);
+
+  useEffect(() => {
     let changed = false;
     for (const job of history.data?.items ?? []) {
       if ((job.status === "completed" || job.status === "failed") && !observedTerminals.current.has(job.id)) {
@@ -96,10 +102,11 @@ export function RagIngestJobs({ open, knowledgeBaseId, text, source, disabled, o
   return (
     <div data-testid="rag-ingest-jobs">
       <Space wrap>
-        <Button size="small" loading={submit.isPending} disabled={disabled || !text.trim()}
+        <Button size="small" loading={submit.isPending} disabled={disabled || submit.isPending || (Boolean(onSubmissionStateChange) && submit.isError)
+            || (documents ? documents.length === 0 : !text.trim())}
           data-testid="rag-ingest-background-submit" onClick={() => {
             submit.mutate({ idempotency_key: crypto.randomUUID(), knowledge_base_id: knowledgeBaseId,
-              documents: [{ text: text.trim(), source: source.trim() || "manual" }] });
+              documents: documents ?? [{ text: text.trim(), source: source.trim() || "manual" }] });
           }}>
           {copy.submit}
         </Button>
@@ -107,23 +114,28 @@ export function RagIngestJobs({ open, knowledgeBaseId, text, source, disabled, o
       </Space>
       {submissionError ? (
         <Alert type="error" showIcon title={copy.submitFailed} description={submissionError}
-          data-testid="rag-ingest-job-submit-error" action={
+          data-testid="rag-ingest-job-submit-error" action={<Space wrap>
             <Button size="small" loading={submit.isPending} disabled={disabled}
               data-testid="rag-ingest-job-submit-retry" onClick={() => {
                 if (submit.variables) submit.mutate(submit.variables);
               }}>{t.inspector.rag.recoveryRetry}</Button>
-          } />
+            {onSubmissionStateChange ? <Popconfirm title={t.sidebar.knowledgeImport.resetTitle}
+              description={t.sidebar.knowledgeImport.resetHint} onConfirm={() => submit.reset()}
+              okText={t.sidebar.knowledgeImport.edit} cancelText={t.sidebar.deleteSessionCancel}>
+              <Button size="small" data-testid="knowledge-import-edit">{t.sidebar.knowledgeImport.edit}</Button>
+            </Popconfirm> : null}
+          </Space>} />
       ) : null}
       <Space style={{ marginTop: 12 }}>
         <Typography.Text strong>{copy.title}</Typography.Text>
-        <Button size="small" loading={history.isFetching} data-testid="rag-ingest-jobs-refresh"
+        <Button size="small" loading={history.isFetching} disabled={!open} data-testid="rag-ingest-jobs-refresh"
           onClick={() => { void history.refetch(); }}>{t.inspector.rag.statusRefresh}</Button>
       </Space>
       {historyError ? <Alert type="error" showIcon title={copy.loadFailed}
         description={historyError} data-testid="rag-ingest-jobs-error" /> : null}
       {cancelError ? <Alert type="warning" showIcon title={copy.cancelFailed}
         description={cancelError} /> : null}
-      {!history.data && history.isPending ? <p>{t.inspector.rag.statusLoading}</p> : null}
+      {open && !history.data && history.isPending ? <p>{t.inspector.rag.statusLoading}</p> : null}
       {history.data?.items.length === 0 ? <p className="panel-note">{copy.empty}</p> : null}
       <div aria-live="polite">
         {history.data?.items.map((job) => (
@@ -138,7 +150,8 @@ export function RagIngestJobs({ open, knowledgeBaseId, text, source, disabled, o
                   onClick={() => cancel.mutate(job.id)}>{copy.cancel}</Button>
               ) : null}
               {job.status === "completed" || job.status === "failed" ? (
-                <Button size="small" data-testid={`rag-ingest-job-review-${job.id}`}
+                <Button size="small" disabled={Boolean(onSubmissionStateChange) && (submit.isPending || submit.isError)}
+                  data-testid={`rag-ingest-job-review-${job.id}`}
                   onClick={() => onReview(job.knowledge_base_id)}>{t.inspector.rag.ingestReviewAction}</Button>
               ) : null}
             </Space>

@@ -276,6 +276,25 @@ export type Messages = {
       tableNoData: string;
       promptEmpty: string;
     };
+    knowledgeImport: {
+      query: string;
+      title: string;
+      action: string;
+      lead: string;
+      target: string;
+      targetHint: string;
+      invalidTarget: string;
+      files: string;
+      reading: string;
+      preview: (count: number) => string;
+      characters: (count: number) => string;
+      versionHint: string;
+      back: string;
+      edit: string;
+      resetTitle: string;
+      resetHint: string;
+      errors: Record<"format" | "encoding" | "empty" | "size" | "count" | "name" | "duplicate" | "read", string>;
+    };
     knowledgeBase: {
       title: string;
       lead: string;

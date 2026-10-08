@@ -32,6 +32,14 @@
 - 后台请求展开最多 **5,000 个有效切块**，按实际非空切块跨文档累计；超出在受理前返回 422，不访问 Chroma。此约束收紧了先前后台接口的有效输入范围，调用方须分拆请求或降低 overlap；同步接口的输入与单次写入行为保持原样。worker 对升级前已排队请求再次执行预算检查，超限任务记为 `failed / invalid_input`，不写入 Chroma。
 - 私有知识库沿用用户隔离；共享库提交仍限管理员，执行前再次核对当前角色，权限失效返回失败状态 `permission_revoked`。导入任务记录始终只对提交者可见。
 
+## 普通知识文件导入入口
+
+设置 → 知识库 → **导入知识**，或在知识库行选择导入（预填该库）。支持 UTF-8 `.txt`、`.md`、`.markdown`，每次 1–20 文件；单文件最多 256,000 字节 / 64,000 Unicode 字符，总文件大小 512,000 字节，序列化文档另留 API 预算。格式、编码、空白内容、二进制控制字符、重复文件名和超限文件在浏览器中拒绝，整批校验通过后才提交。新选择替换旧选择，迟到读取不能覆盖当前预览。
+
+文件名最多 128 字符，作为 `source` 与 `document_id`；身份仍经过服务端脱敏。同一目标库内同名文件归入同一文档，内容变化增加版本，不覆盖旧版本；不同目录的同名文件先重命名。同批拒绝同名文件。预览仅显示前 1,000 字符，实际提交完整已校验文本。没有文件解析服务或附件存储，PDF/Office/OCR 不在本入口范围内。
+
+提交期间及提交结果不确定时冻结目标与文件选择；重试严格复用原载荷和幂等键。确认放弃结果可返回编辑，但不取消已受理的后台任务。受理成功后可关闭窗口，稍后从对应库的导入入口查看历史；失败任务先复核已有版本与确认进度。复核自动定位该库并展开版本；知识库行的“检索测试”带入该库。共享库写入继续由管理员权限和服务端复核共同约束。
+
 ## 执行、恢复和数据保留
 
 数据库初始化新增 `rag_ingest_jobs` 表与索引，并以幂等 `ADD COLUMN IF NOT EXISTS` 为已有表添加 `progress_json`，保留历史/排队载荷；每个 API 实例启动一个常驻 worker 子进程。worker 通过 `FOR UPDATE SKIP LOCKED` 领取任务，并在外部写入期间持有该任务的 PostgreSQL 会话 advisory lock，避免多个实例重复执行或误判活跃任务中断。部署使用直连 PostgreSQL；若加入连接池，须支持会话锁并采用 session pooling。
@@ -49,14 +57,18 @@
 
 ## 验证与维护
 
+2026-10-08：文件导入校验 10/10、业务 API fixture 的 Chromium 7/7，桌面/390px 布局复核 2/2，full release gate 10/10。来源 `/tmp/insightagent-knowledge-import-release.md`、`/tmp/insightagent-knowledge-import-e2e.log` 与 `/tmp/insightagent-knowledge-import-layout.log`；实际 PostgreSQL/Chroma 沿用历史专项证据，未冒充本轮重跑。
+
 ```bash
 backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag_ingest_job
 # 需要 Docker 与本机端口；仅创建临时 PostgreSQL，自动删除容器和测试卷
 backend/.venv/bin/python backend/scripts/test_rag_ingest_postgres.py
 # 同时创建独立 Chroma：实际 40 文档 / 400 切块写入及部分失败复核
 backend/.venv/bin/python backend/scripts/test_rag_ingest_postgres.py --with-chroma
-# 需要已启动的本地 backend/frontend 和 Chroma
+# 离线业务 API fixture：自动启动临时前端，需本机端口/浏览器权限
 cd frontend
+npm run test:e2e -- e2e/knowledge-import.spec.ts
+# 需要已启动的本地 backend/frontend 和 Chroma（仍在 frontend/ 下）
 PLAYWRIGHT_API_BASE_URL=http://127.0.0.1:8000 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001 \
   npm run test:e2e -- e2e/rag-ingest-jobs.spec.ts
 ```

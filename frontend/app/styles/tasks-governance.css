@@ -1218,7 +1218,8 @@
 .kb-row-actions {
   display: inline-flex;
   flex-direction: row;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  max-width: 170px;
   align-items: center;
   justify-content: flex-start;
   gap: 2px;
