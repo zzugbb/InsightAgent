@@ -49,6 +49,7 @@ run_common() {
     python3 "${ROOT_DIR}/scripts/test_business_rag_acceptance.py"
     python3 "${ROOT_DIR}/scripts/test_export_acceptance_evidence_static.py"
   fi
+  bash "${ROOT_DIR}/scripts/test_pilot_drill_scripts.sh"
 }
 
 run_backend() {
