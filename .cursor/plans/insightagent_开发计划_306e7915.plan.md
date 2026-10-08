@@ -4,7 +4,7 @@ overview: 持续推进项目收尾；核心本地实现/契约已封板，执行
 current_focus:
   mainline: project-completion-audit
   status: 持续收尾中；核心本地契约已封板，基础真实模型/合成 RAG 已验证，本次新后端候选配对联调通过；业务质量/目标部署待验
-  latest_change: 2026-10-08 试点部署/恢复演练工具包；pilot_drill 脚本自测通过；待外部目标环境
+  latest_change: 2026-10-08 local_acceptance.sh 统一本机验收入口；dry-run 自测通过
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
