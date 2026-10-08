@@ -44,7 +44,8 @@ def host_port(container: str, port: int) -> int:
     return int(docker("inspect", "--format", template, container))
 
 
-def request_json(url: str, *, payload: dict | None = None, token: str | None = None) -> dict:
+def request_json(url: str, *, payload: dict | None = None, token: str | None = None,
+                 method: str | None = None) -> dict:
     headers = {"Accept": "application/json"}
     data = None
     if payload is not None:
@@ -52,7 +53,7 @@ def request_json(url: str, *, payload: dict | None = None, token: str | None = N
         data = json.dumps(payload).encode()
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    request = Request(url, data=data, headers=headers, method="POST" if data is not None else "GET")
+    request = Request(url, data=data, headers=headers, method=method or ("POST" if data is not None else "GET"))
     with urlopen(request, timeout=5) as response:
         value = json.load(response)
     if not isinstance(value, dict):
@@ -144,6 +145,7 @@ def run_smoke(
     postgres_image: str,
     chroma_image: str,
     expected_api_base_url: str,
+    *, with_agent_fixture: bool = False,
 ) -> None:
     for image in (backend_image, frontend_image, postgres_image, chroma_image):
         docker("image", "inspect", image)
@@ -234,9 +236,23 @@ def run_smoke(
                 backend_base, token, request_json=request_json, request_text=request_text,
                 read_stream=read_stream, wait_until=wait_until,
             )
-            print("PASS: pilot images, production backend/CORS, PostgreSQL/Chroma, frontend HTML/CSS/browser API, background RAG, task SSE/Trace/delta/export, checkpoint and queued cancellation")
-            print(json.dumps({"scope": "local_production_mock", "offline_embedding": True,
-                              "checks": checks}, sort_keys=True))
+            agent_checks = None
+            if with_agent_fixture:
+                from pilot_agent_smoke import check_agent_contracts
+
+                fixture = network + "-model-fixture"
+                script = Path(__file__).resolve().with_name("pilot_model_fixture.py")
+                docker("run", "--rm", "-d", "--name", fixture, "--network", network,
+                       "--network-alias", "model-fixture", "-p", "127.0.0.1::8080", "--read-only",
+                       "--mount", f"type=bind,source={script},target=/tmp/pilot_model_fixture.py,readonly",
+                       backend_image, "python", "-B", "/tmp/pilot_model_fixture.py")
+                started.append(fixture)
+                fixture_base = f"http://127.0.0.1:{host_port(fixture, 8080)}"
+                wait_until("local model fixture", lambda: request_json(fixture_base + "/health").get("ready"))
+                agent_checks = check_agent_contracts(
+                    backend_base, token, fixture_base=fixture_base, request_json=request_json,
+                    request_text=request_text, read_stream=read_stream, wait_until=wait_until,
+                )
         finally:
             for container in reversed(started):
                 docker("rm", "-f", container, check=False)
@@ -256,6 +272,10 @@ def run_smoke(
                         f"(containers={len(remaining_containers)}, network={remaining_network})"
                     )
                 time.sleep(0.2)
+    print("PASS: pilot images, production backend/CORS, PostgreSQL/Chroma, frontend HTML/CSS/browser API, background RAG, task SSE/Trace/delta/export, checkpoint and queued cancellation; cleanup verified")
+    print(json.dumps({"scope": "local_production_protocol_fixture" if with_agent_fixture else "local_production_mock",
+                      "offline_embedding": True, "checks": checks,
+                      **({"agent_checks": agent_checks} if agent_checks is not None else {})}, sort_keys=True))
 
 
 def _frontend_ready(port: int) -> bool:
@@ -270,6 +290,8 @@ def main() -> int:
     parser.add_argument("--expected-api-base-url", required=True)
     parser.add_argument("--postgres-image", default="postgres:16-alpine")
     parser.add_argument("--chroma-image", default="chromadb/chroma:latest")
+    parser.add_argument("--with-agent-fixture", action="store_true",
+                        help="Also check Agent history/RAG/feedback and planning failures via a local HTTP fixture")
     args = parser.parse_args()
     def terminate(*_: object) -> None:
         raise SystemExit(143)
@@ -279,6 +301,7 @@ def main() -> int:
         run_smoke(
             args.backend_image, args.frontend_image, args.postgres_image, args.chroma_image,
             args.expected_api_base_url,
+            with_agent_fixture=args.with_agent_fixture,
         )
     except (RuntimeError, subprocess.SubprocessError, HTTPError, URLError, TimeoutError, OSError, ValueError) as exc:
         print(f"FAIL: {type(exc).__name__}: {exc}")

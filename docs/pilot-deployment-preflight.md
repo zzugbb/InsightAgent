@@ -81,6 +81,16 @@ backend/.venv/bin/python scripts/smoke_pilot_images.py \
 
 仅复核 Dockerfile 静态规则可运行 `docker build --check --build-arg PYTHON_BASE_IMAGE=python:3.14-slim -f backend/Dockerfile.pilot backend` 与对应的前端命令（`NODE_BASE_IMAGE=node:24-bookworm-slim`、`NEXT_PUBLIC_API_BASE_URL=https://api.example.com`）。此检查不会执行依赖安装或验证最终镜像；真正构建仍必须传入摘要固定的基础镜像。
 
+### Agent 核心协议专项
+
+在上方 `smoke_pilot_images.py` 命令追加 `--with-agent-fixture`。它先完成原有 mock 链路，再在同一临时网络启动只读 Python HTTP 替身容器；仅给临时测试用户配置固定的假 Key 与内部模型地址，通过镜像的真实 HTTP Provider 和公开 API 执行场景。替身不保存或输出提示词、请求头或密钥，健康摘要只保留固定模型标签、调用计数和无效请求数。缺少历史、知识正文/来源/版本或计算证据时拒绝回答，防止规则回退误报通过。
+
+当前应用候选 `218f94d` 的 **7/7 场景通过**：历史问答进入规划/回答且不改写用户消息；新会话不带旧历史；两个同命中数、不同正文的知识库分别驱动 `7*2`/`5*2`，最终回答保留来源和内容版本；首轮空正文仍保存本次 12 token 并回退回答，后续空正文保存两次规划的 24 token 后失败，后续 429 只保留此前 12 token。5 个任务完成、2 个失败；实际 HTTP 请求为 13 次规划/5 次回答，无多余请求或无效请求，失败任务不生成 assistant。Trace/delta/JSON v1.0/Markdown、消息与用量核对通过。成功摘要仅在临时资源清理通过后输出。
+
+原始镜像协议记录 `/tmp/insightagent-pilot-agent-protocol.log`，scope 为 `local_production_protocol_fixture`，Agent 子项为 `local_http_protocol_fixture`。无服务自测 `backend/.venv/bin/python scripts/test_pilot_agent_smoke.py` **9/9**，原 task smoke 自测 **6/6**（含清理失败不输出 PASS）；已进入 `test_ci_e2e_tooling.sh`。当前 tooling **1/1**、hygiene **3/3** PASS，摘要为 `/tmp/insightagent-pilot-agent-{tooling,hygiene}.md` / `.json`。本轮应用代码及镜像未变，继续保留 2210/217 的完整静态门禁基线；修改的是验证工具与文档。
+
+这项验证证明候选镜像能传递并保存这些协议场景的数据；替身依据预设规则返回结果，不能证明真实模型的推理、引用质量、成本或服务商兼容性。完整浏览器交互、目标 TLS/访问边界及真实模型验收仍使用各自的独立证据。
+
 ## 单机试点 Compose
 
 `compose.pilot.yml` 运行四个已构建镜像，不挂载源码、不覆盖镜像启动命令、不在启动时安装依赖。PostgreSQL 16 使用 `pg_data:/var/lib/postgresql/data`，Chroma 使用 `chroma_data:/data`；镜像必须与这两个持久路径兼容。数据库和 Chroma 不发布主机端口，backend/frontend 仅绑定主机 `127.0.0.1:8000` / `127.0.0.1:3001`，由同机 HTTPS 代理转发。远程或容器化代理需要单独设计网络，不能直接使用其容器内的 `127.0.0.1`。没有 TLS 入口时，该清单还不能交付外部用户。
@@ -136,7 +146,7 @@ backend/.venv/bin/python scripts/smoke_pilot_compose.py \
 
 脚本先解析原生产清单并核对 remote、前端无密钥、无源码挂载/启动命令覆盖；随后仅在随机命名 fixture 项目中覆盖为 mock、本地镜像 tag 和随机 loopback 端口，不发出真实模型请求。实际验证健康启动、前端 API 地址、后台导入/检索、任务/Trace/导出、步骤恢复与取消；然后移除全部容器、保留卷并重新创建，核对登录、会话、任务/Trace/messages 和知识召回保留。结束时仅删除自己的测试容器、网络和卷，检查清理后才报告 PASS，摘要 scope 为 `local_compose_mock_recreate`。
 
-2026-10-08 当前候选实际验证通过，原始记录为 `/tmp/insightagent-pilot-218f94d-compose-smoke.log`。无服务配置/低敏自测 `scripts/test_pilot_compose.py` 7/7 已纳入 tooling；`compose.pilot.yml` 的变更触发 release-gate/backend-e2e/frontend-e2e，release gate auto 保守选择全部阶段。应用提交的 full release gate 10/10 来源为 `/tmp/insightagent-planning-call-usage-release.md` 与 `.json`，包含后端 2210/2210、module boundary 9/9、前端 217/217、lint 0 error/2 个既有 warning 与 Turbopack/webpack 双构建；本轮只刷新镜像和验证记录，未重复运行完整静态门禁。Compose 联调不覆盖多轮模型反馈或全部浏览器交互；这些范围保留各专项基线，不能把镜像联调当作真实模型质量验证。目标镜像拉取、TLS、真实模型、升级回滚及备份恢复仍未验证。
+2026-10-08 当前候选实际验证通过，原始记录为 `/tmp/insightagent-pilot-218f94d-compose-smoke.log`。无服务配置/低敏自测 `scripts/test_pilot_compose.py` 7/7 已纳入 tooling；`compose.pilot.yml` 的变更触发 release-gate/backend-e2e/frontend-e2e，release gate auto 保守选择全部阶段。应用提交的 full release gate 10/10 来源为 `/tmp/insightagent-planning-call-usage-release.md` 与 `.json`，包含后端 2210/2210、module boundary 9/9、前端 217/217、lint 0 error/2 个既有 warning 与 Turbopack/webpack 双构建；应用代码未变，未重复运行完整静态门禁。Compose 联调不覆盖多轮模型反馈或全部浏览器交互；模型反馈新增上方镜像 HTTP 协议专项，各 UI 范围保留专项基线。目标镜像拉取、TLS、真实模型、升级回滚及备份恢复仍未验证。
 
 ## 目标环境演练记录
 

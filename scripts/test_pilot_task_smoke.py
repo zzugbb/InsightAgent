@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Fail-closed checks for disposable pilot task smoke evidence; no services required."""
 
+import io
 import unittest
+from contextlib import ExitStack, redirect_stdout
 from unittest.mock import patch
 
 from pilot_task_smoke import check_task_contracts
-from smoke_pilot_images import read_stream
+from smoke_pilot_images import read_stream, run_smoke
 
 
 class ApiFixture:
@@ -78,6 +80,30 @@ class ApiFixture:
 
 
 class PilotTaskSmokeTests(unittest.TestCase):
+    def test_cleanup_failure_never_prints_a_success_report(self):
+        # The stack succeeds, but its network remains. No Docker or ports are used.
+        output = io.StringIO()
+        stubs = {
+            "docker": lambda *_, **__: "fixture",
+            "docker_exists": lambda *args: args[0] in {"exec", "network"},
+            "host_port": lambda *_: 8080,
+            "request_json": lambda *_, **__: {"status": "ok", "environment": "production",
+                "chroma": {"reachable": True}, "access_token": "fixture", "id": "session"},
+            "wait_until": lambda _, probe, **__: probe(),
+            "_frontend_ready": lambda *_: True,
+            "check_cors": lambda *_: None,
+            "check_frontend": lambda *_: None,
+            "check_browser_api": lambda *_: None,
+            "check_task_contracts": lambda *_, **__: {"completed_tasks": 2},
+        }
+        with ExitStack() as stack, redirect_stdout(output):
+            for name, stub in stubs.items():
+                stack.enter_context(patch("smoke_pilot_images." + name, side_effect=stub))
+            stack.enter_context(patch("smoke_pilot_images.time.monotonic", side_effect=[0, 11]))
+            with self.assertRaisesRegex(RuntimeError, "temporary Docker resources could not be removed"):
+                run_smoke("backend", "frontend", "postgres", "chroma", "https://api.example.test")
+        self.assertEqual(output.getvalue(), "")
+
     def test_successful_fixture_reports_limited_mock_scope(self):
         result = ApiFixture().run()
         self.assertEqual(result["completed_tasks"], 2)

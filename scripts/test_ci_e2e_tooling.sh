@@ -39,6 +39,7 @@ run_common() {
   python3 "${ROOT_DIR}/scripts/test_local_stack_snapshot.py"
   python3 "${ROOT_DIR}/scripts/test_pilot_deploy_config.py"
   python3 "${ROOT_DIR}/scripts/test_pilot_task_smoke.py"
+  python3 "${ROOT_DIR}/scripts/test_pilot_agent_smoke.py"
   python3 "${ROOT_DIR}/scripts/test_pilot_compose.py"
 }
 
