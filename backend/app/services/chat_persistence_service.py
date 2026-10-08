@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from app.config import get_settings
 from app.db import get_db_connection
+from app.services.usage_accounting import task_usage_source, task_usage_totals
 from app.schemas.trace import TraceStep, parse_trace_steps
 from app.services.task_status_service import (
     normalize_task_status,

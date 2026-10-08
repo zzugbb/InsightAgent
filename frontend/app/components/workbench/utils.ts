@@ -337,10 +337,23 @@ function parseUsageRaw(
       return null;
     }
     const raw = v as Record<string, unknown>;
+    const taskTotal = (field: string): number | null => {
+      const read = (key: string) => {
+        const value = parseUsageNumber(raw[key]);
+        return value !== null && value >= 0 ? value : null;
+      };
+      const overall = read(`overall_${field}`);
+      if (overall !== null) return overall;
+      const final = read(field);
+      const planning = read(`planning_${field}`);
+      if (final === null && planning === null) return null;
+      const total = (final ?? 0) + (planning ?? 0);
+      return Number.isFinite(total) ? total : null;
+    };
     return {
-      prompt: parseUsageNumber(raw["prompt_tokens"]),
-      completion: parseUsageNumber(raw["completion_tokens"]),
-      cost: parseUsageNumber(raw["cost_estimate"]),
+      prompt: taskTotal("prompt_tokens"),
+      completion: taskTotal("completion_tokens"),
+      cost: taskTotal("cost_estimate"),
     };
   } catch {
     return null;

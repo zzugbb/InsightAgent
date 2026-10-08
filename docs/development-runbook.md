@@ -75,6 +75,7 @@ node --test --experimental-strip-types \
   app/components/workbench/model-settings-modal-utils.node.test.ts \
   app/components/workbench/task-queue-diagnostics-contract.type.test.ts \
   app/components/workbench/utils.node.test.ts \
+  app/components/workbench/usage-accounting.node.test.ts \
   app/components/workbench/trace-flow-layout.node.test.ts \
   app/components/workbench/knowledge-base-governance-modal-utils.node.test.ts \
   app/components/workbench/knowledge-import-utils.node.test.ts \
@@ -115,6 +116,8 @@ curl -I http://127.0.0.1:3001
 如果提权审批因为审核通道连接中断被拒，不要绕路用等价命令规避；重新发起同一必要命令的明确审批。
 
 ## e2e 路径
+
+[任务总用量专项](usage-accounting.md)：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k usage_accounting`（8 个后端静态测试）；`backend/.venv/bin/python backend/scripts/test_usage_accounting_postgres.py`（3 个独立 PostgreSQL 场景，需 Docker/随机端口提权，自动清理）；前端计算专项 `usage-accounting.node.test.ts`（6 个，已纳入 release gate）。核对多轮任务的 summary/dashboard/趋势/榜单/会话导出、overall 优先与旧数据回退、混合来源筛选和用户隔离；模型仅本地替身，已接入 backend-e2e。
 
 [远端模型流结束专项](provider-stream-completion.md)：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k provider_stream_completion`（12 个静态测试）；`backend/.venv/bin/python backend/scripts/test_provider_stream_postgres.py`（6 个真实本机 HTTP/独立 PostgreSQL 场景）。后者需要 Docker/随机端口提权并自动清理，仅使用本地模型协议替身，已纳入 backend-e2e。验证部分 EOF 失败、批量 Trace 边界后的尾部、delta/导出、失败重连不重放、400 兼容回退及正常结束帧。
 

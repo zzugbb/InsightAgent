@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.services.usage_accounting import task_usage_source, task_usage_totals
+
 
 def bind_chat_persistence_usage_public_names(namespace: dict[str, object]) -> None:
     globals().update(namespace)
@@ -10,21 +12,6 @@ def get_tasks_usage_summary(
     session_id: str | None = None,
 ) -> dict[str, int | float | None]:
     """聚合 tasks.usage_json（可选按 session_id 过滤）。"""
-
-    def _to_float(v: object) -> float | None:
-        if v is None:
-            return None
-        if isinstance(v, (int, float)):
-            return float(v)
-        if isinstance(v, str):
-            raw = v.strip()
-            if not raw:
-                return None
-            try:
-                return float(raw)
-            except ValueError:
-                return None
-        return None
 
     with get_db_connection() as connection:
         if session_id:
@@ -73,13 +60,7 @@ def get_tasks_usage_summary(
             source_mixed_tasks += 1
         else:
             source_legacy_tasks += 1
-        prompt_raw = payload.get("prompt_tokens")
-        completion_raw = payload.get("completion_tokens")
-        cost_raw = payload.get("cost_estimate")
-
-        prompt_num = _to_float(prompt_raw)
-        completion_num = _to_float(completion_raw)
-        cost_num = _to_float(cost_raw)
+        prompt_num, completion_num, cost_num = task_usage_totals(payload)
 
         has_token = False
         if prompt_num is not None:
@@ -149,21 +130,7 @@ def _parse_usage_source(v: object) -> str | None:
 
 def _classify_usage_source(payload: dict[str, object]) -> str:
     """Classify per-task usage source for summary/dashboard statistics."""
-    usage_source = _parse_usage_source(payload.get("usage_source"))
-    prompt_source = _parse_usage_source(payload.get("prompt_tokens_source"))
-    completion_source = _parse_usage_source(payload.get("completion_tokens_source"))
-
-    if (
-        prompt_source is not None
-        and completion_source is not None
-        and prompt_source != completion_source
-    ):
-        return "mixed"
-
-    for source in (usage_source, prompt_source, completion_source):
-        if source is not None:
-            return source
-    return "legacy"
+    return task_usage_source(payload)
 
 
 def _extract_iso_day(value: object) -> date | None:
@@ -785,9 +752,7 @@ def get_tasks_usage_dashboard(
             source_mixed_tasks += 1
         else:
             source_legacy_tasks += 1
-        prompt_num = _parse_usage_float(payload.get("prompt_tokens"))
-        completion_num = _parse_usage_float(payload.get("completion_tokens"))
-        cost_num = _parse_usage_float(payload.get("cost_estimate"))
+        prompt_num, completion_num, cost_num = task_usage_totals(payload)
         total_tokens_num = (prompt_num or 0.0) + (completion_num or 0.0)
         total_tokens_int = int(total_tokens_num) if total_tokens_num > 0 else 0
         cost_value = cost_num if cost_num is not None and cost_num > 0 else 0.0
