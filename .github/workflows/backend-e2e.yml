@@ -115,6 +115,9 @@ jobs:
       - name: Run remote stream completion PostgreSQL integration
         run: python backend/scripts/test_provider_stream_postgres.py
 
+      - name: Run provider planning wait PostgreSQL integration
+        run: python backend/scripts/test_provider_planning_wait_postgres.py
+
       - name: Run whole-task usage PostgreSQL integration
         run: python backend/scripts/test_usage_accounting_postgres.py
 

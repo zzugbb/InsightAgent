@@ -155,6 +155,7 @@ export type Messages = {
     streamCancelled: string;
     streamTimeout: string;
     streamHeartbeat: string;
+    streamPlanningWait: string;
     loadingPersistedTrace: string;
     persistedTraceLoaded: string;
     persistedTraceEmpty: string;

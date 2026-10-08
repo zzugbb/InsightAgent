@@ -66,3 +66,19 @@
 - 代码核对：兼容 Provider 默认 `timeout_sec=60.0`；非流式 `urlopen` 与响应读取没有通用重试循环，首轮规划异常进入既有规则回退。两次异常约 60 秒、未返回 status family/usage，与超时记录一致；另一次成功请求耗时 59.094 秒。现有日志不能区分连接等待、读取等待或供应商推理慢，也没有请求/任务关联字段；`unexpected_error` 本身不能确诊 TimeoutError。不能推断总任务数、失败率、账单消耗或供应商根因。
 - 当前决策：不延长超时、不新增自动重试；保留首轮回退及未知用量口径。约一分钟规划等待仍是 A1 风险，恢复体验与目标用户可接受等待尚未验收；后续以真实业务任务复核等待、回退可理解性和分支重跑，供应商账单另行核对。
 - 本轮修改仅离线工具和测试/文档，应用实现、服务配置与候选镜像不变。耗时专项 `-k provider_attempt` 11/11（新增 3 个），来源 `/tmp/insightagent-provider-latency-static.log`；后端门禁 2/2 PASS（full slice 2220/2220、模块 9/9），hygiene 3/3 PASS，来源 `/tmp/insightagent-provider-latency-{release,hygiene}.md` / `.json`；前端与数据库/镜像专项保留既有验证范围。
+
+## 规划等待与失败恢复（替身复现，2026-10-08）
+
+本轮用本地 Provider/HTTP 替身复现首轮规划阻塞窗口，不请求真实供应商、不延长 60 秒超时、不加自动重试。
+
+| 场景 | 修复前现象（代码核对 + 替身） | 本轮结论 |
+| --- | --- | --- |
+| 首轮规划耗时数秒 | `state: thinking` 之后同步 `build_tool_plan_artifacts`，期间无 SSE `heartbeat`，也不探测取消 | 规划在线程池执行，主循环按 2s 间隔发 `heartbeat` 并 `force_status_probe` 取消/超时；取消后 `shutdown(wait=False)`，不等待规划线程结束 |
+| 规划期间取消 | 取消写入 DB 后仍要等规划返回才 `raise_if_should_abort` | 替身阻塞下取消后约百毫秒级返回 `cancelled`，无工具 Trace |
+| 空规划 HTTP 回退 | 既有 `planning_empty_initial` 路径 | `planning_provider_attempted=true`、`planning_provider_used=false`，规划用量 12、overall 19，任务完成 |
+| 失败后分支重跑 | 反馈第二轮 429 失败任务 | `POST /reruns` + 子任务 `stream` 完成，父任务保持 failed |
+
+- 验证：`backend/scripts/test_provider_planning_wait_postgres.py` **5/5**（独立 PostgreSQL + 本机 HTTP/离线 Provider；GitHub Actions 使用 `docker` 服务容器、无需 sudo，`task_postgres_fixture` 结束 `docker rm -f -v` 清理）。含「取消后规划线程晚些返回」：任务仍 `cancelled`、Trace/消息/用量 JSON 不被迟到规划改写，放弃调用的 token 不计入任务用量（保持未知）。后端 full slice **2220/2220**、模块 **9/9**、hygiene **3/3**；前端 release gate **217/217**、lint 0 error、Turbopack/webpack 双构建。
+- 实现边界：`shutdown(wait=False)` 后供应商 HTTP 仍可能跑完并写 `llm_http_attempt` 观测日志，但不调用 `future.result()`，不更新 Trace/checkpoint/任务 `usage_json`；每流新建 provider，不共享 DB 连接。每轮规划独立 `ThreadPoolExecutor(max_workers=1)`，不堆积线程池。
+- `TaskUsageTopTaskRow.governance` 前向引用修正与 GitHub `release-gate`（Python **3.14** 延迟注解求值）同文件已合并于实现提交；云端 **3.12** 导入会 `NameError`，未单独 `fix:` 提交以免改写已推送历史，见 PR 描述。
+- 未覆盖：真实 glm-5.3 约 60 秒等待体验、供应商账单、目标部署与候选镜像重建。交付结论仍为 **暂不可交付外部试点**。

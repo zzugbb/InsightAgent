@@ -860,11 +860,18 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
     }
     if (event === "heartbeat") {
       const sm = get().streamMessages;
-      set((state) => ({
-        sseMessage: state.sseMessage.startsWith(sm.streamStarted)
-          ? state.sseMessage
-          : sm.streamHeartbeat,
-      }));
+      set((state) => {
+        const phase = state.ssePhase?.trim().toLowerCase() ?? "";
+        const planningWait =
+          phase === "thinking" ? sm.streamPlanningWait : sm.streamHeartbeat;
+        const nextMessage =
+          phase === "thinking"
+            ? planningWait
+            : state.sseMessage.startsWith(sm.streamStarted)
+              ? state.sseMessage
+              : sm.streamHeartbeat;
+        return { sseMessage: nextMessage };
+      });
     }
   },
 

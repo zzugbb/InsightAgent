@@ -17,6 +17,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 当前验证基线
 
+- 本轮收尾：规划等待 heartbeat/取消探测；取消后放弃规划结果、迟到线程不写 DB/Trace/用量（替身 **5/5**，[说明](../docs/real-model-acceptance.md)）。full slice **2220/2220**。候选镜像与真实 glm 长等待待本机。
 - 本轮收尾：前端 e2e 修复 `composer-keyboard.spec.ts` 生产构建覆盖层断言（GitHub `frontend-e2e` #194/#195）；前端 node 门禁 **217/217** 与 release gate 列表一致，runbook 已补齐漏列的 `next-major-readiness` 测试文件。后端与镜像范围不变，候选镜像未重建。详见根目录 `README.md` 与 [收尾审计](../docs/project-completion-audit.md)。
 - 上轮收尾：[规划等待排查](../docs/real-model-acceptance.md)离线耗时专项 **11/11**；后端门禁 **2/2**（**2220/2220**、模块 **9/9**），来源 `/tmp/insightagent-provider-latency-release.md` / `.json`。
 - 前轮执行证据后端门禁 **2/2 PASS**，来源 `/tmp/insightagent-execution-evidence-release.md` / `.json`：full slice **2217/2217**、module boundary **9/9**；执行证据专项 **7/7**、独立 PostgreSQL/Chroma 核心场景 **11/11**，来源 `/tmp/insightagent-execution-evidence-{static,postgres}.log`。前端未变，保留上一完整门禁 **10/10 PASS** 的前端 node **217/217**、lint **0 error / 2 个既有 warning**与双构建基线（`/tmp/insightagent-planning-call-usage-release.md` / `.json`）；本轮未重跑全量前端。

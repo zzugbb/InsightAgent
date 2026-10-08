@@ -54,7 +54,7 @@
 
 2026-10-08 GitHub `frontend-e2e` #194（`65f1fde`）/#195（`baf7671`）在 full Chromium 阶段失败 2 例：`composer-keyboard.spec.ts` 1440px/390px。根因是 Playwright `CI=1` 使用生产 `npm run build && npm run start`，页面无开发态 `nextjs-portal`，`not.toContainText("Runtime Error")` 在 locator 缺失时失败；业务断言（输入法/Enter/发送/回答）已通过。修复为 `nextjs-portal [data-nextjs-dialog]` 计数为 0（与同仓库其它 e2e 一致）。连带 artifact guard `missing_count` 因 full 阶段失败跳过后置 tooling 步骤，属次生现象。原先文档记录的输入法三浏览器 **6/6** 为用户本机 `npm run dev` 结果，修复后 dev 三浏览器复验待用户 Mac；PR CI 复验待 GitHub Actions。
 
-2026-10-08 [规划等待排查](real-model-acceptance.md)：既有真实 RAG 日志两次非流式异常耗时 60.081/60.075 秒，另一次成功请求 59.094 秒；补齐离线按模式耗时统计与非法值处理，专项 11/11。证据无法区分连接/读取等待与供应商推理，不扩展超时或自动重试；A1 的供应商延迟、失败恢复与成本保持待验。应用/候选镜像不变，既有真实模型与镜像验证范围保留。当前交付结论仍为 **暂不可交付外部试点**，A2/A3 目标环境及 A5 真实业务用户签收缺证据。
+2026-10-08 [规划等待与失败恢复](real-model-acceptance.md)（替身）：首轮规划阻塞窗口补 SSE heartbeat 与取消探测，PostgreSQL 专项 4/4；真实 glm 约 60 秒体验与候选镜像重建仍待用户本机。同日 [规划等待排查](real-model-acceptance.md)离线耗时 11/11 保留。交付结论仍为 **暂不可交付外部试点**。
 
 ## 下一阶段
 
