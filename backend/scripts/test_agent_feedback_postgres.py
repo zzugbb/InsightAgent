@@ -55,6 +55,34 @@ class ConditionalProvider(MockLLMProvider):
         return ProviderResponse(json.dumps({"tools": tools}), self.model, self.provider, ProviderUsage(10, 2, 12))
 
 
+class GraphFeedbackProvider(ConditionalProvider):
+    def __init__(self, plans):
+        super().__init__()
+        self.plans, self.answer_prompts = plans, []
+
+    def generate(self, prompt):
+        if not prompt.startswith("You are the Task Planner for InsightAgent."):
+            return super().generate(prompt)
+        self.planning_prompts.append(prompt)
+        index = len(self.planning_prompts) - 1
+        plan = self.plans[index] if index < len(self.plans) else []
+        return ProviderResponse(json.dumps({"tools": plan}), self.model, self.provider, ProviderUsage(10, 2, 12))
+
+    def stream_generate(self, prompt):
+        self.answer_prompts.append(prompt)
+        yield "fixture answer"
+
+
+def bound_graph(expression, *, template="{value}*2", fanout=False):
+    graph = [{**calc(expression), "id": "root", "depends_on": []},
+             {**calc("0"), "id": "scaled", "depends_on": ["root"],
+              "input_bindings": {"expression": {"node": "root", "path": ["result"], "template": template}}}]
+    if fanout:
+        graph.insert(1, {**calc("0"), "id": "new_sibling", "depends_on": ["root"],
+              "input_bindings": {"expression": {"node": "root", "path": ["result"], "template": "{value}*3"}}})
+    return graph
+
+
 class AgentFeedbackPostgresTests(unittest.TestCase):
     setUp = TaskParallelPostgresTests.setUp
     create = TaskParallelPostgresTests.create
@@ -66,6 +94,54 @@ class AgentFeedbackPostgresTests(unittest.TestCase):
         with patch("app.services.chat_execution_service.get_llm_provider", return_value=provider), \
              TaskParallelPostgresTests.client(self) as client:
             yield client
+
+    def assert_graph_feedback(self, plans, expressions, reason, *, decision_calls=2):
+        provider, calls = GraphFeedbackProvider(plans), []
+        from app.services import tool_runtime as runtime
+        runner = runtime.run_tool
+
+        def capture(**kwargs):
+            if kwargs["name"] == "calc_eval":
+                calls.append(kwargs["tool_input"]["expression"])
+            return runner(**kwargs)
+
+        with patch.object(runtime, "run_tool", side_effect=capture), self.client(provider) as client:
+            task = self.create(client)
+            stream = client.get(f"/api/tasks/{task}/stream").text
+            self.assertIn("event: done", stream)
+            steps = self.steps(client, task)
+            self.assertEqual(calls, expressions)
+            actions = [step for step in steps if step.get("type") == "action"
+                       and (step["meta"].get("tool") or {}).get("name") == "calc_eval"]
+            self.assertEqual([step["meta"]["tool"]["input"]["expression"] for step in actions], expressions)
+            self.assertEqual(len(provider.planning_prompts), decision_calls)
+            self.assertEqual(steps[-1]["meta"]["agent_stop_reason"], reason)
+            self.assertIn(f"Runtime tool-stage stop reason: {reason}", provider.answer_prompts[-1])
+            self.assertEqual([step["seq"] for step in steps], sorted({step["seq"] for step in steps}))
+            self.assertEqual(client.get(f"/api/tasks/{task}/trace/delta?after_seq=0&limit=100").json()["steps"], steps)
+            self.assertEqual(client.get(f"/api/tasks/{task}/export/json").json()["trace"]["steps"], steps)
+            self.assertEqual(client.get(f"/api/tasks/{task}/export/markdown").status_code, 200)
+            usage = json.loads(self.task(client, task)["usage_json"])
+            self.assertEqual(usage["planning_total_tokens"], decision_calls * 12)
+
+    def test_bound_action_cannot_be_replayed_as_flat_input(self):
+        self.assert_graph_feedback([bound_graph("2+3"), [calc("5.0*2")]], ["2+3", "5.0*2"], "repeated_action")
+
+    def test_bound_action_is_checked_after_new_root_without_an_extra_provider_decision(self):
+        self.assert_graph_feedback([[calc("5.0*2")], bound_graph("3+2")], ["5.0*2", "3+2"], "repeated_action")
+
+    def test_new_upstream_result_can_use_the_same_binding_template(self):
+        self.assert_graph_feedback([bound_graph("2+3"), bound_graph("3+4")],
+                                   ["2+3", "5.0*2", "3+4", "7.0*2"], "no_tools", decision_calls=3)
+
+    def test_parallel_batch_repeat_is_rejected_before_any_sibling_starts(self):
+        with patch.dict(os.environ, {"TASK_TOOL_MAX_CONCURRENT": "2"}):
+            get_settings.cache_clear()
+            try:
+                self.assert_graph_feedback([[calc("5.0*2")], bound_graph("3+2", fanout=True)],
+                                           ["5.0*2", "3+2"], "repeated_action")
+            finally:
+                get_settings.cache_clear()
 
     def test_observation_changes_next_action_and_usage_trace_exports_agree(self):
         provider = ConditionalProvider()

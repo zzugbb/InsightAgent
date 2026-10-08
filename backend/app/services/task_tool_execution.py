@@ -27,7 +27,7 @@ def execute_task_tool_plan(*, tool_plan, max_concurrent, registry_provider, seq_
                            prepare_iteration, estimate_token_count, raise_if_should_abort,
                            touch_heartbeat, execute_item, apply_actions, persist_trace_fn,
                            complete_task_fn, record_failure_event_fn, checkpoint_start_index=1,
-                           checkpoint_enabled=False, confirm_should_continue=None):
+                           checkpoint_enabled=False, confirm_should_continue=None, allow_tool_input=None):
     common = dict(task_id=task_id, prompt=prompt, user_id=user_id, model=model,
                   estimate_token_count=estimate_token_count, make_step_id=lambda: str(uuid4()))
     outputs = {}
@@ -39,6 +39,11 @@ def execute_task_tool_plan(*, tool_plan, max_concurrent, registry_provider, seq_
             continue
         raise_if_should_abort()
         touch_heartbeat()
+        if allow_tool_input is not None and not all(allow_tool_input(spec) for _, spec in batch):
+            # Entire ready batch is checked before action events, workers or tool side effects.
+            yield {"kind": "result", "result": {"seq_cursor": seq_cursor, "should_return": False,
+                                                  "stop_reason": "repeated_action"}}
+            return
         if len(batch) == 1:
             index, spec = batch[0]
             ctx = prepare_iteration(index, spec, seq_cursor + 1, batch_provider)

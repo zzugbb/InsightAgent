@@ -34,17 +34,29 @@ class AgentFeedbackLoop:
         self.round = 1
         self.calls = 0
         self.seen = set()
+        self.resolved_rounds = {}
         self._remember(optional_tools(initial_plan, registry_provider))
 
     @staticmethod
     def _signature(node):
         # IDs are routing labels, not permission to repeat an already completed action.
-        return json.dumps({"name": node["name"], "input": node.get("input", {}),
-                           "input_bindings": node.get("input_bindings", {})}, sort_keys=True, ensure_ascii=False)
+        return json.dumps({"name": node["name"], "input": node.get("input", {})}, sort_keys=True, ensure_ascii=False)
 
     def _remember(self, plan):
         self.calls += len(plan)
-        self.seen.update(self._signature(node) for node in plan)
+        self.seen.update(self._signature(node) for node in plan if not node.get("input_bindings"))
+
+    def allow_resolved_input(self, node):
+        """Check effective input before launching a batch; same-round DAG duplicates remain valid."""
+        if not optional_tools([node], self.registry_provider):
+            return True
+        signature = self._signature(node)
+        earlier_round = self.resolved_rounds.get(signature)
+        if earlier_round is not None and earlier_round < self.round:
+            return False
+        self.resolved_rounds.setdefault(signature, self.round)
+        self.seen.add(signature)
+        return True
 
     def decide(self, *, prompt, observations, provider):
         if self.round >= self.max_rounds:
@@ -72,7 +84,8 @@ class AgentFeedbackLoop:
             return FeedbackDecision([], "no_tools", artifacts)
         if self.calls + len(plan) > MAX_TOOL_CALLS:
             return FeedbackDecision([], "max_tool_calls", artifacts)
-        if any(self._signature(node) in self.seen for node in plan):
+        # Binding placeholders/node IDs cannot establish identity; check those after resolution.
+        if any(not node.get("input_bindings") and self._signature(node) in self.seen for node in plan):
             return FeedbackDecision([], "repeated_action", artifacts)
         self._remember(plan)
         self.round += 1

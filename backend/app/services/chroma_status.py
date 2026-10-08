@@ -1,4 +1,4 @@
-"""Chroma 可达性探测（占位）：ingest/检索 API 尚未实现，仅服务编排与健康检查。"""
+"""Chroma 服务心跳探测；知识导入/检索与会话 Memory 由独立服务模块实现。"""
 
 from __future__ import annotations
 

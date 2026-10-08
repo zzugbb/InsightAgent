@@ -26,6 +26,8 @@
 - 反馈使用任务启动时的工具注册表快照；各轮仍由现有执行器校验工具与用户资源权限。
 - 后续规划只接受完整有效的工具列表，不把非法/部分有效响应回退成原始计划。决策阶段 Provider 异常沿用任务失败处理。
 - 各轮 DAG 独立；依赖与标量绑定仅引用本轮节点。跨轮通过安全 Observation 传递信息，不能引用上一轮 DAG 节点 ID。
+- 跨轮防重复按工具名与实际输入比较；静态参数在决策时检查，绑定节点在结果替换后、启动工具/事件/并发工作线程前再检查。绑定占位值与节点 ID 不作为执行身份；相同模板得到不同参数可继续，同轮 DAG 重复节点和工具内部重试保持原行为。
+- 任一就绪批次包含之前轮次的重复输入时，整批不启动；已执行的本轮上游结果保留，复用 `repeated_action` 停止 Trace/最终回答提示，停止时不额外调用决策模型，seq 及规划用量延续已有记录。
 - 根据模型返回的工具列表动态追加行动；空列表结束工具阶段。轮次、总节点数、Observation 上限（24,000 字符）或重复规划动作触发终止；已有工具重试仍由执行器控制。
 - 最终回答接收白名单工具停止原因与证据/未解决事项说明，并在最终 Trace 可选记录 agent_stop_reason；模型结束原因与聊天/详情提示见[回答完整性](answer-completion.md)，不宣称真实模型一定遵循提示。
 - 终止 Trace 的 `agent_decision` 为 `no_tools`、`max_rounds`、`max_tool_calls`、`observation_limit`、`repeated_action` 或 `invalid_decision`；继续执行为 `continue`。到达限制表示结束工具阶段，不证明任务需求已全部满足。
@@ -49,6 +51,8 @@
 普通文件入口复用后台 RAG 任务，UTF-8、数量/大小和字符预算在浏览器校验；文件名保留为 source/document_id，同名文档新内容保留版本。预览后提交，结果不确定时冻结草稿并重试原载荷/幂等键。复核自动展开目标库，检索测试带入该库，共享写入仍限管理员。详情与使用边界见 [RAG 后台导入](rag-background-ingest.md)。
 
 ## 最终验证与实现位置
+
+当前跨轮输入维护：静态 `-k agent_feedback` **10/10**、独立 PostgreSQL `test_agent_feedback_postgres.py` **10/10**，DAG **7/7** 与并发生命周期 **6/6** 回归；来源 `/tmp/insightagent-feedback-input-{static,postgres,dag-regression,parallel-regression}.log`。验证绑定/普通参数互换、同模板新结果、并发整批阻止、实际调用与 Trace/delta/export/停止提示和规划用量；均为本地模型替身。完整门禁 `/tmp/insightagent-feedback-input-release.md` / `.json`：**10/10 PASS**，后端 **2202/2202**、模块边界 **9/9**、前端 **217/217**、双构建和 lint 通过（两个既有 warning）。本轮未修改前端或重跑浏览器。
 
 后续维护验证来源：`/tmp/insightagent-tool-evidence-release.md` / `.json`，full gate **10/10**（后端 **2155/2155**、前端 **200/200**）；`/tmp/insightagent-tool-evidence-postgres.log` 公开 HTTP 证据 **3/3**，实际请求/持久化验证相同命中数不同正文的分支、单轮回答、来源与脱敏。反馈 **6/6**、HTTP 并发 **7/7**、会话/Chroma 核心 **9/9** 回归日志均为 `/tmp/insightagent-tool-evidence-*-regression.log`；本地替身不能证明真实模型效果。
 

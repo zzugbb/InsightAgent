@@ -25,6 +25,48 @@ class FixtureProvider:
 
 
 class AgentFeedbackMixin:
+    def test_agent_feedback_resolved_binding_is_remembered_for_a_later_flat_plan(self):
+        loop, provider = self.feedback_fixture(json.dumps({"tools": [calc("5.0*2")]}))
+        self.assertTrue(loop.allow_resolved_input(calc("5.0*2")))
+        self.assertEqual(loop.decide(prompt="next", observations=[], provider=provider).reason, "repeated_action")
+
+    def test_agent_feedback_binding_identity_waits_for_effective_input_not_node_labels(self):
+        loop, provider = self.feedback_fixture(json.dumps({"tools": [calc("3+4")]}))
+        self.assertTrue(loop.allow_resolved_input(calc("2+3")))
+        self.assertEqual(loop.decide(prompt="next", observations=[], provider=provider).reason, "continue")
+        self.assertFalse(loop.allow_resolved_input({**calc("2+3"), "id": "renamed",
+            "input_bindings": {"expression": {"node": "new_source", "path": ["result"]}}}))
+        self.assertTrue(loop.allow_resolved_input(calc("7.0*2")))
+
+    def test_agent_feedback_same_round_duplicates_and_planner_steps_keep_existing_semantics(self):
+        loop, _ = self.feedback_fixture('{"tools": []}')
+        self.assertTrue(loop.allow_resolved_input(calc("2+3")))
+        self.assertTrue(loop.allow_resolved_input(calc("2+3")))
+        loop.round = 2
+        self.assertFalse(loop.allow_resolved_input(calc("2+3")))
+        planner = {"name": "task_plan", "input": {"prompt": "plan"}}
+        self.assertTrue(loop.allow_resolved_input(planner))
+        loop.round = 3
+        self.assertTrue(loop.allow_resolved_input(planner))
+
+    def test_agent_feedback_same_binding_template_with_new_upstream_result_is_not_a_repeat(self):
+        from app.services.tool_plan_dependencies import bind_node_input
+
+        def graph(root_expression):
+            return [{**calc(root_expression), "id": "root", "depends_on": []},
+                    {**calc("0"), "id": "scaled", "depends_on": ["root"],
+                     "input_bindings": {"expression": {"node": "root", "path": ["result"], "template": "{value}*2"}}}]
+        registry = runtime.get_default_tool_registry_provider()
+        initial = graph("2+3")
+        loop = AgentFeedbackLoop(initial_plan=initial, max_rounds=3, registry_provider=registry)
+        self.assertTrue(loop.allow_resolved_input(initial[0]))
+        self.assertTrue(loop.allow_resolved_input(bind_node_input(initial[1], {"root": {"result": 5.0}})))
+        provider = FixtureProvider(json.dumps({"tools": graph("3+4")}))
+        decision = loop.decide(prompt="next", observations=[], provider=provider)
+        self.assertEqual(decision.reason, "continue")
+        self.assertTrue(loop.allow_resolved_input(decision.plan[0]))
+        self.assertTrue(loop.allow_resolved_input(bind_node_input(decision.plan[1], {"root": {"result": 7.0}})))
+
     def feedback_fixture(self, content, rounds=3):
         registry = runtime.get_default_tool_registry_provider()
         return AgentFeedbackLoop(initial_plan=[calc("2+3")], max_rounds=rounds,

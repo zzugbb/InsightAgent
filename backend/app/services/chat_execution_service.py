@@ -30,7 +30,7 @@ from app.services.settings_service import get_stored_settings
 from app.services.task_checkpoint_service import checkpoint_plan, restored_prefix, validate_resume
 from app.services.task_tool_execution import execute_task_tool_plan
 from app.services.task_terminal_usage import build_terminal_usage
-from app.services.agent_feedback import AgentFeedbackLoop, feedback_enabled, sum_planning_usage
+from app.services.agent_feedback import AgentFeedbackLoop, FeedbackDecision, feedback_enabled, sum_planning_usage
 from app.services.task_queue_service import (
     forget_waiting_task,
     get_task_queue_snapshot,
@@ -1022,6 +1022,7 @@ def stream_task_execution(
                 checkpoint_start_index=checkpoint_seed["start_index"] if checkpoint_seed else 1,
                 checkpoint_enabled=saved_plan is not None,
                 confirm_should_continue=lambda: raise_if_should_abort(force_status_probe=True),
+                allow_tool_input=feedback_loop.allow_resolved_input if feedback_loop is not None else None,
             ):
                 if item["kind"] == "event":
                     yield sse_event(str(item["event"]), item["data"])
@@ -1042,8 +1043,9 @@ def stream_task_execution(
             source_steps = [step["id"] for step in trace_steps
                             if (step.get("meta") or {}).get("agent_round") == agent_round
                             and step.get("type") == "action"]
-            decision = feedback_loop.decide(prompt=model_prompt,
-                observations=with_model_observations(tool_observations, trace_steps), provider=provider)
+            decision = (FeedbackDecision([], "repeated_action") if tool_result.get("stop_reason") == "repeated_action"
+                        else feedback_loop.decide(prompt=model_prompt,
+                            observations=with_model_observations(tool_observations, trace_steps), provider=provider))
             decision_content = build_tool_plan_summary(decision.plan, registry_provider=tool_registry_provider) if decision.plan else f"Agent tools stopped: {decision.reason}. Generate answer from available observations."
             decision_meta = {"model": provider_model, "step_type": "planning", "label": "agent_decision",
                              "agent_round": feedback_loop.round, "agent_decision": decision.reason,
