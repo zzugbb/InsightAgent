@@ -1,10 +1,10 @@
 ---
 name: InsightAgent 开发计划
-overview: 持续推进项目收尾；核心本地实现/契约已封板，按现有定位补主链路缺口、刷新候选镜像，真实模型/目标部署与用户验收仍待实证。
+overview: 持续推进项目收尾；核心本地实现/契约已封板，当前候选镜像本地复验通过，按现有定位维护主链路，真实模型/目标部署与用户验收仍待实证。
 current_focus:
   mainline: project-completion-audit
-  status: 持续收尾中；核心本地契约已封板，必要修复与候选镜像复验继续，真实模型/目标部署待资源
-  latest_change: 2026-10-08 修复规划空正文错误的实际用量丢失及旧请求用量残留；提供方静态 8/8、反馈 PostgreSQL 20/20，完整门禁 10/10
+  status: 持续收尾中；核心本地契约已封板，当前候选镜像复验完成，真实模型/目标部署待资源
+  latest_change: 2026-10-08 从干净应用提交 218f94d 重建前后端 ARM64 候选，78 个后端 Python 文件摘要一致；禁网 embedding、生产/mock 任务链路与 Compose 重建持久化两项联调 PASS
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -69,8 +69,8 @@ validation_baseline:
   current_audit: 历史 glm-5.1 provider-usage 完成任务 10 条，含工具/RAG Trace；一条历史任务 JSON/Markdown 导出构建通过；此前最小 GLM 调用 HTTP 429，未重试；本轮无真实 key，不发起请求
   backup_restore_fixture: scripts/local_stack_snapshot.py 安全测试通过；修正 Compose Chroma /data 挂载后，隔离 fixture 的 PostgreSQL 测试行与 Chroma 测试文档均从新项目卷恢复读回；目标环境 RPO/RTO 未验证
   tooling_current: 生产 Compose 预检自测 7/7，literal 密钥/环境优先级/模型缺失/数据库一致性/保留卷均进入门禁；compose.pilot.yml 已纳入 CI workflow、auto 全阶段与 artifact guard 路径
-  pilot_images_current: ARM64 生产镜像与 84 个后端锁定版本通过；非 root 默认 embedding 缓存禁网可运行，实际后台导入/检索、任务/Trace/导出/步骤恢复/取消通过；镜像来源见 docs/pilot-deployment-preflight.md
-  pilot_compose_current: compose.pilot.yml 单机配置与 scripts/pilot_compose.py 已落地；随机 loopback 端口/mock fixture 健康启动，重建所有容器后登录/会话/任务/Trace/messages/Chroma 读回，清理独立资源后 PASS；不替代目标部署或备份恢复
+  pilot_images_current: 应用提交 218f94d 的 ARM64 双镜像构建通过，84 个后端锁定版本核验通过，78 个 Python 文件源码摘要一致；禁网非 root 384 维 embedding 与生产/mock 任务/知识链路 PASS；完整 ID、配方与来源见 docs/pilot-deployment-preflight.md
+  pilot_compose_current: 当前 218f94d 双镜像与固定 PostgreSQL/Chroma 摘要下，随机 loopback/mock fixture 健康启动，重建所有容器后登录/会话/任务/Trace/messages/Chroma 读回，独立资源清理后 PASS；来源 /tmp/insightagent-pilot-218f94d-compose-smoke.log，不替代多轮模型专项、目标部署或备份恢复
   async_rag_ingest: 持久化、幂等、取消与中断恢复落地；新增分批写入、确认进度与 5000 切块预算；沿用前轮 21/21 PostgreSQL/Chroma 隔离集成基线，包含实际 40 文档/400 切块，原始载荷终结后清理
   http_read_parallel: 固定 GET/无请求体且 parallel_read_only=true；15 个静态专项、7 个本机 HTTP/PostgreSQL 场景通过；真实端点只读性/限流/延迟待实证
   tool_dependencies: 显式 DAG 最多 32 节点/128 边，仅公开预览标量绑定 query/expression；26 个静态专项与 7 个 PostgreSQL 场景通过；HTTP/DAG checkpoint 与写入并行延期，目标图生成质量待验证
@@ -80,8 +80,8 @@ validation_baseline:
   backend_current: full slice 2210/2210、module boundary 9/9；规划调用失败/回退实际用量、参数边界及回答增量已验证，OpenAPI 51 操作/89 组件与 SSE/Trace/export 兼容
   release_gate: /tmp/insightagent-planning-call-usage-release.md 与 .json，full 10/10 PASS；Turbopack/webpack 双构建通过
   frontend: node 217/217、lint 0 error/2 既有 warning；本轮无前端实现改动，保留历史提示 Chromium 1440px 英文/390px 中文 2/2
-  e2e_current: 本轮反馈/规划 PostgreSQL 20/20、用量汇总 3/3、终态 10/10、远端流 6/6；真实本机 HTTP 空正文错误/429 与请求间用量隔离通过，其他范围保留历史基线
-  hygiene: py_compile、git diff --check、git diff --cached --check、backup plan diff clean
+  e2e_current: 保留反馈/规划 PostgreSQL 20/20、用量汇总 3/3、终态 10/10、远端流 6/6；真实本机 HTTP 空正文错误/429 与请求间用量隔离通过，其他范围保留历史基线
+  hygiene: 本轮 hygiene 3/3 PASS，来源 /tmp/insightagent-pilot-218f94d-hygiene.md 与 .json；compileall、diff whitespace 与 backup plan untouched；提交前继续核对 cached diff
 completed_mainlines:
   - agent-core-alignment：本地实现/契约封板；有界对话上下文、模型 RAG 证据、Observation 决策、Trace 关系和文件导入，真实模型效果验收仍待 key
   - provider-tool-expansion：provider search 归一化、planner 多协议 tool call、JSON 字符串参数、reconnect 错误码
@@ -100,7 +100,8 @@ next_candidate_mainlines:
   - eslint-10-adoption：仅待上游正式兼容后受控升级
 next_steps:
   - 终态、失败用量与回答完整性维护完成；按实际使用问题核对下一步
-  - 用户已结束旧持续收尾目标；真实 key/目标环境未具备时不重复请求，外部模型/部署/恢复/签收留作待验收项
+  - 当前候选镜像本地复验已完成，持续收尾目标保持进行中；按可复现的主链路问题维护，暂无必须新增的功能主线
+  - 真实 key/目标环境未具备时不重复请求，外部模型/部署/恢复/签收留作待验收项；写入并行及 HTTP/DAG checkpoint 继续延期
 logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要、验证口径、维护规则和主线地图不应被整段删除。
 ---
 
@@ -131,12 +132,12 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 ## 当前验证基线
 
 - 2026-10-08 full release gate **10/10 PASS**，来源 `/tmp/insightagent-planning-call-usage-release.md` / `.json`；后端 full slice **2210/2210**、module boundary **9/9**；前端 node **217/217**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建通过。
-- 本轮规划调用用量：提供方静态 **8/8**、独立 PostgreSQL 反馈/规划 **20/20**、用量汇总 **3/3**、终态 **10/10**、远端流 **6/6**；来源 `/tmp/insightagent-planning-call-usage-{static,postgres,accounting-regression,terminal-regression,stream-regression}.log`。覆盖真实本机 HTTP 空正文/429、完整/部分/缺失用量、首轮回退与后续失败、Trace/delta/export 和请求隔离；模型仅协议替身。
-- 保留空流回退回答 **14/14**、终态 **10/10**、成功保存 **6/6**，来源 `/tmp/insightagent-fallback-trace-*.log`；历史消息/会话静态 **9/11**、前端提示计算 **9/9** 与 Chromium 桌面英文/手机中文 **2/2** 保留 `/tmp/insightagent-message-completion-*.log` 基线。会话/Chroma 核心 **9/9** 保留；本轮未重跑浏览器或这些专项。
+- 规划调用用量专项基线：提供方静态 **8/8**、独立 PostgreSQL 反馈/规划 **20/20**、用量汇总 **3/3**、终态 **10/10**、远端流 **6/6**；来源 `/tmp/insightagent-planning-call-usage-{static,postgres,accounting-regression,terminal-regression,stream-regression}.log`。覆盖真实本机 HTTP 空正文/429、完整/部分/缺失用量、首轮回退与后续失败、Trace/delta/export 和请求隔离；模型仅协议替身。本轮应用代码未变，保留该门禁与专项基线。
+- 保留空流回退回答 **14/14**、终态 **10/10**、成功保存 **6/6**，来源 `/tmp/insightagent-fallback-trace-*.log`；历史消息/会话静态 **9/11**、前端提示计算 **9/9** 与 Chromium 桌面英文/手机中文 **2/2** 保留 `/tmp/insightagent-message-completion-*.log` 基线。会话/Chroma 核心 **9/9** 保留；本轮未重跑这些交互或模型专项。
 - 保留用量计算后端 **8/8** / 前端 **6/6**（`/tmp/insightagent-usage-accounting-{static,frontend}.log`）及公开工具证据 **3/3**、HTTP 并发 **7/7**（`/tmp/insightagent-tool-evidence-{postgres,http-regression}.log`）；本轮未重跑这些专项。
-- 已验证前端基线：输入法/键盘三浏览器桌面/手机 **6/6**、知识导入 Chromium **7/7**、布局复核 **2/2**、Trace **2/2**；来源 `/tmp/insightagent-composer-keyboard-e2e.log`、`/tmp/insightagent-knowledge-import-e2e.log`、`/tmp/insightagent-knowledge-import-layout.log`、`/tmp/insightagent-trace-flow-e2e.log`。本轮未重跑浏览器，保留原基线；输入法事件 fixture 不代替操作系统人工验收。
+- 已验证前端基线：输入法/键盘三浏览器桌面/手机 **6/6**、知识导入 Chromium **7/7**、布局复核 **2/2**、Trace **2/2**；来源 `/tmp/insightagent-composer-keyboard-e2e.log`、`/tmp/insightagent-knowledge-import-e2e.log`、`/tmp/insightagent-knowledge-import-layout.log`、`/tmp/insightagent-trace-flow-e2e.log`。本轮镜像联调仅核对浏览器 API 地址，未重跑这些交互专项；输入法事件 fixture 不代替操作系统人工验收。
 - 历史 service-backed 基线：完整 Chromium **77 passed / 1 skipped**、完整重跑 PostgreSQL **11/11**、步骤恢复 **9/9**、内建并发 **6/6**、DAG **7/7**、RAG **21/21** 与 400 切块实写，均保留原验证范围。
-- 既有镜像/Compose 与备份恢复证据见试点部署和恢复文档；这些镜像不包含当前核心对齐改动，不代表目标部署验收。
+- 2026-10-08 当前候选镜像已刷新至应用提交 `218f94d`，覆盖核心对齐和近期修复；ARM64 双构建、禁网 384 维 embedding、生产配置/mock 任务与知识链路、Compose 全容器重建后持久数据读回均 PASS。来源 `/tmp/insightagent-pilot-218f94d-{backend-retry,frontend-build,source-proof,smoke,compose-smoke}.log`；完整镜像 ID/源码摘要见试点部署记录。这两项联调不覆盖多轮模型反馈或全部 UI 专项，不代替目标部署/真实模型验收。
 - 用户无真实 key/部署环境；未发起真实模型请求。决策/回答质量、试点 HTTPS/升级回滚、恢复 RPO/RTO 与签收均未验证；本地封板不代表外部验收完成，项目总完成度不估百分比。
 
 ## 当前主线
