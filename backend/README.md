@@ -16,11 +16,10 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 当前验证基线
 
-- 2026-10-08 输入交互维护：前端 release gate **4/4 PASS**（node **200/200**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建），来源 `/tmp/insightagent-composer-release.md` / `.json`；输入法/键盘浏览器专项 **6/6**（Chromium/Firefox/WebKit，各 1440px/390px），来源 `/tmp/insightagent-composer-keyboard-e2e.log`。组字事件由 fixture 模拟，未代替操作系统真实输入法人工验收。
-- 2026-10-08 full release gate **10/10 PASS**，来源 `/tmp/insightagent-core-scenarios-release.md` 与 `.json`；后端 full slice **2148/2148**（上下文/知识证据新增 13 个）、module boundary **9/9**；前端 node **200/200**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建通过。
-- 保留的后端核心场景基线：PostgreSQL/Chroma **9/9**（含实际知识写入/检索、上下文隔离/排队边界、两条条件分支与来源导出）；反馈回归 **6/6**、步骤恢复回归 **9/9**。来源 `/tmp/insightagent-core-scenarios-postgres.log`、`/tmp/insightagent-context-feedback-regression.log`、`/tmp/insightagent-context-checkpoint-regression.log`；业务模型仅本地替身。
-- 已验证前端基线：知识导入 Chromium **7/7**、1440px/390px 布局复核 **2/2**，来源 `/tmp/insightagent-knowledge-import-e2e.log`、`/tmp/insightagent-knowledge-import-layout.log`；Trace 浏览器 **2/2**，来源 `/tmp/insightagent-trace-flow-e2e.log`。本轮仅修改输入交互；这些知识导入/Trace 浏览器结果未重跑。
-- 历史 service-backed 基线：完整 Chromium **77 passed / 1 skipped**、完整重跑 PostgreSQL **11/11**、内建并发 **6/6**、HTTP **7/7**、DAG **7/7**、RAG **21/21** 与 400 切块实写，均保留原验证范围。
+- 2026-10-08 full release gate **10/10 PASS**，来源 `/tmp/insightagent-tool-evidence-release.md` / `.json`；后端 full slice **2155/2155**（公开工具结果证据新增 7 个）、module boundary **9/9**；前端 node **200/200**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建通过。
+- 本轮公开 HTTP 工具结果专项 **3/3**（真实本机请求/独立 PostgreSQL、同数量不同正文驱动分支、单轮回答、脱敏/Trace/delta/导出），来源 `/tmp/insightagent-tool-evidence-postgres.log`；反馈回归 **6/6**、HTTP 并发 **7/7**、会话/Chroma 核心 **9/9**，来源 `/tmp/insightagent-tool-evidence-{feedback,http,core}-regression.log`。业务模型仅本地替身。
+- 已验证前端基线：输入法/键盘三浏览器桌面/手机 **6/6**、知识导入 Chromium **7/7**、布局复核 **2/2**、Trace **2/2**；来源 `/tmp/insightagent-composer-keyboard-e2e.log`、`/tmp/insightagent-knowledge-import-e2e.log`、`/tmp/insightagent-knowledge-import-layout.log`、`/tmp/insightagent-trace-flow-e2e.log`。本轮无前端实现变更，未重跑浏览器；输入法事件 fixture 不代替操作系统人工验收。
+- 历史 service-backed 基线：完整 Chromium **77 passed / 1 skipped**、完整重跑 PostgreSQL **11/11**、步骤恢复 **9/9**、内建并发 **6/6**、DAG **7/7**、RAG **21/21** 与 400 切块实写，均保留原验证范围。
 - 既有镜像/Compose 与备份恢复证据见试点部署和恢复文档；这些镜像不包含当前核心对齐改动，不代表目标部署验收。
 - 用户无真实 key/部署环境；未发起真实模型请求。决策/回答质量、试点 HTTPS/升级回滚、恢复 RPO/RTO 与签收均未验证；本地封板不代表外部验收完成，项目总完成度不估百分比。
 
@@ -32,6 +31,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 稳定契约
 
+- HTTP 工具成功后的模型证据仅取 Trace 中公开的 effective_result_output_keys，复用脱敏，不读取原始响应、输入或注册表配置；最多 6 项/单项 JSON 3000/总 JSON 8000 字符，裁剪保持有效 JSON 并标记 truncated；供反馈与最终回答使用，计数 Observation 与 SSE/Trace/export 不变。
 - 聊天输入在 composition 生命周期、原生 isComposing 或兼容 keyCode=229 时将 Enter 留给输入法；正常 Enter 发送、Shift+Enter 换行与发送禁用规则保持一致，不改变后端请求或 SSE/Trace 契约。
 - 非 canonical mock 的普通任务在启动时读取本任务创建前已完成的同用户/同会话问答；最多 6 轮、单消息 4,000 字符、序列化历史 16,000 字符。首轮规划、后续决策与最终回答使用同一快照；工具执行/规则回退保留当前原始输入。Trace 仅追加上下文数量/截断摘要；mock 演示与 checkpoint 独立分支保持原行为。
 - 模型额外接收已脱敏 RAG Trace 片段/来源/文档版本，最多 6 片段、每片段 1,200 字符、序列化证据 8,000 字符，标注为不可信数据。计数型工具 Observation、既有 SSE/Trace/导出形状兼容；模型引用质量待真实提供方验证。
@@ -177,6 +177,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - `scripts/tool_runtime_slice/`：后端 slice 测试主题包；`backend/scripts/test_tool_runtime_slice.py` 是兼容入口
 - `app/services/chroma_memory_service.py`：会话 Memory 的 status/add/query 与任务后摘要 best-effort 写入
 - `app/services/conversation_context.py` / `agent_knowledge_context.py`：有界会话快照与模型 RAG 正文/版本证据
+- `app/services/agent_tool_context.py`：公开 HTTP 工具结果的模型证据、脱敏与 JSON 预算；不改变 Trace/Observation 展示
 - `app/services/chroma_rag_service.py`：RAG ingest/query/status、knowledge base list/clear/delete 与 shared/private 语义
 - `app/services/rag_ingest_{jobs,schema,worker,runner}.py` 与 `app/api/routes/rag_ingest.py`：持久化后台导入、分批确认进度、领取/恢复与子进程监管；共享 lazy chunking 在 `app/services/rag_chunking.py`，详见[后台导入契约](../docs/rag-background-ingest.md)
 - `app/services/settings_service.py`：用户级模型设置读取/保存与 `api_key` 加密解密

@@ -22,7 +22,7 @@ from app.services.chat_persistence_service import (
 )
 from app.services.chroma_memory_service import try_append_task_memory
 from app.services.conversation_context import ConversationContext, load_conversation_context
-from app.services.agent_knowledge_context import with_knowledge_observations
+from app.services.agent_tool_context import with_model_observations
 from app.services.provider_service import ProviderSelectionError, get_llm_provider
 from app.services.settings_service import get_stored_settings
 from app.services.task_checkpoint_service import checkpoint_plan, restored_prefix, validate_resume
@@ -999,7 +999,7 @@ def stream_task_execution(
                             if (step.get("meta") or {}).get("agent_round") == agent_round
                             and step.get("type") == "action"]
             decision = feedback_loop.decide(prompt=model_prompt,
-                observations=with_knowledge_observations(tool_observations, trace_steps), provider=provider)
+                observations=with_model_observations(tool_observations, trace_steps), provider=provider)
             raise_if_should_abort(force_status_probe=True)
             decision_content = build_tool_plan_summary(decision.plan, registry_provider=tool_registry_provider) if decision.plan else f"Agent tools stopped: {decision.reason}. Generate answer from available observations."
             decision_meta = {"model": provider_model, "step_type": "planning", "label": "agent_decision",
@@ -1066,7 +1066,7 @@ def stream_task_execution(
 
         provider_prompt = build_tool_prompt_with_observations(
             prompt=model_prompt,
-            tool_observations=(with_knowledge_observations(tool_observations, trace_steps)
+            tool_observations=(with_model_observations(tool_observations, trace_steps)
                                if provider_name != "mock" else tool_observations),
         )
         stream_chunk_count = 0

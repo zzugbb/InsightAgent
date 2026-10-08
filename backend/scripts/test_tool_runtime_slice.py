@@ -301,6 +301,7 @@ from tool_runtime_slice.runtime_service_execution_semantics import RuntimeServic
 from tool_runtime_slice.agent_feedback import AgentFeedbackMixin
 from tool_runtime_slice.conversation_context import ConversationContextMixin
 from tool_runtime_slice.agent_knowledge_context import AgentKnowledgeContextMixin
+from tool_runtime_slice.agent_tool_context import AgentToolContextMixin
 from tool_runtime_slice.settings_registry import SettingsRegistryMixin
 from tool_runtime_slice.task_routes_usage_governance import TaskRoutesUsageGovernanceMixin
 from tool_runtime_slice.task_stream_reconnect import TaskStreamReconnectMixin
@@ -330,6 +331,7 @@ class ToolRuntimeSliceTests(
     AgentFeedbackMixin,
     ConversationContextMixin,
     AgentKnowledgeContextMixin,
+    AgentToolContextMixin,
     ProviderSourceHttpJsonMixin,
     ProviderToolExpansionMixin,
     PlanningProviderMixin,

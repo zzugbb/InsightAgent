@@ -116,6 +116,8 @@ curl -I http://127.0.0.1:3001
 
 ## e2e 路径
 
+公开 HTTP 工具结果的模型证据专项：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k agent_tool_context`（7 个静态边界）；`backend/.venv/bin/python backend/scripts/test_agent_tool_context_postgres.py`（3 个真实本机 HTTP/独立 PostgreSQL 场景，模型为本地替身，需提权访问 Docker/随机端口，自动清理；已纳入 backend-e2e）。核对同命中数/不同正文的分支、单轮最终回答、公开字段与嵌套脱敏、Trace/delta/导出一致性。
+
 聊天输入键盘专项为 `frontend/e2e/composer-keyboard.spec.ts`，使用 API fixture 模拟 composition/isComposing/229 确认事件、Shift+Enter 换行与正常发送；运行 `cd frontend && npx playwright test e2e/composer-keyboard.spec.ts --project=chromium --project=firefox --project=webkit --workers=1 --reporter=list --output=/tmp/insightagent-composer-keyboard-results`，需要前端服务、本机端口及浏览器提权。三浏览器各覆盖 1440px/390px；这不代替操作系统输入法人工验收。新 spec 自动纳入 frontend full Chromium 发现范围。
 
 [Agent 核心对齐](agent-core-alignment.md)：静态反馈边界用 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k agent_feedback`；会话和模型证据专项分别为 `-k conversation_context`、`-k agent_knowledge_context`。核心场景用 `backend/.venv/bin/python backend/scripts/test_agent_core_scenarios_postgres.py`（独立 PostgreSQL/Chroma、实际知识写入/检索与本地 Provider，自动清理；已进入 backend-e2e）；持久化/条件分支/用量/取消用 `backend/.venv/bin/python backend/scripts/test_agent_feedback_postgres.py`（需提权访问 Docker/随机本机端口，独立 PostgreSQL 与本地模型替身，自动清理）。前端专项为 `e2e/trace-flow.spec.ts` 和知识文件导入 `e2e/knowledge-import.spec.ts`，业务 API 全部使用 fixture，需临时前端服务与浏览器权限。文件解码/预算专项为 `knowledge-import-utils.node.test.ts`，已进入 frontend node 门禁。

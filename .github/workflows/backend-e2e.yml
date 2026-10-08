@@ -106,6 +106,9 @@ jobs:
       - name: Run core conversation and RAG scenarios PostgreSQL integration
         run: python backend/scripts/test_agent_core_scenarios_postgres.py
 
+      - name: Run published HTTP tool evidence PostgreSQL integration
+        run: python backend/scripts/test_agent_tool_context_postgres.py
+
       - name: Run tool dependency PostgreSQL integration
         run: python backend/scripts/test_tool_dependencies_postgres.py
 

@@ -4,7 +4,7 @@ overview: agent-core-alignment 本地实现/契约已封板；上下文、RAG �
 current_focus:
   mainline: agent-core-alignment
   status: 本地实现/契约已封板；后续按实际使用问题维护，真实模型/部署待验收
-  latest_change: 2026-10-08 修复输入法 Enter 误发送；三浏览器桌面/手机 6/6，前端门禁 4/4；核心本地封板状态不变
+  latest_change: 2026-10-08 补齐公开 HTTP 工具结果到模型的传递，真实 HTTP/PostgreSQL 3/3、回归反馈 6/6/HTTP 7/7/核心 9/9；完整门禁 10/10
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -27,6 +27,7 @@ stable_contracts:
   - Task Center failure source 诊断 chips 与状态筛选只调整前端本地状态；状态、失败摘要和观测筛选统一优先使用 status_normalized，显式 failure_hint/failure_source 优先于 trace 文本推断，不改变任务列表 API 与 trace/export payload
   - Task Center 与任务详情页 operator next-action 提示只由现有 status、failure hint/source 与 semantic failure stats 本地派生；Audit Logs operator next-action 提示只由现有 event_type、event_detail 与 task_id 本地派生；不新增后端字段，不改变任务/审计 API、SSE、trace 或 export payload
   - 聊天输入在 composition 生命周期、原生 isComposing 或兼容 keyCode=229 时将 Enter 留给输入法；正常 Enter 发送、Shift+Enter 换行与发送禁用规则保持一致，不改变后端请求或 SSE/Trace 契约。
+  - HTTP 工具成功后的模型证据仅取 Trace 中公开的 effective_result_output_keys，复用脱敏，不读取原始响应、输入或注册表配置；最多 6 项/单项 JSON 3000/总 JSON 8000 字符，裁剪保持有效 JSON 并标记 truncated；供反馈与最终回答使用，计数 Observation 与 SSE/Trace/export 不变。
   - 模型会话快照仅含本任务创建前完成的同用户/会话问答，最多 6 轮/单消息 4000/历史 JSON 16000；RAG 证据最多 6 片段/单片段 1200/JSON 8000，规则回退与工具执行保留本次原始输入
   - 知识文件导入复用 ingest-jobs，UTF-8 TXT/Markdown 1–20 文件、256 KB/64,000 字符单文件、512 KB 总文件；文件名为 source/document_id，结果不确定时冻结并复用原载荷/幂等键；版本复核与检索均定位目标库，shared 写入权限不变
   - Knowledge Governance operator next-action、共享范围说明与破坏性操作禁用只由现有 query 状态、chroma_reachable、knowledge_base_id 和用户角色本地派生；Knowledge Governance <-> RAG 往返仅切换、聚焦并展开已有前端弹窗，不新增后端字段，不改变 shared RAG 权限或 API shape
@@ -58,7 +59,7 @@ stable_contracts:
   - Next 16.3.5 与 eslint-config-next 精确对齐，React / React DOM 固定 19.2.8；React Compiler refs / set-state-in-effect 无例外；ESLint 9.39.5 在 React/import/jsx-a11y 插件正式兼容 ESLint 10 前保持锁定
   - data/insightagent.plan.back.md 是只读备份计划，永远不修改
 validation_baseline:
-  source: 2026-10-08 输入交互三浏览器 6/6、前端门禁 4/4；保留核心 full gate 10/10、PostgreSQL/Chroma 9/9、反馈 6/6、checkpoint 9/9；真实模型/目标环境未验证
+  source: 2026-10-08 tool-evidence full gate 10/10、公开 HTTP 结果专项 3/3、反馈 6/6、HTTP 7/7、会话/Chroma 9/9；保留前端三浏览器 6/6；真实模型/目标环境未验证
   current_audit: 历史 glm-5.1 provider-usage 完成任务 10 条，含工具/RAG Trace；一条历史任务 JSON/Markdown 导出构建通过；此前最小 GLM 调用 HTTP 429，未重试；本轮无真实 key，不发起请求
   backup_restore_fixture: scripts/local_stack_snapshot.py 安全测试通过；修正 Compose Chroma /data 挂载后，隔离 fixture 的 PostgreSQL 测试行与 Chroma 测试文档均从新项目卷恢复读回；目标环境 RPO/RTO 未验证
   tooling_current: 生产 Compose 预检自测 7/7，literal 密钥/环境优先级/模型缺失/数据库一致性/保留卷均进入门禁；compose.pilot.yml 已纳入 CI workflow、auto 全阶段与 artifact guard 路径
@@ -70,10 +71,10 @@ validation_baseline:
   task_tool_parallel: 默认 1（串行），1–4 配置仅并发内建与明确声明的 HTTP 读取；15 个专项与 6 个 PostgreSQL 场景通过，进程最多 8 个读取线程；取消/超时丢弃迟到结果
   task_checkpoints: 实验性内建顺序计划，成功前缀复用、独立分支与失败重试；6 个静态专项、9/9 PostgreSQL，HTTP/DAG checkpoint 延期；新 Trace 标注来源且复用 token/cost 归零
   task_reruns: 完整任务分支支持编辑输入、独立会话、幂等与来源分页；7 个既有专项进入门禁，11/11 PostgreSQL 既有回归通过；原任务/Trace/usage 不变
-  backend_current: full slice 2148/2148、module boundary 9/9，含上下文/知识证据新增 13 个；OpenAPI 51 操作/88 组件不变
-  release_gate: 当前 /tmp/insightagent-composer-release.md 与 .json，frontend 4/4 PASS；最近 full 基线 /tmp/insightagent-core-scenarios-release.md 与 .json，10/10 PASS
+  backend_current: full slice 2155/2155、module boundary 9/9，含公开工具结果证据新增 7 个；OpenAPI 51 操作/88 组件不变
+  release_gate: /tmp/insightagent-tool-evidence-release.md 与 .json，full 10/10 PASS；Turbopack/webpack 双构建通过
   frontend: node 200/200（文件校验 10 个）；lint 0 error/2 既有 warning；文件导入 Chromium 7/7，桌面/手机布局复核 2/2
-  e2e_current: 本轮输入交互三浏览器 6/6（事件/API fixture，桌面/手机）；保留 PostgreSQL/Chroma 9/9、反馈 6/6、恢复 9/9 与知识导入/Trace 基线；完整 Chromium 未重跑
+  e2e_current: 本轮公开 HTTP 结果 3/3、反馈 6/6、HTTP 并发 7/7、会话/Chroma 9/9；前端保留输入交互 6/6 与知识导入/Trace 基线，未重跑浏览器
   hygiene: py_compile、git diff --check、git diff --cached --check、backup plan diff clean
 completed_mainlines:
   - agent-core-alignment：本地实现/契约封板；有界对话上下文、模型 RAG 证据、Observation 决策、Trace 关系和文件导入，真实模型效果验收仍待 key
@@ -122,11 +123,10 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 当前验证基线
 
-- 2026-10-08 输入交互维护：前端 release gate **4/4 PASS**（node **200/200**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建），来源 `/tmp/insightagent-composer-release.md` / `.json`；输入法/键盘浏览器专项 **6/6**（Chromium/Firefox/WebKit，各 1440px/390px），来源 `/tmp/insightagent-composer-keyboard-e2e.log`。组字事件由 fixture 模拟，未代替操作系统真实输入法人工验收。
-- 2026-10-08 full release gate **10/10 PASS**，来源 `/tmp/insightagent-core-scenarios-release.md` 与 `.json`；后端 full slice **2148/2148**（上下文/知识证据新增 13 个）、module boundary **9/9**；前端 node **200/200**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建通过。
-- 保留的后端核心场景基线：PostgreSQL/Chroma **9/9**（含实际知识写入/检索、上下文隔离/排队边界、两条条件分支与来源导出）；反馈回归 **6/6**、步骤恢复回归 **9/9**。来源 `/tmp/insightagent-core-scenarios-postgres.log`、`/tmp/insightagent-context-feedback-regression.log`、`/tmp/insightagent-context-checkpoint-regression.log`；业务模型仅本地替身。
-- 已验证前端基线：知识导入 Chromium **7/7**、1440px/390px 布局复核 **2/2**，来源 `/tmp/insightagent-knowledge-import-e2e.log`、`/tmp/insightagent-knowledge-import-layout.log`；Trace 浏览器 **2/2**，来源 `/tmp/insightagent-trace-flow-e2e.log`。本轮仅修改输入交互；这些知识导入/Trace 浏览器结果未重跑。
-- 历史 service-backed 基线：完整 Chromium **77 passed / 1 skipped**、完整重跑 PostgreSQL **11/11**、内建并发 **6/6**、HTTP **7/7**、DAG **7/7**、RAG **21/21** 与 400 切块实写，均保留原验证范围。
+- 2026-10-08 full release gate **10/10 PASS**，来源 `/tmp/insightagent-tool-evidence-release.md` / `.json`；后端 full slice **2155/2155**（公开工具结果证据新增 7 个）、module boundary **9/9**；前端 node **200/200**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建通过。
+- 本轮公开 HTTP 工具结果专项 **3/3**（真实本机请求/独立 PostgreSQL、同数量不同正文驱动分支、单轮回答、脱敏/Trace/delta/导出），来源 `/tmp/insightagent-tool-evidence-postgres.log`；反馈回归 **6/6**、HTTP 并发 **7/7**、会话/Chroma 核心 **9/9**，来源 `/tmp/insightagent-tool-evidence-{feedback,http,core}-regression.log`。业务模型仅本地替身。
+- 已验证前端基线：输入法/键盘三浏览器桌面/手机 **6/6**、知识导入 Chromium **7/7**、布局复核 **2/2**、Trace **2/2**；来源 `/tmp/insightagent-composer-keyboard-e2e.log`、`/tmp/insightagent-knowledge-import-e2e.log`、`/tmp/insightagent-knowledge-import-layout.log`、`/tmp/insightagent-trace-flow-e2e.log`。本轮无前端实现变更，未重跑浏览器；输入法事件 fixture 不代替操作系统人工验收。
+- 历史 service-backed 基线：完整 Chromium **77 passed / 1 skipped**、完整重跑 PostgreSQL **11/11**、步骤恢复 **9/9**、内建并发 **6/6**、DAG **7/7**、RAG **21/21** 与 400 切块实写，均保留原验证范围。
 - 既有镜像/Compose 与备份恢复证据见试点部署和恢复文档；这些镜像不包含当前核心对齐改动，不代表目标部署验收。
 - 用户无真实 key/部署环境；未发起真实模型请求。决策/回答质量、试点 HTTPS/升级回滚、恢复 RPO/RTO 与签收均未验证；本地封板不代表外部验收完成，项目总完成度不估百分比。
 

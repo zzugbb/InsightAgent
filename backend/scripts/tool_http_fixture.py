@@ -7,11 +7,12 @@ from urllib.parse import urlsplit
 
 
 class ReadService:
-    def __init__(self, *, overlap=False, blocked=False, retry=False):
+    def __init__(self, *, overlap=False, blocked=False, retry=False, response_payload=None):
         self.calls, self.active, self.max_active = [], 0, 0
         self.lock, self.started, self.finished, self.release = Lock(), Event(), Event(), Event()
         self.barrier = Barrier(2) if overlap else None
         self.retry, self.exited = retry, 0
+        self.response_payload = response_payload
         if not blocked:
             self.release.set()
 
@@ -35,8 +36,8 @@ class ReadService:
                         fixture.barrier.wait(timeout=3)
                     fixture.release.wait(5)
                     status = 503 if fixture.retry and path == "/read_a" and attempt == 1 else 200
-                    payload = json.dumps({"result": 5 if path == "/read_a" else 7,
-                                          "api_key": "response-fixture-secret"}).encode()
+                    payload = json.dumps(fixture.response_payload if fixture.response_payload is not None else {
+                        "result": 5 if path == "/read_a" else 7, "api_key": "response-fixture-secret"}).encode()
                     self.send_response(status)
                     self.send_header("Content-Type", "application/json")
                     self.send_header("Content-Length", str(len(payload)))
