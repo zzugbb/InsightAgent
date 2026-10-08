@@ -44,7 +44,7 @@ def local_provider(mode):
                     body += event(choices=[{"delta": {"content": "partial fixture answer"}, "finish_reason": None}])
                 if mode == "finish":
                     body += event(choices=[{"delta": {}, "finish_reason": "stop"}])
-                if mode in {"finish", "done"}:
+                if mode in {"finish", "done", "partial_usage"}:
                     body += event(choices=[], usage={"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7})
                 if mode in {"done", "empty"}:
                     body += "data: [DONE]\n\n"

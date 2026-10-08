@@ -10,7 +10,9 @@
 - 汇总 total_tokens 为汇总 prompt + completion，保留原统计定义；不是从上游账单读取。cost_estimate 仍使用项目已配置单价的估算值。
 - 来源分布与 source_kind 筛选包含已有规划来源：已记录 provider 与 estimated 混用时归为 mixed；无法判断的参与阶段保留 legacy。任务原始 final/planning/overall 明细字段与 API/SSE/Trace/export 形状不变。
 
-汇总依据持久化 usage_json；没有持久化用量的失败或中断任务不能据此证明没有发生上游消耗。此修复不补造缺失记录。
+汇总依据持久化 usage_json。执行器失败或超时终结时保存已记录的规划/决策用量；最终生成已完成时保留正常用量记录，否则只读取该次最终调用实际返回的 ProviderUsage，缺失字段保持未知，不根据部分文本推算未完成调用的消耗。只有总量时保留 provider_total_tokens，不反推输入/输出；不将上一轮规划的 last_usage 当作最终回答用量。历史缺失记录不回填，已由外部取消或其他实例终结的任务不覆盖；没有持久化用量仍不能证明没有上游消耗。
+
+前端详情/Context Inspector 支持仅 planning/overall 的记录：规划与汇总可见，最终回答字段显示未知；会话聚合仍按已知字段计算。
 
 实现位置：后端 `app/services/usage_accounting.py` 提供统一读取规则，持久化 facade 与仪表盘复用；前端 `workbench/utils.ts` 的会话聚合使用同一读取顺序，当前任务仍展示 final/planning/overall 明细。
 

@@ -1,4 +1,4 @@
-# 任务成功与回答保存
+# 任务终态与回答保存
 
 ## 成功事务
 
@@ -13,6 +13,17 @@
 
 实现位置：`backend/app/services/chat_persistence_service.py` 的 `complete_task` / `_insert_chat_message` 与 `chat_execution_service.py` 的成功分支。事务未提交的异常由数据库连接关闭回滚；最终生成文字可保留在失败 Trace，但不作为成功会话消息进入后续上下文。
 
+## 结束前复核与失败用量
+
+- 模型流迭代结束、空流回退生成返回后，以及最终 Trace 保存后/成功事务提交前，复核任务取消与总执行时限。最后文本之后或保存期间跨时限，不写成功回答、Memory 或 `done`；保持既有 timeout/error 事件。
+- 使用同步 Provider 的等待仍受提供方 socket timeout 约束；这次补齐的是等待返回后的终态判定，不保证阻塞读期间立即中断。
+- 模型/工具/数据库写入失败、执行器自己终结的超时均保存已记录规划/决策用量；已完成最终调用沿用正常记录，未完成调用仅保存提供方实际返回的用量。字段缺失保持未知，不根据部分文字补估。详见[用量汇总](usage-accounting.md)。
+- 迟到反馈决策返回的用量可以计入执行器超时记录，但不追加决策 Trace 或新工具；调用抛错且未返回用量的消耗保持未知。
+- 活动状态、用户与执行实例写入保护继续有效；外部取消/其他实例已经终结后，不覆盖其终态或用量。这些竞争下尚未保存的消耗仍可能未知。
+- 前端支持仅规划/整体用量的任务，不把未知的最终回答用量显示为 0。
+
+新增实现位于 `backend/app/services/task_terminal_usage.py`，只构建已知消耗记录；执行服务复用既有终态写入与统计接口。
+
 ## 验证与维护
 
 ```bash
@@ -23,3 +34,5 @@ backend/.venv/bin/python backend/scripts/test_task_completion_postgres.py
 2026-10-08：静态 5/5；独立 PostgreSQL 6/6，包含数据库触发器注入助手插入/会话更新时间失败、并发完成、取消/执行实例/用户竞争、提交前外部读取、成功回放/导出与下一轮会话上下文。集成已进入 backend-e2e，使用本地模型替身，无真实模型请求。
 
 来源 `/tmp/insightagent-task-completion-{static,postgres}.log`；模型流 6/6、用量 3/3、步骤恢复 9/9 回归来源 `/tmp/insightagent-task-completion-{stream,usage,checkpoint}-regression.log`；完整门禁 `/tmp/insightagent-task-completion-release.md` / `.json`（10/10 PASS、后端 2180/2180、前端 206/206）。本轮未重跑浏览器。
+
+2026-10-08 终态维护：静态 `-k task_terminal_usage` **5/5**，前端用量计算 **8/8**；独立 PostgreSQL `test_task_terminal_postgres.py` **10/10**，覆盖流尾、空流回退、最终 Trace 保存跨时限，迟到决策、取消竞争、工具/决策/流失败、真实本机 HTTP usage 后 EOF、汇总/导出与成功写入失败。已进入 backend-e2e。来源 `/tmp/insightagent-task-terminal-{static,frontend,postgres}.log`；反馈、模型流、原子成功回归各 **6/6**，来源 `/tmp/insightagent-task-terminal-{feedback,stream,completion}-regression.log`。完整门禁 `/tmp/insightagent-task-terminal-release.md` / `.json`；无真实模型/目标部署或浏览器复验。

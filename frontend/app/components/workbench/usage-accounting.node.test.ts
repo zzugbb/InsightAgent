@@ -64,3 +64,28 @@ test("invalid stage numbers cannot poison the session totals", () => {
   assert.equal(resolveTasksUsageAggregate([task({ prompt_tokens: true,
     completion_tokens: "NaN", cost_estimate: "Infinity", planning_prompt_tokens: -1 })]), null);
 });
+
+test("failed planning-only tasks show known planning without inventing final usage", () => {
+  const row = task({ planning_prompt_tokens: 30, planning_completion_tokens: 6,
+    planning_total_tokens: 36, planning_usage_source: "provider", planning_cost_estimate: 0.000042,
+    overall_prompt_tokens: 30, overall_completion_tokens: 6, overall_total_tokens: 36 });
+  row.status = "failed";
+  const breakdown = resolveTaskUsageFromTask(row);
+  assert.ok(breakdown);
+  assert.equal(breakdown.prompt, null);
+  assert.equal(breakdown.completion, null);
+  assert.equal(breakdown.total, null);
+  assert.equal(breakdown.cost, null);
+  assert.equal(breakdown.usageSource, null);
+  assert.equal(breakdown.planning?.total, "36");
+  assert.equal(breakdown.overall?.total, "36");
+  assert.equal(resolveTasksUsageAggregate([row])?.total, "36");
+});
+
+test("unknown usage stays hidden while overall-only legacy records remain readable", () => {
+  assert.equal(resolveTaskUsageFromTask(task({ prompt_tokens: null, completion_tokens: null })), null);
+  const breakdown = resolveTaskUsageFromTask(task({ overall_prompt_tokens: 5, overall_completion_tokens: 2 }));
+  assert.equal(breakdown?.total, null);
+  assert.equal(breakdown?.planning, null);
+  assert.equal(breakdown?.overall?.total, "7");
+});

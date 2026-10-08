@@ -264,6 +264,7 @@ from tool_runtime_slice.provider_call_observability import ProviderCallObservabi
 from tool_runtime_slice.provider_stream_completion import ProviderStreamCompletionMixin
 from tool_runtime_slice.task_usage_accounting import TaskUsageAccountingMixin
 from tool_runtime_slice.task_completion_atomic import TaskCompletionAtomicMixin
+from tool_runtime_slice.task_terminal_usage import TaskTerminalUsageMixin
 from tool_runtime_slice.registry_file_diagnostics import RegistryFileDiagnosticsMixin
 from tool_runtime_slice.registry_execution_diagnostics import RegistryExecutionDiagnosticsMixin
 from tool_runtime_slice.registry_source_file_diagnostics import RegistrySourceFileDiagnosticsMixin
@@ -409,6 +410,7 @@ class ToolRuntimeSliceTests(
     ProviderStreamCompletionMixin,
     TaskUsageAccountingMixin,
     TaskCompletionAtomicMixin,
+    TaskTerminalUsageMixin,
     unittest.TestCase,
 ):
     def _make_sensitive_http_json_action_step(

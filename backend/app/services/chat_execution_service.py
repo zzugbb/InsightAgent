@@ -27,6 +27,7 @@ from app.services.provider_service import ProviderSelectionError, get_llm_provid
 from app.services.settings_service import get_stored_settings
 from app.services.task_checkpoint_service import checkpoint_plan, restored_prefix, validate_resume
 from app.services.task_tool_execution import execute_task_tool_plan
+from app.services.task_terminal_usage import build_terminal_usage
 from app.services.agent_feedback import AgentFeedbackLoop, feedback_enabled, sum_planning_usage
 from app.services.task_queue_service import (
     forget_waiting_task,
@@ -464,6 +465,26 @@ def stream_task_execution(
     stream_started_ts = monotonic()
     task_slot = None
     task_running_started = False
+    planning_usage_payload = None
+    final_usage_payload = None
+    provider = None
+    final_call_started = False
+
+    def terminal_usage():
+        captured = None
+        if final_call_started and final_usage_payload is None:
+            getter = getattr(provider, "get_last_usage", None)
+            if callable(getter):
+                try:
+                    captured = getter()
+                except Exception:
+                    pass  # Usage diagnostics must not replace the original failure.
+        return build_terminal_usage(
+            planning_usage=planning_usage_payload, final_usage=final_usage_payload,
+            provider_usage=captured,
+            prompt_price=float(getattr(runtime_config, "usage_prompt_token_price_per_1k", 0)),
+            completion_price=float(getattr(runtime_config, "usage_completion_token_price_per_1k", 0)),
+        )
 
     def record_audit_event(
         *,
@@ -610,6 +631,7 @@ def stream_task_execution(
             trace_steps=trace_steps,
             user_id=user_id,
             status=exc.status,
+            usage=terminal_usage(),
             execution_owner_id=TASK_EXECUTION_OWNER_ID,
         )
         if terminal_write_lost(completed_count):
@@ -620,6 +642,8 @@ def stream_task_execution(
 
     def complete_task_for_service_action(**kwargs: object) -> object:
         kwargs.setdefault("execution_owner_id", TASK_EXECUTION_OWNER_ID)
+        if kwargs.get("status", "completed") != "completed":
+            kwargs.setdefault("usage", terminal_usage())
         completed_count = complete_task(**kwargs)
         if terminal_write_lost(completed_count):
             terminal_exc = terminal_abort_after_lost_race()
@@ -684,6 +708,7 @@ def stream_task_execution(
                 trace_steps=trace_steps,
                 user_id=user_id,
                 status="timed_out",
+                usage=terminal_usage(),
                 execution_owner_id=TASK_EXECUTION_OWNER_ID,
             )
             abort_error = build_abort_error_for_status(
@@ -843,7 +868,6 @@ def stream_task_execution(
             checkpoint_seed=checkpoint_seed, max_rounds=getattr(runtime_config, "agent_max_rounds", 3),
         )
         agent_round = 1
-        planning_usage_payload = None
         plan_meta: dict[str, object] = {
             "model": provider_model,
             "step_type": "planning",
@@ -1000,7 +1024,6 @@ def stream_task_execution(
                             and step.get("type") == "action"]
             decision = feedback_loop.decide(prompt=model_prompt,
                 observations=with_model_observations(tool_observations, trace_steps), provider=provider)
-            raise_if_should_abort(force_status_probe=True)
             decision_content = build_tool_plan_summary(decision.plan, registry_provider=tool_registry_provider) if decision.plan else f"Agent tools stopped: {decision.reason}. Generate answer from available observations."
             decision_meta = {"model": provider_model, "step_type": "planning", "label": "agent_decision",
                              "agent_round": feedback_loop.round, "agent_decision": decision.reason,
@@ -1017,6 +1040,7 @@ def stream_task_execution(
                                      prompt_tokens=decision_usage["prompt_tokens"],
                                      completion_tokens=decision_usage["completion_tokens"],
                                      usage_source=decision_usage["usage_source"])
+            raise_if_should_abort(force_status_probe=True)
             seq_cursor += 1
             decision_step = {"id": str(uuid4()), "seq": seq_cursor, "type": "thought",
                              "content": decision_content, "meta": decision_meta}
@@ -1075,6 +1099,7 @@ def stream_task_execution(
 
         streamed_content = ""
         final_step_seq = int(final_step_streaming.get("seq", seq_cursor))
+        final_call_started = True
         for chunk in provider.stream_generate(provider_prompt):
             raise_if_should_abort()
             stream_chunk_count += 1
@@ -1115,6 +1140,7 @@ def stream_task_execution(
             latest_usage = get_last_usage()
             if isinstance(latest_usage, ProviderUsage):
                 provider_usage = latest_usage
+        raise_if_should_abort(force_status_probe=True)
         if not final_content:
             raise_if_should_abort(force_status_probe=True)
             fallback = provider.generate(provider_prompt)
@@ -1142,6 +1168,7 @@ def stream_task_execution(
                 "cost_estimate": final_usage_payload["cost_estimate"],
             },
         }
+        raise_if_should_abort(force_status_probe=True)
         persist_trace(force=True)
 
         usage_payload = _merge_usage_payloads(
@@ -1149,6 +1176,7 @@ def stream_task_execution(
             planning_usage=planning_usage_payload,
         )
 
+        raise_if_should_abort(force_status_probe=True)
         completed_count = complete_task(
             task_id=task_id,
             trace_steps=trace_steps,
@@ -1195,6 +1223,7 @@ def stream_task_execution(
             trace_steps=trace_steps,
             user_id=user_id,
             status="failed",
+            usage=terminal_usage(),
             execution_owner_id=TASK_EXECUTION_OWNER_ID,
         )
         if terminal_write_lost(completed_count):
@@ -1232,6 +1261,7 @@ def stream_task_execution(
             trace_steps=trace_steps,
             user_id=user_id,
             status="failed",
+            usage=terminal_usage(),
             execution_owner_id=TASK_EXECUTION_OWNER_ID,
         )
         if terminal_write_lost(completed_count):
@@ -1274,6 +1304,7 @@ def stream_task_execution(
             trace_steps=trace_steps,
             user_id=user_id,
             status="failed",
+            usage=terminal_usage(),
             execution_owner_id=TASK_EXECUTION_OWNER_ID,
         )
         if terminal_write_lost(completed_count):
@@ -1306,6 +1337,7 @@ def stream_task_execution(
                     trace_steps=trace_steps,
                     user_id=user_id,
                     status="failed",
+                    usage=terminal_usage(),
                     execution_owner_id=TASK_EXECUTION_OWNER_ID,
                 )
                 if not terminal_write_lost(completed_count):

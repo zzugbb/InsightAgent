@@ -298,13 +298,18 @@ function normalizeUsageObject(
   raw: Record<string, unknown>,
 ): InspectorUsageRow | null {
   const base = normalizeUsageSection(raw);
-  if (!base) {
+  const planning = normalizeUsageSection(raw, "planning_");
+  const overall = normalizeUsageSection(raw, "overall_");
+  if (!base && !planning && !overall) {
     return null;
   }
   return {
-    ...base,
-    planning: normalizeUsageSection(raw, "planning_"),
-    overall: normalizeUsageSection(raw, "overall_"),
+    ...(base ?? {
+      prompt: null, completion: null, total: null, cost: null,
+      promptSource: null, completionSource: null, usageSource: null,
+    }),
+    planning,
+    overall,
   };
 }
 
