@@ -149,10 +149,20 @@ def trace_sources(steps: list[dict[str, Any]]) -> set[str]:
     return sources
 
 
-def final_answer_text(steps: list[dict[str, Any]]) -> str:
+def final_answer_text(steps: list[dict[str, Any]], task: dict[str, Any] | None = None) -> str:
     for step in reversed(steps):
-        if step.get("type") == "message" and (step.get("meta") or {}).get("role") == "assistant":
+        meta = step.get("meta") or {}
+        if meta.get("step_type") == "final_answer":
+            content = str(step.get("content") or "")
+            if content:
+                return content
+        if step.get("type") == "message" and meta.get("role") == "assistant":
             return str(step.get("content") or "")
+    if task:
+        for key in ("result", "output", "answer"):
+            value = task.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
     return ""
 
 
@@ -267,7 +277,7 @@ def evaluate_question(
     steps: list[dict[str, Any]],
     task: dict[str, Any],
 ) -> QuestionResult:
-    answer = final_answer_text(steps)
+    answer = final_answer_text(steps, task)
     tools = trace_tool_names(steps)
     sources = trace_sources(steps)
     checks = spec.get("checks") or {}
@@ -386,7 +396,8 @@ class SyntheticRagProvider:
             tools = [{"name": "task_retrieve", "input": {"query": "budget", "knowledge_base_id": kb}}]
         else:
             observations = prompt.split("Completed tool observations (JSON):\n", 1)[1]
-            if "budget: 7" in observations and "加倍" in prompt:
+            has_budget = any(token in observations for token in ("budget: 7", "预算：7", "预算: 7"))
+            if has_budget and "加倍" in prompt:
                 tools = [{"name": "calc_eval", "input": {"expression": "7*2"}}]
         return self._ProviderResponse(
             json.dumps({"tools": tools}),
