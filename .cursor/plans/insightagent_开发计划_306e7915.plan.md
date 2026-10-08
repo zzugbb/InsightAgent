@@ -4,7 +4,7 @@ overview: 持续推进项目收尾；核心本地实现/契约已封板，执行
 current_focus:
   mainline: project-completion-audit
   status: 持续收尾中；核心本地契约已封板，基础真实模型/合成 RAG 已验证，本次新后端候选配对联调通过；业务质量/目标部署待验
-  latest_change: 2026-10-08 真实业务 RAG 验收工具包（待外部资料）；business_rag_acceptance 静态自测 2/2
+  latest_change: 2026-10-08 真实业务 RAG 验收工具包（待外部资料）静态 2/2；e2e workflow 健壮性（tooling if always、诊断重跑摘要）；规划等待替身 5/5；已同步 main composer-keyboard/runbook（node 217/217）；真实 glm/镜像待 Mac
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -83,9 +83,9 @@ validation_baseline:
   task_tool_parallel: 默认 1（串行），1–4 配置仅并发内建与明确声明的 HTTP 读取；15 个专项与 6 个 PostgreSQL 场景通过，进程最多 8 个读取线程；取消/超时丢弃迟到结果
   task_checkpoints: 实验性内建顺序计划，成功前缀复用、独立分支与失败重试；6 个静态专项、9/9 PostgreSQL，HTTP/DAG checkpoint 延期；新 Trace 标注来源且复用 token/cost 归零
   task_reruns: 完整任务分支支持编辑输入、独立会话、幂等与来源分页；7 个既有专项进入门禁，11/11 PostgreSQL 既有回归通过；原任务/Trace/usage 不变
-  backend_current: full slice 2220/2220、module 9/9；规划等待替身 PostgreSQL 4/4；应用运行时变更，候选镜像须本机重建
-  release_gate: 后端 2/2、hygiene 3/3；前端 node/lint 保留基线，thinking 阶段规划等待文案
-  frontend: node 217/217、lint 0 error/2 warning；heartbeat 文案 + PR #1 composer-keyboard e2e
+  backend_current: full slice 2220/2220、module boundary 9/9；规划等待替身 5/5（PostgreSQL）；应用运行时变更，候选镜像须本机重建
+  release_gate: 后端 2/2、hygiene 3/3；前端 node/lint/双构建；thinking 规划等待文案 + composer-keyboard CI=1 Chromium 2/2
+  frontend: node 217/217（21 个 node.test.ts，与 ci_run_release_gate.sh 一致）、lint 0 error/2 warning；heartbeat 文案 + composer-keyboard 生产构建断言修复
   e2e_current: composer-keyboard 生产构建 Chromium 2/2（云端 VM）；dev 三浏览器 6/6 为用户本机历史记录，修复后 dev 复验待 Mac；GitHub frontend-e2e PR 复验待跑
   e2e_ci_incident: frontend-e2e #194/#195 因 bare nextjs-portal not.toContainText 在生产构建误失败；已改为 data-nextjs-dialog 计数 0
   hygiene: 本轮工具/文档 hygiene 3/3 PASS，来源 /tmp/insightagent-provider-latency-hygiene.md 与 .json；compileall、diff whitespace 与 backup plan untouched；提交前继续核对 cached diff
