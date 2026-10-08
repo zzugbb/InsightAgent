@@ -13,6 +13,7 @@ from business_rag_acceptance_runner import (  # noqa: E402
     SYNTHETIC_FIXTURE,
     build_report,
     compare_tool_claims,
+    final_answer_text,
     load_materials,
     load_questions,
     run_auto_checks,
@@ -26,6 +27,17 @@ class BusinessRagAcceptanceStaticTests(unittest.TestCase):
         spec = load_questions(SYNTHETIC_FIXTURE / "questions.json")
         self.assertGreaterEqual(len(materials), 1)
         self.assertGreaterEqual(len(spec["questions"]), 2)
+
+    def test_final_answer_text_reads_trace_final_answer_step(self):
+        steps = [
+            {"type": "action", "content": "retrieve", "meta": {"step_type": "rag_retrieval"}},
+            {
+                "type": "observation",
+                "content": "检索结果显示预算为 7，加倍后为 14。",
+                "meta": {"step_type": "final_answer"},
+            },
+        ]
+        self.assertIn("14", final_answer_text(steps))
 
     def test_auto_checks_and_report_shape(self):
         answer = "资料中未记载上线日期。"
