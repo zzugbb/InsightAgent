@@ -16,6 +16,7 @@
 
 ## 当前验证基线
 
+- 本轮收尾：清理实时计划 frontmatter 合并残留的冲突标记；hygiene 增加行首冲突标记扫描。本地 hygiene **4/4 PASS**，来源 `/tmp/insightagent-conflict-hygiene.md` / `.json`。
 - 本轮收尾（项 E）：统一本机验收 `scripts/local_acceptance.sh` 与 [local-acceptance-checklist.md](docs/local-acceptance-checklist.md)；干跑自测通过。
 - 上轮收尾（项 D）：[目标环境部署与恢复演练工具包](docs/pilot-environment-drill.md)（`pilot_https_probe.sh`、`pilot_backup_restore_drill.sh`）；`test_pilot_drill_scripts.sh` 通过。**待外部验收（缺目标环境）**。
 - 上轮收尾（项 C）：[目标业务端到端验收模板](docs/target-task-acceptance.md)与 `scripts/export_acceptance_evidence.py`（单会话低敏证据包）；静态自测 **1/1**。**待外部验收（缺目标任务与用户）**。

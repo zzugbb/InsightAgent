@@ -17,6 +17,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 当前验证基线
 
+- 本轮收尾：清理实时计划 frontmatter 合并残留的冲突标记；hygiene 增加行首冲突标记扫描。本地 hygiene **4/4 PASS**，来源 `/tmp/insightagent-conflict-hygiene.md` / `.json`。前端应用实现未变。
 - 本轮收尾：`frontend-e2e` workflow 健壮性（tooling `if: always()`、诊断重跑摘要脚本）；VM `test_ci_e2e_tooling.sh frontend` 通过。
 - 本轮收尾：`thinking` 阶段 heartbeat 展示规划等待文案；release gate **217/217**、lint 0 error、Turbopack/webpack 双构建。无新增 e2e 断言（文案未进既有 spec）。dev 三浏览器**待 Mac**。
 - 本轮收尾：修复 GitHub `frontend-e2e` #194/#195 中 `composer-keyboard.spec.ts` 在生产构建下的误失败（`nextjs-portal` 在 `CI=1` 生产启动时不存在，`not.toContainText` 误报）。断言改为 `nextjs-portal [data-nextjs-dialog]` 计数为 0，与同仓库其它 e2e 一致。云端 VM 生产模式 Chromium **2/2**；控制台 `errors` 断言在生产构建下通过。门禁 node **217/217**（与 `scripts/ci_run_release_gate.sh` 的 `FRONTEND_NODE_TESTS` 一致，21 个文件）；runbook 已补齐漏列的 `app/next-major-readiness.node.test.ts`（8 项）。原先输入法三浏览器 **6/6** 为用户本机 `npm run dev` 结果，修复后 dev 三浏览器复验**待用户 Mac**；候选镜像未重建。

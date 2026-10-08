@@ -69,6 +69,7 @@ main() {
   assert_contains "backend/.venv/bin/python -m compileall -q backend/app backend/scripts" "${TMP_DIR}/all.txt"
   assert_contains "git diff --check" "${TMP_DIR}/all.txt"
   assert_contains "git diff -- data/insightagent.plan.back.md" "${TMP_DIR}/all.txt"
+  assert_contains "bash scripts/check_conflict_markers.sh" "${TMP_DIR}/all.txt"
   assert_not_contains "ci_run_backend_e2e.sh" "${TMP_DIR}/all.txt"
   assert_not_contains "ci_run_frontend_e2e.sh" "${TMP_DIR}/all.txt"
 
@@ -228,6 +229,20 @@ SH
   assert_contains "resolved_phases=backend,frontend,tooling,hygiene" "${TMP_DIR}/auto-pilot.txt"
 
   expect_fail bash "${SCRIPT}" --phase unknown --dry-run
+
+  clean_repo="${TMP_DIR}/conflict-clean"
+  dirty_repo="${TMP_DIR}/conflict-dirty"
+  setup_git_repo "${clean_repo}"
+  printf 'clean\n' > "${clean_repo}/note.txt"
+  git -C "${clean_repo}" add note.txt
+  git -C "${clean_repo}" commit -m "clean" >/dev/null
+  bash "${ROOT_DIR}/scripts/check_conflict_markers.sh" "${clean_repo}"
+
+  setup_git_repo "${dirty_repo}"
+  printf '<<<<<<< HEAD\nclean\n' > "${dirty_repo}/note.txt"
+  git -C "${dirty_repo}" add note.txt
+  git -C "${dirty_repo}" commit -m "dirty" >/dev/null
+  expect_fail bash "${ROOT_DIR}/scripts/check_conflict_markers.sh" "${dirty_repo}"
 
   echo "ci_release_gate tests passed"
 }

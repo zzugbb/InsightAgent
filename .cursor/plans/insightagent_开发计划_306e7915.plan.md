@@ -4,11 +4,7 @@ overview: 持续推进项目收尾；核心本地实现/契约已封板，执行
 current_focus:
   mainline: project-completion-audit
   status: 持续收尾中；核心本地契约已封板，基础真实模型/合成 RAG 已验证，本次新后端候选配对联调通过；业务质量/目标部署待验
-<<<<<<< HEAD
-  latest_change: 2026-10-08 local_acceptance.sh 统一本机验收入口；dry-run 自测通过
-=======
-  latest_change: 2026-10-08 试点部署/恢复演练工具包；目标任务验收模板与 export 静态 1/1；真实业务 RAG 静态 2/2；e2e workflow 健壮性；规划等待 5/5；composer-keyboard/runbook node 217/217；真实 glm/镜像待 Mac
->>>>>>> cursor/pilot-drill-kit-11df
+  latest_change: 2026-10-08 local_acceptance.sh 统一本机验收入口；dry-run 自测通过；试点部署/恢复演练工具包；目标任务验收模板与 export 静态 1/1；真实业务 RAG 静态 2/2；e2e workflow 健壮性；规划等待 5/5；composer-keyboard/runbook node 217/217；真实 glm/镜像待 Mac
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -92,7 +88,7 @@ validation_baseline:
   frontend: node 217/217（21 个 node.test.ts，与 ci_run_release_gate.sh 一致）、lint 0 error/2 warning；heartbeat 文案 + composer-keyboard 生产构建断言修复
   e2e_current: composer-keyboard 生产构建 Chromium 2/2（云端 VM）；dev 三浏览器 6/6 为用户本机历史记录，修复后 dev 复验待 Mac；GitHub frontend-e2e PR 复验待跑
   e2e_ci_incident: frontend-e2e #194/#195 因 bare nextjs-portal not.toContainText 在生产构建误失败；已改为 data-nextjs-dialog 计数 0
-  hygiene: 本轮工具/文档 hygiene 3/3 PASS，来源 /tmp/insightagent-provider-latency-hygiene.md 与 .json；compileall、diff whitespace 与 backup plan untouched；提交前继续核对 cached diff
+  hygiene: 本轮冲突标记清理 hygiene 4/4 PASS，来源 /tmp/insightagent-conflict-hygiene.md 与 .json；compileall、diff whitespace、backup plan untouched、行首冲突标记扫描
 completed_mainlines:
   - agent-core-alignment：本地实现/契约封板；有界对话上下文、模型 RAG 证据、Observation 决策、Trace 关系和文件导入，真实模型基础链路与合成 RAG 已验证，业务质量仍待验
   - provider-tool-expansion：provider search 归一化、planner 多协议 tool call、JSON 字符串参数、reconnect 错误码
@@ -142,6 +138,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 当前验证基线
 
+- 本轮收尾：清理本文件 frontmatter 合并残留的冲突标记；hygiene 增加行首冲突标记扫描。本地 hygiene **4/4 PASS**，来源 `/tmp/insightagent-conflict-hygiene.md` / `.json`。`data/insightagent.plan.back.md` 未改。
 - 本轮收尾：[规划等待与失败恢复](../../docs/real-model-acceptance.md)替身 **5/5**（含迟到规划不写用量）；前端 gate **217/217** + 双构建。后端 **2220/2220**。真实 glm/`pilot-*` **待本机**。
 - 上轮：[规划等待排查](../../docs/real-model-acceptance.md)离线耗时 **11/11**；PR #1 composer-keyboard 生产 e2e 修复。
 - 前轮执行证据后端门禁 **2/2 PASS**，来源 `/tmp/insightagent-execution-evidence-release.md` / `.json`：full slice **2217/2217**、module boundary **9/9**；执行证据专项 **7/7**、独立 PostgreSQL/Chroma 核心场景 **11/11**，来源 `/tmp/insightagent-execution-evidence-{static,postgres}.log`。前端未变，保留上一完整门禁 **10/10 PASS** 的前端 node **217/217**、lint **0 error / 2 个既有 warning**与双构建基线（`/tmp/insightagent-planning-call-usage-release.md` / `.json`）；本轮未重跑全量前端。
