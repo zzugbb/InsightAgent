@@ -116,6 +116,8 @@ curl -I http://127.0.0.1:3001
 
 ## e2e 路径
 
+[远端模型流结束专项](provider-stream-completion.md)：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k provider_stream_completion`（12 个静态测试）；`backend/.venv/bin/python backend/scripts/test_provider_stream_postgres.py`（6 个真实本机 HTTP/独立 PostgreSQL 场景）。后者需要 Docker/随机端口提权并自动清理，仅使用本地模型协议替身，已纳入 backend-e2e。验证部分 EOF 失败、批量 Trace 边界后的尾部、delta/导出、失败重连不重放、400 兼容回退及正常结束帧。
+
 公开 HTTP 工具结果的模型证据专项：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k agent_tool_context`（7 个静态边界）；`backend/.venv/bin/python backend/scripts/test_agent_tool_context_postgres.py`（3 个真实本机 HTTP/独立 PostgreSQL 场景，模型为本地替身，需提权访问 Docker/随机端口，自动清理；已纳入 backend-e2e）。核对同命中数/不同正文的分支、单轮最终回答、公开字段与嵌套脱敏、Trace/delta/导出一致性。
 
 聊天输入键盘专项为 `frontend/e2e/composer-keyboard.spec.ts`，使用 API fixture 模拟 composition/isComposing/229 确认事件、Shift+Enter 换行与正常发送；运行 `cd frontend && npx playwright test e2e/composer-keyboard.spec.ts --project=chromium --project=firefox --project=webkit --workers=1 --reporter=list --output=/tmp/insightagent-composer-keyboard-results`，需要前端服务、本机端口及浏览器提权。三浏览器各覆盖 1440px/390px；这不代替操作系统输入法人工验收。新 spec 自动纳入 frontend full Chromium 发现范围。

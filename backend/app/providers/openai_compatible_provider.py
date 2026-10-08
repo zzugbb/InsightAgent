@@ -252,6 +252,7 @@ class OpenAICompatibleLLMProvider:
         for idx, payload in enumerate(payload_candidates):
             yielded_chunks = 0
             done_seen = False
+            finish_seen = False
             request = self._build_request(payload)
             started_at = monotonic()
             outcome = "interrupted"
@@ -281,25 +282,32 @@ class OpenAICompatibleLLMProvider:
                         usage = self._extract_usage(event)
                         if usage is not None:
                             self._last_usage = usage
+                        choices = event.get("choices") if isinstance(event, dict) else None
+                        if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+                            reason = choices[0].get("finish_reason")
+                            if isinstance(reason, str) and reason in {
+                                "stop", "length", "tool_calls", "content_filter", "function_call",
+                            }:
+                                finish_seen = True
                         delta = self._extract_delta_content(event)
                         if delta:
                             yielded_chunks += 1
                             yield delta
-                if yielded_chunks == 0:
-                    if done_seen:
-                        outcome = "empty_response"
-                        raise ProviderCallError(
-                            code="remote_provider_empty_response",
-                            user_message="Remote provider stream finished without text output.",
-                            detail=None,
-                            retryable=False,
-                        )
+                if not (done_seen or finish_seen):
                     outcome = "interrupted"
                     raise ProviderCallError(
                         code="remote_provider_stream_interrupted",
                         user_message="Remote provider stream ended before completion.",
-                        detail="done marker not received",
+                        detail="completion signal not received",
                         retryable=True,
+                    )
+                if yielded_chunks == 0:
+                    outcome = "empty_response"
+                    raise ProviderCallError(
+                        code="remote_provider_empty_response",
+                        user_message="Remote provider stream finished without text output.",
+                        detail=None,
+                        retryable=False,
                     )
                 outcome = "success"
                 return
@@ -318,8 +326,8 @@ class OpenAICompatibleLLMProvider:
             except URLError as exc:
                 outcome = "network_error"
                 self._raise_network_error(exc=exc, stream_mode=True)
-            except ProviderCallError:
-                if outcome == "interrupted":
+            except ProviderCallError as exc:
+                if outcome == "interrupted" and exc.code != "remote_provider_stream_interrupted":
                     outcome = "provider_error"
                 raise
             except Exception as exc:  # noqa: BLE001

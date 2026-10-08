@@ -261,6 +261,7 @@ from tool_runtime_slice.provider_tool_expansion import ProviderToolExpansionMixi
 from tool_runtime_slice.provider_source_http_json import ProviderSourceHttpJsonMixin
 from tool_runtime_slice.provider_streaming import ProviderStreamingMixin
 from tool_runtime_slice.provider_call_observability import ProviderCallObservabilityMixin
+from tool_runtime_slice.provider_stream_completion import ProviderStreamCompletionMixin
 from tool_runtime_slice.registry_file_diagnostics import RegistryFileDiagnosticsMixin
 from tool_runtime_slice.registry_execution_diagnostics import RegistryExecutionDiagnosticsMixin
 from tool_runtime_slice.registry_source_file_diagnostics import RegistrySourceFileDiagnosticsMixin
@@ -403,6 +404,7 @@ class ToolRuntimeSliceTests(
     RequestObservabilityMixin,
     ApiSurfaceContractMixin,
     ProviderCallObservabilityMixin,
+    ProviderStreamCompletionMixin,
     unittest.TestCase,
 ):
     def _make_sensitive_http_json_action_step(

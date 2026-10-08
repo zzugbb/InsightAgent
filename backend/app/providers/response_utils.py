@@ -145,9 +145,4 @@ def extract_response_delta_text(response: object) -> str:
         nested = normalize_response_text(nested_value)
         if nested:
             return nested
-    if choices is _MISSING:
-        return ""
-    nested = extract_response_delta_text({"choices": choices})
-    if nested:
-        return nested
     return ""

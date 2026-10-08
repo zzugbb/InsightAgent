@@ -1089,6 +1089,15 @@ def stream_task_execution(
                     },
                 )
                 last_heartbeat_ts = now
+            streamed_content += chunk
+            # Keep all emitted text for terminal failure writes, even between DB batches.
+            final_step_seq += 1
+            final_step_streaming = {
+                **final_step_streaming,
+                "content": streamed_content,
+                "seq": final_step_seq,
+            }
+            trace_steps[-1] = final_step_streaming
             yield sse_event(
                 "token",
                 {
@@ -1097,16 +1106,8 @@ def stream_task_execution(
                     "delta": chunk,
                 },
             )
-            streamed_content += chunk
             should_persist = stream_chunk_count % STREAM_TRACE_PERSIST_EVERY == 0
             if should_persist:
-                final_step_seq += 1
-                final_step_streaming = {
-                    **final_step_streaming,
-                    "content": streamed_content,
-                    "seq": final_step_seq,
-                }
-                trace_steps[-1] = final_step_streaming
                 persist_trace()
 
         final_content = streamed_content

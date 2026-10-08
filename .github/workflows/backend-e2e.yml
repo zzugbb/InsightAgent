@@ -109,6 +109,9 @@ jobs:
       - name: Run published HTTP tool evidence PostgreSQL integration
         run: python backend/scripts/test_agent_tool_context_postgres.py
 
+      - name: Run remote stream completion PostgreSQL integration
+        run: python backend/scripts/test_provider_stream_postgres.py
+
       - name: Run tool dependency PostgreSQL integration
         run: python backend/scripts/test_tool_dependencies_postgres.py
 
