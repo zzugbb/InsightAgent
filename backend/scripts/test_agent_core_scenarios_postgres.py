@@ -54,6 +54,33 @@ class AgentCoreScenariosPostgresTests(unittest.TestCase):
         self.assertIn("event: done", response.text)
         return self.steps(client, task)
 
+    def test_fallback_answer_receives_only_actually_executed_tools(self):
+        provider = ContextProvider("invalid")
+        with self.client(provider) as client, patch.object(runtime, "query_knowledge_base", return_value={
+            "hits": [{"id": "one", "content": "budget: 7", "metadata": {"source": "guide.md"}}],
+            "hit_count": 1, "knowledge_base_id": "manuals", "collection": "kb_fixture_manuals",
+        }):
+            task = self.create(client, "请检索知识库后用计算工具把预算加倍 [kb:manuals]")
+            steps = self.execute(client, task)
+            prompt = provider.final_prompts[-1]
+            payload = json.loads(prompt.split("Runtime execution evidence (JSON):\n")[1].split("\n\n")[0])
+            self.assertFalse(steps[0]["meta"]["planning_provider_used"])
+            self.assertTrue(payload["initial_planning_fallback"])
+            self.assertIn("task_retrieve", payload["executed_tools"])
+            self.assertNotIn("calc_eval", payload["executed_tools"])
+            self.assertIn("Never claim a tool or external action was executed", prompt)
+
+    def test_valid_answer_receives_successful_calculator_and_no_raw_input(self):
+        provider = ContextProvider()
+        with self.client(provider) as client:
+            # Invalid planning uses the existing deterministic calculation marker.
+            with patch.object(provider, "generate", return_value=ProviderResponse("invalid plan", provider.model, provider.provider)):
+                task = self.create(client, "Compute [calc:2+3]")
+                self.execute(client, task)
+            payload = json.loads(provider.final_prompts[-1].split("Runtime execution evidence (JSON):\n")[1].split("\n\n")[0])
+            self.assertIn("calc_eval", payload["executed_tools"])
+            self.assertNotIn("input", payload)
+
     def test_follow_up_context_reaches_planning_and_answer_without_rewriting_messages(self):
         provider = ContextProvider()
         with self.client(provider) as client:

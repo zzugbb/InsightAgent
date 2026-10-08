@@ -9,7 +9,7 @@ from uuid import uuid4
 from app.config import get_settings
 from app.providers.base import ProviderCallError, ProviderUsage
 from app.providers.completion_signals import normalize_finish_reason
-from app.services.answer_completion import with_tool_stop_context
+from app.services.answer_completion import with_execution_evidence, with_tool_stop_context
 from app.services.audit_service import safe_record_audit_event
 from app.services.chat_persistence_service import (
     complete_task,
@@ -1082,6 +1082,8 @@ def stream_task_execution(
                                if provider_name != "mock" else tool_observations),
         )
         provider_prompt = with_tool_stop_context(provider_prompt, agent_stop_reason)
+        if provider_name != "mock":
+            provider_prompt = with_execution_evidence(provider_prompt, trace_steps)
         stream_chunk_count = 0
         provider_usage: ProviderUsage | None = None
         get_last_usage = getattr(provider, "get_last_usage", None)

@@ -6,8 +6,8 @@
 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization`、`next-major-upgrade-readiness`。
 - 最近封板：`agent-core-alignment` 的本地实现与契约验证已封板：有界对话上下文、工具反馈决策、RAG 正文/来源证据、Trace 关系与知识文件导入均完成。可进入后续维护或下一条按实际需求选定的主线；真实模型效果验收仍属于外部待验项。
-- 当前阶段：持续推进[项目收尾](docs/project-completion-audit.md)，按现有定位修复主链路并核对交付证据；Agent 核心本地实现/契约已封板，真实模型基础链路已验证，RAG/真实任务质量与目标部署验收继续收尾。
-- 当前维护完成：[规划调用用量](docs/usage-accounting.md)非流式空正文错误携带该次真实用量，首轮规则回退和后续失败都保存已发生消耗；新请求先清空旧用量，部分字段保持未知，成功/失败任务共用汇总规则。反馈必填输入、实际输入防重复与回答增量继续保留。
+- 当前阶段：持续推进[项目收尾](docs/project-completion-audit.md)，按现有定位修复主链路并核对交付证据；Agent 核心本地实现/契约已封板，真实模型基础链路与合成 RAG 已验证，业务任务质量与目标部署验收继续收尾。
+- 当前维护完成：[真实 RAG 验收修复](docs/real-model-acceptance.md)：最终回答接收成功工具/复用结果清单，明确自行推算不等于工具执行；内建检索规划声明实际可绑定字段，检索正文中的数值由后续反馈发起计算。外部 SSE/Trace/export 与规则回退保持原契约；此前规划失败用量、反馈参数和回答增量修复保留。
 - A2 [试点镜像与部署入口](docs/pilot-deployment-preflight.md)已准备：84 个后端依赖版本锁定、非 root 默认 embedding 构建缓存通过禁网验证；新增生产 `compose.pilot.yml`、低敏预检/操作入口与健康启动顺序。隔离 mock 下重建全部容器后，登录、会话、任务/Trace 与 Chroma 知识保留；目标部署、TLS、候选镜像真实模型与升级回滚仍待实测。
 - A3 本地恢复基础已落地：两份 Compose 的 Chroma 卷改挂当前镜像实际持久路径 `/data`，新增[离线备份与隔离恢复流程](docs/local-stack-backup-restore.md)；独立 fixture 已读回 PostgreSQL 与 Chroma 测试数据。目标环境恢复与 RPO/RTO 仍待验证。
 - A4 [后台 RAG 导入](docs/rag-background-ingest.md)的持久化/分批进度与[完整任务分支重跑](docs/task-reruns.md)已完成本地闭环；[任务内工具并发](docs/task-tool-parallel.md)支持内建检索/计算有界并发；[工具依赖与结果引用](docs/tool-dependencies.md)支持显式 DAG、重复工具、拓扑波次与公开预览标量绑定；[HTTP 读取并发](docs/http-read-parallel.md)支持明确声明只读的固定 GET、配置冻结和生命周期协调。[实验性步骤恢复](docs/task-checkpoints.md)已实现内建顺序计划的独立分支、成功前缀复用与当前设置复核。OpenAPI 为 51 操作 / 89 组件；写入工具并行及 HTTP/DAG checkpoint 明确延期，目标运行与用户验收待完成。
@@ -16,20 +16,20 @@
 
 ## 当前验证基线
 
-- 2026-10-08 full release gate **10/10 PASS**，来源 `/tmp/insightagent-planning-call-usage-release.md` / `.json`；后端 full slice **2210/2210**、module boundary **9/9**；前端 node **217/217**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建通过。
-- 规划调用用量专项基线：提供方静态 **8/8**、独立 PostgreSQL 反馈/规划 **20/20**、用量汇总 **3/3**、终态 **10/10**、远端流 **6/6**；来源 `/tmp/insightagent-planning-call-usage-{static,postgres,accounting-regression,terminal-regression,stream-regression}.log`。覆盖真实本机 HTTP 空正文/429、完整/部分/缺失用量、首轮回退与后续失败、Trace/delta/export 和请求隔离；模型仅协议替身。本轮应用代码未变，保留该门禁与专项基线。
+- 当前后端门禁 **2/2 PASS**，来源 `/tmp/insightagent-execution-evidence-release.md` / `.json`：full slice **2217/2217**、module boundary **9/9**；执行证据专项 **7/7**、独立 PostgreSQL/Chroma 核心场景 **11/11**，来源 `/tmp/insightagent-execution-evidence-{static,postgres}.log`。前端未变，保留上一完整门禁 **10/10 PASS** 的前端 node **217/217**、lint **0 error / 2 个既有 warning**与双构建基线（`/tmp/insightagent-planning-call-usage-release.md` / `.json`）；本轮未重跑全量前端。
+- 规划调用用量专项基线：提供方静态 **8/8**、独立 PostgreSQL 反馈/规划 **20/20**、用量汇总 **3/3**、终态 **10/10**、远端流 **6/6**；来源 `/tmp/insightagent-planning-call-usage-{static,postgres,accounting-regression,terminal-regression,stream-regression}.log`。覆盖真实本机 HTTP 空正文/429、完整/部分/缺失用量、首轮回退与后续失败、Trace/delta/export 和请求隔离；模型仅协议替身。该专项为前轮验证，保留其范围；当前后端修复门禁见本节首项。
 - 保留空流回退回答 **14/14**、终态 **10/10**、成功保存 **6/6**，来源 `/tmp/insightagent-fallback-trace-*.log`；历史消息/会话静态 **9/11**、前端提示计算 **9/9** 与 Chromium 桌面英文/手机中文 **2/2** 保留 `/tmp/insightagent-message-completion-*.log` 基线。会话/Chroma 核心 **9/9** 保留；本轮未重跑这些交互或模型专项。
 - 保留用量计算后端 **8/8** / 前端 **6/6**（`/tmp/insightagent-usage-accounting-{static,frontend}.log`）及公开工具证据 **3/3**、HTTP 并发 **7/7**（`/tmp/insightagent-tool-evidence-{postgres,http-regression}.log`）；本轮未重跑这些专项。
-- 已验证前端基线：输入法/键盘三浏览器桌面/手机 **6/6**、知识导入 Chromium **7/7**、布局复核 **2/2**、Trace **2/2**；来源 `/tmp/insightagent-composer-keyboard-e2e.log`、`/tmp/insightagent-knowledge-import-e2e.log`、`/tmp/insightagent-knowledge-import-layout.log`、`/tmp/insightagent-trace-flow-e2e.log`。本轮镜像联调仅核对浏览器 API 地址，未重跑这些交互专项；输入法事件 fixture 不代替操作系统人工验收。
+- 已验证前端基线：输入法/键盘三浏览器桌面/手机 **6/6**、知识导入 Chromium **7/7**、布局复核 **2/2**、Trace **2/2**；来源 `/tmp/insightagent-composer-keyboard-e2e.log`、`/tmp/insightagent-knowledge-import-e2e.log`、`/tmp/insightagent-knowledge-import-layout.log`、`/tmp/insightagent-trace-flow-e2e.log`。前轮镜像联调仅核对浏览器 API 地址，未重跑这些交互专项；输入法事件 fixture 不代替操作系统人工验收。
 - 历史 service-backed 基线：完整 Chromium **77 passed / 1 skipped**、完整重跑 PostgreSQL **11/11**、步骤恢复 **9/9**、内建并发 **6/6**、DAG **7/7**、RAG **21/21** 与 400 切块实写，均保留原验证范围。
-- 2026-10-08 当前候选镜像已刷新至应用提交 `218f94d`，覆盖核心对齐和近期修复；ARM64 双构建、禁网 384 维 embedding、生产配置/mock 任务与知识链路、Compose 全容器重建后持久数据读回均 PASS。来源 `/tmp/insightagent-pilot-218f94d-{backend-retry,frontend-build,source-proof,smoke,compose-smoke}.log`；完整镜像 ID/源码摘要见试点部署记录。两项基础联调的范围仍为 mock 任务与持久化；真实模型效果与目标部署验收仍待实证。
-- 镜像 Agent 协议专项 **7/7**：通过实际 HTTP Provider 核对历史传递/会话隔离、两种 RAG 正文驱动的反馈分支、来源/版本、空正文回退/失败及 429 请求间用量隔离；5 个任务完成、2 个失败，13 次规划/5 次回答请求，Trace/delta/导出/用量一致。来源 `/tmp/insightagent-pilot-agent-protocol.log`，仅本地协议替身；无服务自测 **9/9**、清理失败不输出 PASS 的回归已纳入 tooling，成功摘要在资源清理后输出；本轮 tooling **1/1**、hygiene **3/3** PASS，来源 `/tmp/insightagent-pilot-agent-{tooling,hygiene}.md` / `.json`。
-- 2026-10-08 [真实模型配置验收](docs/real-model-acceptance.md)部分通过：智谱 `glm-5.3` 极短流式请求成功，真实任务 **3/3**（计算、历史续算及登录工作台发送）完成；Trace/delta/导出/消息与提供方用量一致。三任务共 **6,405 tokens**，加连通验证共 **6,530 tokens**；本机开发服务实测，未计作候选镜像或目标部署验证。真实 RAG 引用质量、失败恢复体验与账单成本仍待验收；目标 HTTPS/升级回滚、恢复 RPO/RTO 与用户签收未验证，项目总完成度不估百分比。
+- 2026-10-08 最近已验证的候选镜像来自应用提交 `218f94d`，覆盖核心对齐和近期修复；ARM64 双构建、禁网 384 维 embedding、生产配置/mock 任务与知识链路、Compose 全容器重建后持久数据读回均 PASS。来源 `/tmp/insightagent-pilot-218f94d-{backend-retry,frontend-build,source-proof,smoke,compose-smoke}.log`；完整镜像 ID/源码摘要见试点部署记录。两项基础联调的范围仍为 mock 任务与持久化；真实模型效果与目标部署验收仍待实证。 当前执行证据/检索规划修复尚未进入该镜像，发布前需刷新后端候选并按受影响范围复验。
+- 镜像 Agent 协议专项 **7/7**：通过实际 HTTP Provider 核对历史传递/会话隔离、两种 RAG 正文驱动的反馈分支、来源/版本、空正文回退/失败及 429 请求间用量隔离；5 个任务完成、2 个失败，13 次规划/5 次回答请求，Trace/delta/导出/用量一致。来源 `/tmp/insightagent-pilot-agent-protocol.log`，仅本地协议替身；无服务自测 **9/9**、清理失败不输出 PASS 的回归已纳入 tooling，成功摘要在资源清理后输出；前轮 tooling **1/1**、hygiene **3/3** PASS，来源 `/tmp/insightagent-pilot-agent-{tooling,hygiene}.md` / `.json`。
+- 2026-10-08 [真实模型配置验收](docs/real-model-acceptance.md)部分通过：智谱 `glm-5.3` 极短流式请求成功，真实任务 **3/3**（计算、历史续算及登录工作台发送）完成；Trace/delta/导出/消息与提供方用量一致。三任务共 **6,405 tokens**，加连通验证共 **6,530 tokens**；本机开发服务实测，未计作候选镜像或目标部署验证。真实 RAG 合成资料检索/反馈计算 2/2 通过；未知日期回答正确但首轮超时回退（严格报告 2/3），注入规划超时的真实回答明确未执行计算；业务资料质量、失败恢复体验与账单成本仍待验收；目标 HTTPS/升级回滚、恢复 RPO/RTO 与用户签收未验证，项目总完成度不估百分比。
 
 ## 当前开发计划
 
 1. `agent-core-alignment` 本地实现/契约已封板；终态、失败规划用量、回答提示/增量与反馈参数维护已完成，后续按实际使用问题核对必要修复。
-2. `project-completion-audit` 持续收尾：当前候选镜像本地复验已完成，后续按可复现的主链路问题维护；有效模型配置已验证，后续补真实 RAG/任务质量及目标部署/恢复与用户验收实证。当前没有确认必须新增的功能主线，写入并行及 HTTP/DAG checkpoint 继续延期。
+2. `project-completion-audit` 持续收尾：原候选镜像本地复验已完成，本次后端修复后待刷新候选；后续按可复现的主链路问题维护；有效模型配置已验证，后续补业务资料/任务质量与供应商稳定性，刷新后端候选镜像，并补目标部署/恢复与用户验收实证。当前没有确认必须新增的功能主线，写入并行及 HTTP/DAG checkpoint 继续延期。
 3. ESLint 10 保留为上游兼容后的维护候选，当前不强制覆盖 peer 约束。
 
 ## 稳定契约
@@ -45,7 +45,7 @@
 - HTTP 工具成功后的模型证据仅取 Trace 中公开的 effective_result_output_keys，复用脱敏，不读取原始响应、输入或注册表配置；最多 6 项/单项 JSON 3000/总 JSON 8000 字符，裁剪保持有效 JSON 并标记 truncated；供反馈与最终回答使用，计数 Observation 与 SSE/Trace/export 不变。
 - 聊天输入在 composition 生命周期、原生 isComposing 或兼容 keyCode=229 时将 Enter 留给输入法；正常 Enter 发送、Shift+Enter 换行与发送禁用规则保持一致，不改变后端请求或 SSE/Trace 契约。
 - 非 canonical mock 的普通任务在启动时读取本任务创建前已完成的同用户/同会话问答；最多 6 轮、单消息 4,000 字符、序列化历史 16,000 字符。历史 assistant 上下文可选附带最终回答 Trace 的白名单 completion 信号，并计入同一预算；正常结束不证明目标完成，缺失/损坏记录不推断原因。首轮规划、后续决策与最终回答使用同一快照；工具执行/规则回退保留当前原始输入。Trace 仅追加上下文数量/截断摘要；mock 演示与 checkpoint 独立分支保持原行为。
-- 模型额外接收已脱敏 RAG Trace 片段/来源/文档版本，最多 6 片段、每片段 1,200 字符、序列化证据 8,000 字符，标注为不可信数据。计数型工具 Observation、既有 SSE/Trace/导出形状兼容；模型引用质量待真实提供方验证。
+- 模型额外接收已脱敏 RAG Trace 片段/来源/文档版本，最多 6 片段、每片段 1,200 字符、序列化证据 8,000 字符，标注为不可信数据。计数型工具 Observation、既有 SSE/Trace/导出形状兼容；真实提供方合成资料的来源/版本引用已验证，业务资料与引用鲁棒性仍待验收。
 
 - 知识库提供 UTF-8 TXT/Markdown 文件预览与后台导入（每次 1–20 文件，单文件 256 KB / 64,000 字符，总大小 512 KB）；文件名作为来源和文档 ID，同名文件归为同一文档并保留内容版本。提交中和结果不确定时冻结输入，重试复用原载荷/幂等键；明确放弃结果后可返回编辑。复核自动定位版本，检索测试携带目标库；复用既有 API 与共享库管理员权限。
 

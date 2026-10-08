@@ -238,6 +238,14 @@ def _build_provider_tool_plan_prompt(
             input_lines.append(
                 f"For {tool_name} input, include query, optional top_k, optional knowledge_base_id.\n"
             )
+            if (registration.runner is _runtime_module()._run_task_retrieve
+                    and set(registration.result_preview_keys) == {"hit_count", "knowledge_base_id"}):
+                input_lines.append(
+                    f"{tool_name} publishes only hit_count and knowledge_base_id as bindable preview fields. "
+                    "Retrieved document text, budget and other facts are NOT binding paths. "
+                    "When a calculation needs a fact not yet retrieved, plan retrieval only first; "
+                    "a later feedback round can read the retrieved knowledge and supply a literal expression.\n"
+                )
             continue
         if semantic_kind == "local_calculator":
             input_lines.append(
