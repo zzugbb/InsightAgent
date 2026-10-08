@@ -65,7 +65,7 @@ GitHub `backend-e2e` / `frontend-e2e` 的 “Validate e2e tooling fixtures” �
 release-gate、backend-e2e 与 frontend-e2e 上传的发布/e2e artifacts 显式保留 `14` 天。
 `scripts/ci_export_diagnostics_overview.sh` 会汇总 backend/frontend diagnostics 与 artifact guard 结果，并输出低敏 `operator_summary`，只包含状态、主行动、告警计数、guard 失败数、关注 scope 与阻塞 guard scope。
 
-前端检查：
+前端检查：node 门禁的完整文件列表以 `scripts/ci_run_release_gate.sh` 内 `FRONTEND_NODE_TESTS` 为准；下方命令须与其保持一致。
 
 ```bash
 cd frontend
@@ -88,6 +88,7 @@ node --test --experimental-strip-types \
   app/components/workbench/workbench-layout.node.test.ts \
   app/components/workbench/workbench-trace-sync.node.test.ts \
   app/components/workbench/workbench-recovery.node.test.ts \
+  app/next-major-readiness.node.test.ts \
   app/runtime-dependency-contract.node.test.ts \
   app/source-file-size.node.test.ts \
   app/tasks/task-detail-page-utils.node.test.ts
