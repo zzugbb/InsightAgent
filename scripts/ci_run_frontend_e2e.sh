@@ -71,7 +71,7 @@ elif [ "${phase}" = "full" ]; then
 elif [ "${phase}" = "queue" ]; then
   cmd="cd ${quoted_frontend_dir} && PLAYWRIGHT_QUEUE_LOW_CONCURRENCY=1 NEXT_PUBLIC_API_BASE_URL=${quoted_api_base_url} PLAYWRIGHT_API_BASE_URL=${quoted_api_base_url} PLAYWRIGHT_BASE_URL=${quoted_frontend_base_url} npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g \"queued task recovery shows queue position\""
 else
-  cmd="cd ${quoted_frontend_dir} && NEXT_PUBLIC_API_BASE_URL=${quoted_api_base_url} PLAYWRIGHT_API_BASE_URL=${quoted_api_base_url} PLAYWRIGHT_BASE_URL=${quoted_frontend_base_url} npm run test:e2e -- --last-failed --output=test-results/last-failed"
+  cmd="cd ${quoted_frontend_dir} && NEXT_PUBLIC_API_BASE_URL=${quoted_api_base_url} PLAYWRIGHT_API_BASE_URL=${quoted_api_base_url} PLAYWRIGHT_BASE_URL=${quoted_frontend_base_url} npm run test:e2e -- --last-failed"
 fi
 
 if [ "${dry_run}" = "1" ]; then

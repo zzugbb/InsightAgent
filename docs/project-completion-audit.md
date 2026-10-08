@@ -31,11 +31,11 @@
 
 | ID | 优先级 | 发现与证据 | 关闭条件 |
 | --- | --- | --- | --- |
-| A1 | 试点前必须，部分已验证 | 当前智谱 `glm-5.3` 真实流式连通与任务 3/3 通过，含登录工作台发送；计算/历史、Trace/delta/export/messages/usage 一致，共 6,530 tokens 含连通验证。范围见[验收记录](real-model-acceptance.md)。 | 合成资料 RAG 正文/引用与计算已验证；继续补目标业务样本质量、引用鲁棒性、供应商延迟/稳定性、失败恢复体验与账单成本核对；基础成功链路无需重复验收。密钥与登录凭据不提交仓库。 |
+| A1 | 试点前必须，部分已验证 | 当前智谱 `glm-5.3` 真实流式连通与任务 3/3 通过，含登录工作台发送；计算/历史、Trace/delta/export/messages/usage 一致，共 6,530 tokens 含连通验证。范围见[验收记录](real-model-acceptance.md)。2026-10-08 新增 [business-rag-acceptance.md](business-rag-acceptance.md) 工具包（独立 KB 导入、自动核对、低敏报告）；合成 fixture 静态自测 2/2，**待外部验收（缺真实业务资料）**。 | 合成资料 RAG 正文/引用与计算已验证；用工具包在目标业务资料上复验质量/引用/未记载；继续补供应商稳定性、失败恢复与账单成本。密钥不提交仓库。 |
 | A2 | 试点前必须 | `compose.full.yml` 仍是本地开发栈；[试点镜像配方与部署入口](pilot-deployment-preflight.md)已准备。新后端候选源码 `0209651` 的 ARM64 构建通过，前端应用代码未变，复用 `218f94d` 镜像；配对基础与 Agent 协议联调通过，84 项后端锁定依赖与 Python 源码摘要核验通过。禁网非 root embedding、真实 PostgreSQL/Chroma 后台导入/检索、生产/mock 任务 SSE/Trace/delta/导出、步骤恢复/取消及前端浏览器 API 地址通过；旧 `218f94d` 配对的生产 Compose 隔离重建后登录/会话/任务/Trace/messages/知识保留通过，本轮未重跑该专项，临时资源已清理。预检核验 HTTPS/CORS、凭据、六个镜像摘要、数据库一致性和模型配置；候选未推送，尚无目标环境、TLS 或升级回滚实证。 | 明确试点目标环境；用固定版本、非默认凭据、生产构建、HTTPS/访问边界完成一次部署、升级及回滚演练，并保存非敏感记录。在环境具备前保持 `未验证`。 |
-| A3 | 生产前必须，试点需决定风险接受 | 已新增[本地离线备份/隔离恢复流程](local-stack-backup-restore.md)，用独立 fixture 验证 PostgreSQL 行与 Chroma 向量恢复；同时发现并修正旧 Compose 的 Chroma 卷挂载路径错误。目标环境尚无真实恢复记录。 | 对目标环境实际备份并从备份恢复 PostgreSQL 与 Chroma；验证会话、Trace、知识库和登录，记录 RPO/RTO、责任人及失败回退。 |
+| A3 | 生产前必须，试点需决定风险接受 | 已新增[本地离线备份/隔离恢复流程](local-stack-backup-restore.md)与 [pilot-environment-drill.md](pilot-environment-drill.md)（HTTPS 只读探测、临时项目备份恢复耗时脚本、RPO/RTO 模板）。目标环境尚无真实恢复记录。**待外部验收（缺目标环境）**。 | 对目标环境实际备份并从备份恢复 PostgreSQL 与 Chroma；验证会话、Trace、知识库和登录，记录 RPO/RTO、责任人及失败回退。 |
 | A4 | 范围决策与实现 | [后台 RAG 导入](rag-background-ingest.md)已具备持久化、幂等、取消、权限、多 worker 与恢复；分批写入、确认进度、每批角色复核及 5000 切块预算已验证，40 文档 / 400 切块隔离实写通过。[完整任务分支重跑](task-reruns.md)已支持输入编辑、独立会话、幂等与来源分页；[任务内工具并发](task-tool-parallel.md)已支持内建独立检索/计算、串行回退、顺序 Trace 合并及取消/超时协调；[工具依赖与结果引用](tool-dependencies.md)已支持显式 DAG、重复工具、稳定拓扑波次和公开预览标量绑定；[HTTP 读取并发](http-read-parallel.md)已支持固定 GET/无请求体显式只读声明、配置冻结和生命周期协调；[实验性步骤恢复](task-checkpoints.md)完成内建顺序计划的成功前缀复用、失败重试、独立分支、幂等及取消/超时闭环；写入并行及 HTTP/DAG checkpoint 明确延期。请求与 LLM 尝试低敏观测已落地；OpenAPI 51 操作 / 89 组件进入门禁。 | 本地实现与限定范围已明确；真实资料与目标环境仍需验证规模、等待体验和观测/调用方流程，fixture 耗时不等于吞吐承诺。写入并行及 HTTP/DAG checkpoint 不作为小规模试点阻塞项。 |
-| A5 | 试点前必须 | 现有 e2e 证明预设路径可自动跑通，但本轮没有目标用户、真实任务样本、可用性反馈或签收标准的证据。full Chromium 的 1 个 skip 是低并发队列专用场景，另有独立 queue e2e 路径，不直接视为产品缺陷。 | 选 2–3 个真实任务和目标用户，完成端到端走查；记录完成率、失败点、可理解性和签收结论。 |
+| A5 | 试点前必须 | 现有 e2e 证明预设路径可自动跑通，但本轮没有目标用户、真实任务样本、可用性反馈或签收标准的证据。已提供 [target-task-acceptance.md](target-task-acceptance.md) 任务/签收模板与 `export_acceptance_evidence.py` 证据导出（低敏、单会话）。**待外部验收（缺目标任务与用户）**。 | 选 2–3 个真实任务和目标用户，完成端到端走查；记录完成率、失败点、可理解性和签收结论。 |
 | A6 | 非收尾阻塞 | 2026-09-30 核对锁文件，`eslint-config-next` 内 React/import/jsx-a11y 三个插件的 peer 范围均排除 ESLint 10；React 插件官方兼容修复尚未发布。现用 ESLint 9 精确锁定，既有 lint 基线 0 error / 2 warning；预检的 1 个外部兼容动作概括这组约束。 | 官方兼容版本发布并确认三个插件均支持 ESLint 10 后，再走依赖红测和完整门禁；不以该升级作为试点完成条件。 |
 
 ## 原始范围裁决
@@ -52,7 +52,7 @@
 
 ## 当前收尾维护
 
-2026-10-08 GitHub `frontend-e2e` #194（`65f1fde`）/#195（`baf7671`）在 full Chromium 阶段失败 2 例：`composer-keyboard.spec.ts` 1440px/390px。根因是 Playwright `CI=1` 使用生产 `npm run build && npm run start`，页面无开发态 `nextjs-portal`，`not.toContainText("Runtime Error")` 在 locator 缺失时失败；业务断言（输入法/Enter/发送/回答）已通过。修复为 `nextjs-portal [data-nextjs-dialog]` 计数为 0（与同仓库其它 e2e 一致）。连带 artifact guard `missing_count` 因 full 阶段失败跳过后置 tooling 步骤，属次生现象。原先文档记录的输入法三浏览器 **6/6** 为用户本机 `npm run dev` 结果，修复后 dev 三浏览器复验待用户 Mac；PR CI 复验待 GitHub Actions。
+2026-10-08 GitHub `frontend-e2e` #194/#195：`composer-keyboard.spec.ts` 生产构建断言已在上游 PR 修复；workflow 次生问题已加固——e2e 主步骤失败后 tooling 自测 `if: always()` 仍生成 artifact guard 占位摘要，避免 `missing_count=2` 掩盖根因；诊断重跑改为同 `test-results` 目录 `--last-failed` 并由 `ci_rerun_frontend_e2e_diagnostics.sh` 在 step summary 标出真实重跑结果（不 `continue-on-error`）。main 仍 `fail-on-missing`。dev 三浏览器输入法复验待用户 Mac；叠放 PR 不触发 GitHub CI，workflow 变更以 VM tooling 自测为准。
 
 2026-10-08 [规划等待与失败恢复](real-model-acceptance.md)（替身）：首轮规划阻塞窗口补 SSE heartbeat 与取消探测，PostgreSQL 专项 4/4；真实 glm 约 60 秒体验与候选镜像重建仍待用户本机。同日 [规划等待排查](real-model-acceptance.md)离线耗时 11/11 保留。交付结论仍为 **暂不可交付外部试点**。
 

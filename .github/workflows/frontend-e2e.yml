@@ -167,12 +167,11 @@ jobs:
 
       - name: Rerun failed chromium tests for diagnostics
         if: failure()
-        continue-on-error: true
         run: |
-          bash scripts/ci_run_frontend_e2e.sh \
-            --phase rerun-last-failed \
+          bash scripts/ci_rerun_frontend_e2e_diagnostics.sh \
             --api-base-url http://127.0.0.1:8000 \
-            --frontend-base-url http://127.0.0.1:3001
+            --frontend-base-url http://127.0.0.1:3001 \
+            --summary-file "$GITHUB_STEP_SUMMARY"
 
       - name: Show backend logs on failure
         if: failure()
@@ -192,6 +191,7 @@ jobs:
             --run-attempt "${{ github.run_attempt }}"
 
       - name: Validate e2e tooling fixtures (frontend scope)
+        if: always()
         run: bash scripts/test_ci_e2e_tooling.sh frontend
 
       - name: Finalize frontend diagnostics and artifacts

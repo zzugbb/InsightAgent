@@ -194,6 +194,7 @@ jobs:
             --log-dir /tmp
 
       - name: Validate e2e tooling fixtures (backend scope)
+        if: always()
         run: bash scripts/test_ci_e2e_tooling.sh backend
 
       - name: Finalize backend diagnostics and artifacts

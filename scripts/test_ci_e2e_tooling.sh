@@ -27,6 +27,7 @@ run_common() {
   bash "${ROOT_DIR}/scripts/test_ci_boot_backend_instance.sh"
   bash "${ROOT_DIR}/scripts/test_ci_run_backend_e2e.sh"
   bash "${ROOT_DIR}/scripts/test_ci_run_frontend_e2e.sh"
+  bash "${ROOT_DIR}/scripts/test_ci_rerun_frontend_e2e_diagnostics.sh"
   bash "${ROOT_DIR}/scripts/test_ci_collect_backend_failure_diagnostics.sh"
   bash "${ROOT_DIR}/scripts/test_ci_build_frontend_failure_index.sh"
   bash "${ROOT_DIR}/scripts/test_ci_service_bootstrap.sh"
@@ -41,6 +42,15 @@ run_common() {
   python3 "${ROOT_DIR}/scripts/test_pilot_task_smoke.py"
   python3 "${ROOT_DIR}/scripts/test_pilot_agent_smoke.py"
   python3 "${ROOT_DIR}/scripts/test_pilot_compose.py"
+  if [ -x "${ROOT_DIR}/backend/.venv/bin/python" ]; then
+    "${ROOT_DIR}/backend/.venv/bin/python" "${ROOT_DIR}/scripts/test_business_rag_acceptance.py"
+    "${ROOT_DIR}/backend/.venv/bin/python" "${ROOT_DIR}/scripts/test_export_acceptance_evidence_static.py"
+  else
+    python3 "${ROOT_DIR}/scripts/test_business_rag_acceptance.py"
+    python3 "${ROOT_DIR}/scripts/test_export_acceptance_evidence_static.py"
+  fi
+  bash "${ROOT_DIR}/scripts/test_pilot_drill_scripts.sh"
+  bash "${ROOT_DIR}/scripts/test_local_acceptance.sh"
 }
 
 run_backend() {
