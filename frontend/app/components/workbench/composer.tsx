@@ -7,6 +7,7 @@ import {
   forwardRef,
   KeyboardEvent,
   type Ref,
+  useRef,
 } from "react";
 
 import { useMessages } from "../../../lib/preferences-context";
@@ -45,6 +46,7 @@ export const Composer = forwardRef(function Composer(
 ) {
   const t = useMessages();
   const compactComposer = useMediaQuery(COMPACT_COMPOSER_QUERY);
+  const composing = useRef(false);
   /** 与 ChatGPT 类似：空状态约一行，随内容增高（勿用 CSS 固定 min-height 压死高度） */
   const minRows = 1;
   const maxRows = compactComposer ? 12 : 18;
@@ -57,6 +59,10 @@ export const Composer = forwardRef(function Composer(
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    // Candidate confirmation belongs to the IME; 229 covers legacy event signals.
+    if (composing.current || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
+      return;
+    }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       if (!sendDisabled) {
@@ -72,6 +78,8 @@ export const Composer = forwardRef(function Composer(
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={handleKeyDown}
+        onCompositionStart={() => { composing.current = true; }}
+        onCompositionEnd={() => { composing.current = false; }}
         placeholder={t.composer.placeholder}
         title={t.workbench.cmdKHint}
         rows={minRows}
