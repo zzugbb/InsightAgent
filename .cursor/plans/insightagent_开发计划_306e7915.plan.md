@@ -4,7 +4,7 @@ overview: 持续推进项目收尾；核心本地实现/契约已封板，执行
 current_focus:
   mainline: project-completion-audit
   status: 持续收尾中；核心本地契约已封板，基础真实模型/合成 RAG 已验证，本次新后端候选配对联调通过；业务质量/目标部署待验
-  latest_change: 2026-10-08 e2e workflow 健壮性：tooling if always、诊断重跑摘要；VM tooling 自测通过；真实 glm/镜像待 Mac
+  latest_change: 2026-10-08 真实业务 RAG 验收工具包（待外部资料）；business_rag_acceptance 静态自测 2/2
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -65,6 +65,7 @@ stable_contracts:
   - Next 16.3.5 与 eslint-config-next 精确对齐，React / React DOM 固定 19.2.8；React Compiler refs / set-state-in-effect 无例外；ESLint 9.39.5 在 React/import/jsx-a11y 插件正式兼容 ESLint 10 前保持锁定
   - data/insightagent.plan.back.md 是只读备份计划，永远不修改
 validation_baseline:
+  business_rag_acceptance: scripts/business_rag_acceptance_runner.py；静态 2/2；Docker 隔离自测待 daemon；待外部验收（缺真实业务资料）
   ci_e2e_robustness: frontend/backend tooling if always；ci_rerun_frontend_e2e_diagnostics；test_ci_rerun + workflow_guards + release-gate tooling PASS（VM）
   planning_wait_recovery: 替身 5/5（含取消后迟到规划不写 Trace/用量）；前端 gate 217/217；真实 glm/镜像待本机
   provider_latency_audit: 只读既有真实 RAG 日志，两次约 60 秒异常；离线耗时专项 11/11
