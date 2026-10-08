@@ -81,7 +81,7 @@ for (const width of [1440, 390]) {
     await expect(input).toHaveValue("");
     await expect(page.locator("article.message-row.assistant")).toContainText("已收到完整输入");
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
-    await expect(page.locator("nextjs-portal")).not.toContainText("Runtime Error");
+    await expect(page.locator("nextjs-portal [data-nextjs-dialog]")).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 }

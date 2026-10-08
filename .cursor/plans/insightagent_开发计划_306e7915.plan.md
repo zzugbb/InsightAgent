@@ -4,7 +4,7 @@ overview: 持续推进项目收尾；核心本地实现/契约已封板，执行
 current_focus:
   mainline: project-completion-audit
   status: 持续收尾中；核心本地契约已封板，基础真实模型/合成 RAG 已验证，本次新后端候选配对联调通过；业务质量/目标部署待验
-  latest_change: 2026-10-08 修复回答执行声明/检索绑定提示；后端 2217/2217、核心集成 11/11；真实 RAG 反馈计算 2/2 及回退说明通过，严格 RAG 报告 2/3 含规划超时；新后端 0209651 配对原前端镜像协议 7/7，源码与清理核验通过
+  latest_change: 2026-10-08 修复 frontend-e2e composer-keyboard 生产构建覆盖层断言；runbook 补齐 FRONTEND_NODE_TESTS 漏列的 next-major-readiness（209→217 为少跑文件）；云端 VM node 217/217、CI=1 Chromium 2/2；dev 三浏览器复验待用户 Mac
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -81,9 +81,10 @@ validation_baseline:
   task_checkpoints: 实验性内建顺序计划，成功前缀复用、独立分支与失败重试；6 个静态专项、9/9 PostgreSQL，HTTP/DAG checkpoint 延期；新 Trace 标注来源且复用 token/cost 归零
   task_reruns: 完整任务分支支持编辑输入、独立会话、幂等与来源分页；7 个既有专项进入门禁，11/11 PostgreSQL 既有回归通过；原任务/Trace/usage 不变
   backend_current: full slice 2220/2220、module boundary 9/9，来源 /tmp/insightagent-provider-latency-release.md 与 .json；规划调用失败/回退实际用量、参数边界及回答增量已验证，OpenAPI 51 操作/89 组件与 SSE/Trace/export 兼容
-  release_gate: 当前后端 /tmp/insightagent-provider-latency-release.md 与 .json，2/2 PASS；full slice 2220/2220、module 9/9；前端保留上一完整门禁 10/10 的 node 217/217 与双构建，本轮未重跑前端
-  frontend: node 217/217、lint 0 error/2 既有 warning；本轮无前端实现改动，保留历史提示 Chromium 1440px 英文/390px 中文 2/2
-  e2e_current: 保留反馈/规划 PostgreSQL 20/20、用量汇总 3/3、终态 10/10、远端流 6/6；真实本机 HTTP 空正文错误/429 与请求间用量隔离通过，其他范围保留历史基线
+  release_gate: 后端 2/2 PASS full slice 2220/2220、module 9/9；前端 node/lint/双构建保留上一完整门禁，本轮补 composer-keyboard CI=1 Chromium 2/2
+  frontend: node 217/217（21 个 node.test.ts，与 ci_run_release_gate.sh 一致）、lint 0 error/2 既有 warning；e2e 断言与 runbook 列表修复，无应用实现改动
+  e2e_current: composer-keyboard 生产构建 Chromium 2/2（云端 VM）；dev 三浏览器 6/6 为用户本机历史记录，修复后 dev 复验待 Mac；GitHub frontend-e2e PR 复验待跑
+  e2e_ci_incident: frontend-e2e #194/#195 因 bare nextjs-portal not.toContainText 在生产构建误失败；已改为 data-nextjs-dialog 计数 0
   hygiene: 本轮工具/文档 hygiene 3/3 PASS，来源 /tmp/insightagent-provider-latency-hygiene.md 与 .json；compileall、diff whitespace 与 backup plan untouched；提交前继续核对 cached diff
 completed_mainlines:
   - agent-core-alignment：本地实现/契约封板；有界对话上下文、模型 RAG 证据、Observation 决策、Trace 关系和文件导入，真实模型基础链路与合成 RAG 已验证，业务质量仍待验
@@ -102,9 +103,9 @@ next_candidate_mainlines:
   - 后续按实际使用问题维护；当前没有确认必须新增的功能主线
   - eslint-10-adoption：仅待上游正式兼容后受控升级
 next_steps:
-  - 执行证据/检索绑定提示修复及真实 RAG 合成样本验证完成；业务资料、成本与恢复体验继续验收
-  - 原候选镜像本地复验已完成，本次修复已进入新后端候选并通过配对联调；持续收尾目标保持进行中；按可复现的主链路问题维护，暂无必须新增的功能主线
-  - 已配置真实模型并完成基础链路验收，合成 RAG 已验证，后续补业务质量；目标部署/恢复/签收待环境与真实样本具备；写入并行及 HTTP/DAG checkpoint 继续延期
+  - 等待 PR 上 GitHub frontend-e2e 复验；用户 Mac 上 dev 三浏览器 composer-keyboard 复验
+  - 业务资料、成本与恢复体验继续验收；目标部署/恢复/签收待环境与真实样本具备；写入并行及 HTTP/DAG checkpoint 继续延期
+  - 按可复现的主链路问题维护；暂无必须新增的功能主线
 logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要、验证口径、维护规则和主线地图不应被整段删除。
 ---
 
