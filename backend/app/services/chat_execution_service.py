@@ -410,6 +410,9 @@ def _run_blocking_planning_step(
     raise_if_should_abort,
     maybe_touch_execution_heartbeat,
 ) -> Iterator[str | TBlocking]:
+    # Planning may still finish in the worker after cancel/timeout; its return value is
+    # discarded and must not touch task trace/usage (those lists live on this generator).
+    # Each stream uses a fresh provider instance; abandoned calls keep usage unknown.
     executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="task-planning")
     future = executor.submit(work)
     try:

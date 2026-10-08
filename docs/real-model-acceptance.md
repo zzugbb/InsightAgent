@@ -78,5 +78,7 @@
 | 空规划 HTTP 回退 | 既有 `planning_empty_initial` 路径 | `planning_provider_attempted=true`、`planning_provider_used=false`，规划用量 12、overall 19，任务完成 |
 | 失败后分支重跑 | 反馈第二轮 429 失败任务 | `POST /reruns` + 子任务 `stream` 完成，父任务保持 failed |
 
-- 验证：`backend/scripts/test_provider_planning_wait_postgres.py` **4/4**（独立 PostgreSQL + 本机 HTTP/离线 Provider，自动清理）；后端 full slice 仍为 **2220/2220**、模块 **9/9**、hygiene **3/3**。前端在 `thinking` 阶段将 heartbeat 提示改为「正在等待模型生成工具规划」；未改 SSE 事件形状。
-- 未覆盖：真实 glm-5.3 约 60 秒等待体验、供应商账单、目标部署与候选镜像重建（应用运行时变更，须用户本机重跑 `smoke_pilot_images.py` 等）。交付结论仍为 **暂不可交付外部试点**。
+- 验证：`backend/scripts/test_provider_planning_wait_postgres.py` **5/5**（独立 PostgreSQL + 本机 HTTP/离线 Provider；GitHub Actions 使用 `docker` 服务容器、无需 sudo，`task_postgres_fixture` 结束 `docker rm -f -v` 清理）。含「取消后规划线程晚些返回」：任务仍 `cancelled`、Trace/消息/用量 JSON 不被迟到规划改写，放弃调用的 token 不计入任务用量（保持未知）。后端 full slice **2220/2220**、模块 **9/9**、hygiene **3/3**；前端 release gate **217/217**、lint 0 error、Turbopack/webpack 双构建。
+- 实现边界：`shutdown(wait=False)` 后供应商 HTTP 仍可能跑完并写 `llm_http_attempt` 观测日志，但不调用 `future.result()`，不更新 Trace/checkpoint/任务 `usage_json`；每流新建 provider，不共享 DB 连接。每轮规划独立 `ThreadPoolExecutor(max_workers=1)`，不堆积线程池。
+- `TaskUsageTopTaskRow.governance` 前向引用修正与 GitHub `release-gate`（Python **3.14** 延迟注解求值）同文件已合并于实现提交；云端 **3.12** 导入会 `NameError`，未单独 `fix:` 提交以免改写已推送历史，见 PR 描述。
+- 未覆盖：真实 glm-5.3 约 60 秒等待体验、供应商账单、目标部署与候选镜像重建。交付结论仍为 **暂不可交付外部试点**。

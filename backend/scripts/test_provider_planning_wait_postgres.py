@@ -15,6 +15,7 @@ from test_agent_feedback_postgres import AgentFeedbackPostgresTests, calc
 from test_provider_stream_postgres import local_provider
 from app.providers.base import ProviderResponse, ProviderUsage
 from app.providers.mock_provider import MockLLMProvider
+from app.services import chat_persistence_service as persistence
 from app.services import task_rerun_service as reruns
 from test_agent_feedback_postgres import ConditionalProvider
 
@@ -26,6 +27,7 @@ class SlowInitialPlanningProvider(MockLLMProvider):
         self.started = started
         self.release = release
         self.planning_prompts: list[str] = []
+        self.planning_completions = 0
 
     def generate(self, prompt: str) -> ProviderResponse:
         if not prompt.startswith("You are the Task Planner for InsightAgent."):
@@ -37,6 +39,7 @@ class SlowInitialPlanningProvider(MockLLMProvider):
             self.release.wait(15)
         if self.delay_sec > 0:
             time.sleep(self.delay_sec)
+        self.planning_completions += 1
         return ProviderResponse(
             json.dumps({"tools": [calc("2+3")]}),
             self.model,
@@ -93,6 +96,36 @@ class ProviderPlanningWaitPostgresTests(unittest.TestCase):
             self.assertLess(cancel_elapsed, 3.0)
             self.assertEqual(self.task(client, task)["status_normalized"], "cancelled")
             self.assertEqual(self.steps(client, task), [])
+
+    def test_late_planning_return_after_cancel_does_not_mutate_task(self):
+        started, release = Event(), Event()
+        provider = SlowInitialPlanningProvider(started=started, release=release)
+        with self.client(provider) as client, ThreadPoolExecutor(max_workers=1) as pool:
+            task = self.create(client)
+            response = pool.submit(client.get, f"/api/tasks/{task}/stream")
+            self.assertTrue(started.wait(5))
+            self.assertEqual(client.post(f"/api/tasks/{task}/cancel").status_code, 200)
+            stream = response.result(timeout=8).text
+            self.assertIn("event: cancelled", stream)
+            snapshot = self.task(client, task)
+            trace_before = self.steps(client, task)
+            messages_before = persistence.get_task_messages(task, "owner")
+            release.set()
+            for _ in range(30):
+                if provider.planning_completions >= 1:
+                    break
+                time.sleep(0.1)
+            self.assertEqual(provider.planning_completions, 1)
+            time.sleep(0.2)
+            after = self.task(client, task)
+            self.assertEqual(after["status_normalized"], "cancelled")
+            self.assertEqual(snapshot["status_normalized"], after["status_normalized"])
+            self.assertEqual(snapshot.get("usage_json"), after.get("usage_json"))
+            self.assertIsNone(after.get("usage_json"))
+            self.assertEqual(self.steps(client, task), trace_before)
+            self.assertEqual(trace_before, [])
+            self.assertEqual(persistence.get_task_messages(task, "owner"), messages_before)
+            self.assertEqual([row["role"] for row in messages_before], ["user"])
 
     def test_http_planning_timeout_keeps_rule_fallback_trace_and_usage(self):
         with local_provider("planning_empty_initial") as (provider, calls), self.client(provider) as client:
