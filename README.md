@@ -7,20 +7,20 @@
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization`、`next-major-upgrade-readiness`。
 - 最近封板：`agent-core-alignment` 的本地实现与契约验证已封板：有界对话上下文、工具反馈决策、RAG 正文/来源证据、Trace 关系与知识文件导入均完成。可进入后续维护或下一条按实际需求选定的主线；真实模型效果验收仍属于外部待验项。
 - 当前阶段：[Agent 核心对齐](docs/agent-core-alignment.md)本地实现/契约已封板；后续按实际使用问题维护，真实模型质量与目标部署验收待资源具备。
-- 当前维护完成：[回答完整性提示](docs/answer-completion.md)记录并展示工具停止与模型结束原因；连续对话将历史回答的白名单结束原因传给后续规划、决策及最终回答，提醒识别截断或未完成检查。会话隔离、上下文预算、原始正文及外部接口沿用现有契约。
+- 当前维护完成：[回答完整性提示](docs/answer-completion.md)会话消息可选携带最终回答的白名单结束原因与 seq，聊天提示不再依赖任务分页/筛选；按消息、任务与活动流的较新记录展示，旧服务仍按 Trace 回退。历史回答原因也进入连续对话模型上下文。原始正文与 SSE/Trace/export 保持兼容。
 - A2 [试点镜像与部署入口](docs/pilot-deployment-preflight.md)已准备：84 个后端依赖版本锁定、非 root 默认 embedding 构建缓存通过禁网验证；新增生产 `compose.pilot.yml`、低敏预检/操作入口与健康启动顺序。隔离 mock 下重建全部容器后，登录、会话、任务/Trace 与 Chroma 知识保留；目标部署、TLS、真实模型与升级回滚仍待实测。
 - A3 本地恢复基础已落地：两份 Compose 的 Chroma 卷改挂当前镜像实际持久路径 `/data`，新增[离线备份与隔离恢复流程](docs/local-stack-backup-restore.md)；独立 fixture 已读回 PostgreSQL 与 Chroma 测试数据。目标环境恢复与 RPO/RTO 仍待验证。
-- A4 [后台 RAG 导入](docs/rag-background-ingest.md)的持久化/分批进度与[完整任务分支重跑](docs/task-reruns.md)已完成本地闭环；[任务内工具并发](docs/task-tool-parallel.md)支持内建检索/计算有界并发；[工具依赖与结果引用](docs/tool-dependencies.md)支持显式 DAG、重复工具、拓扑波次与公开预览标量绑定；[HTTP 读取并发](docs/http-read-parallel.md)支持明确声明只读的固定 GET、配置冻结和生命周期协调。[实验性步骤恢复](docs/task-checkpoints.md)已实现内建顺序计划的独立分支、成功前缀复用与当前设置复核。OpenAPI 为 51 操作 / 88 组件；写入工具并行及 HTTP/DAG checkpoint 明确延期，目标运行与用户验收待完成。
+- A4 [后台 RAG 导入](docs/rag-background-ingest.md)的持久化/分批进度与[完整任务分支重跑](docs/task-reruns.md)已完成本地闭环；[任务内工具并发](docs/task-tool-parallel.md)支持内建检索/计算有界并发；[工具依赖与结果引用](docs/tool-dependencies.md)支持显式 DAG、重复工具、拓扑波次与公开预览标量绑定；[HTTP 读取并发](docs/http-read-parallel.md)支持明确声明只读的固定 GET、配置冻结和生命周期协调。[实验性步骤恢复](docs/task-checkpoints.md)已实现内建顺序计划的独立分支、成功前缀复用与当前设置复核。OpenAPI 为 51 操作 / 89 组件；写入工具并行及 HTTP/DAG checkpoint 明确延期，目标运行与用户验收待完成。
 - 非阻塞维护候选：ESLint 10 正式采用；2026-09-30 核对锁文件，`eslint-config-next` 内的 `eslint-plugin-react@7.37.5`、`eslint-plugin-import@2.32.0`、`eslint-plugin-jsx-a11y@6.10.2` peer 范围均排除 ESLint 10，React 插件官方兼容修复尚未发布。预检的 1 个外部兼容动作概括这组约束；保持 ESLint `9.39.5` 精确锁定，不强制覆盖 peer 约束。
 - 外部 SSE / trace / export / e2e 契约保持兼容；`backend/app`、`backend/scripts` 与 `frontend` 源码继续维持单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
-- 2026-10-08 full release gate **10/10 PASS**，来源 `/tmp/insightagent-history-completion-release.md` / `.json`；后端 full slice **2195/2195**、module boundary **9/9**；前端 node **213/213**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建通过。
-- 本轮历史回答 completion：会话静态 **11/11**、回答完整性 PostgreSQL **10/10**、会话/Chroma 核心回归 **9/9**；来源 `/tmp/insightagent-history-completion-{static,postgres,core-regression}.log`。覆盖规划/决策/最终回答传递、预算、最新步骤、损坏记录及用户/会话/截止隔离；仅本地模型替身。
-- 回答提示 UI 保留静态 **6/6**、前端计算 **5/5**、Chromium 桌面英文/手机中文 **2/2** 与终态 **10/10**、反馈 **6/6** 原基线；来源 `/tmp/insightagent-answer-completion-*.log`。本轮无 UI 改动，未重跑浏览器专项。
+- 2026-10-08 full release gate **10/10 PASS**，来源 `/tmp/insightagent-message-completion-release.md` / `.json`；后端 full slice **2198/2198**、module boundary **9/9**；前端 node **217/217**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建通过。
+- 本轮历史消息提示：回答静态 **9/9**、会话静态 **11/11**、PostgreSQL **13/13**、前端计算 **9/9**；来源 `/tmp/insightagent-message-completion-{static,context,postgres,frontend}.log`。覆盖任务分页/筛选独立性、版本优先、用户/会话/角色隔离、旧记录容错及导出不变；模型仅本地替身。
+- Chromium 桌面英文/手机中文 **2/2**，发送、首 50 条排除历史任务、刷新、筛选、详情与返回聊天通过；来源 `/tmp/insightagent-message-completion-e2e.log`。历史会话/Chroma 核心 **9/9**、终态 **10/10**、反馈 **6/6** 范围保留。
 - 保留用量计算后端 **8/8** / 前端 **6/6**（`/tmp/insightagent-usage-accounting-{static,frontend}.log`）、反馈/并发生命周期各 **6/6**（`/tmp/insightagent-stream-completion-{feedback,parallel}.log`）及公开工具证据 **3/3**、HTTP 并发 **7/7**（`/tmp/insightagent-tool-evidence-{postgres,http-regression}.log`）；本轮未重跑这些专项。
-- 已验证前端基线：输入法/键盘三浏览器桌面/手机 **6/6**、知识导入 Chromium **7/7**、布局复核 **2/2**、Trace **2/2**；来源 `/tmp/insightagent-composer-keyboard-e2e.log`、`/tmp/insightagent-knowledge-import-e2e.log`、`/tmp/insightagent-knowledge-import-layout.log`、`/tmp/insightagent-trace-flow-e2e.log`。本轮未重跑浏览器专项，保留原基线；输入法事件 fixture 不代替操作系统人工验收。
+- 已验证前端基线：输入法/键盘三浏览器桌面/手机 **6/6**、知识导入 Chromium **7/7**、布局复核 **2/2**、Trace **2/2**；来源 `/tmp/insightagent-composer-keyboard-e2e.log`、`/tmp/insightagent-knowledge-import-e2e.log`、`/tmp/insightagent-knowledge-import-layout.log`、`/tmp/insightagent-trace-flow-e2e.log`。本轮仅复验历史回答提示，其余浏览器专项保留原基线；输入法事件 fixture 不代替操作系统人工验收。
 - 历史 service-backed 基线：完整 Chromium **77 passed / 1 skipped**、完整重跑 PostgreSQL **11/11**、步骤恢复 **9/9**、内建并发 **6/6**、DAG **7/7**、RAG **21/21** 与 400 切块实写，均保留原验证范围。
 - 既有镜像/Compose 与备份恢复证据见试点部署和恢复文档；这些镜像不包含当前核心对齐改动，不代表目标部署验收。
 - 用户无真实 key/部署环境；未发起真实模型请求。决策/回答质量、试点 HTTPS/升级回滚、恢复 RPO/RTO 与签收均未验证；本地封板不代表外部验收完成，项目总完成度不估百分比。
@@ -33,9 +33,10 @@
 
 ## 稳定契约
 
+- 会话消息 completion 为可选兼容扩展（seq、两个白名单结束原因）；只匹配同用户/会话的 assistant 所属任务，旧/损坏 Trace 不推断，任务分页或筛选不影响历史回答提示。消息正文与导出 v1.0 不变。
 - 工具阶段停止原因传给最终回答；最终 Trace.meta 可选记录 agent_stop_reason/provider_finish_reason，聊天/任务详情只对白名单限制或截断原因提示。正常/未知原因不推断完整性；completed 表示执行结束，不能证明用户目标全部满足。
 - 流结束、回退生成完成及成功提交前复核取消/超时；失败和执行器超时保存已记录规划用量及上游返回的最终用量，缺失字段不因部分文字而补估。前端仅有规划记录时保留最终回答用量未知；终态竞争不覆盖其他执行实例或外部取消结果。
-- 正常任务成功状态、Trace/usage、assistant 消息与会话更新时间在同一事务提交；回答保存失败则回滚并终结为失败，终态/执行实例竞争落败不插入回答。Memory 与 done 在提交后执行；独立消息接口及外部字段形状不变。详见[成功保存契约](docs/task-completion.md)。
+- 正常任务成功状态、Trace/usage、assistant 消息与会话更新时间在同一事务提交；回答保存失败则回滚并终结为失败，终态/执行实例竞争落败不插入回答。Memory 与 done 在提交后执行；消息正文及任务终态/SSE/export 字段形状不变。详见[成功保存契约](docs/task-completion.md)。
 - 任务/会话汇总、趋势、榜单、会话导出与前端会话统计优先读取有效 overall 用量，字段缺失时按 final + planning 回退，避免重复计数；来源筛选包含规划阶段，任务原始明细与 API 形状不变。详见[用量口径](docs/usage-accounting.md)。
 - 远端模型流必须收到 [DONE] 或已知首 choice finish_reason 才算正常结束；无信号 EOF 返回既有 remote_provider_stream_interrupted，保留全部已生成 Trace/递增 seq，不写成功 assistant 或 Memory，不自动重放；空帧不递归，正常结束无文本仍报 remote_provider_empty_response。详见[流结束契约](docs/provider-stream-completion.md)。
 - HTTP 工具成功后的模型证据仅取 Trace 中公开的 effective_result_output_keys，复用脱敏，不读取原始响应、输入或注册表配置；最多 6 项/单项 JSON 3000/总 JSON 8000 字符，裁剪保持有效 JSON 并标记 truncated；供反馈与最终回答使用，计数 Observation 与 SSE/Trace/export 不变。

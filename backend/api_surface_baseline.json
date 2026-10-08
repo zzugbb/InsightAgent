@@ -56,6 +56,7 @@
     "PUT /api/settings": "b7b40b3c199d185fa52df9f40af519c858ad977cc9c29c9894fc531a5c8db4d4"
   },
   "components": {
+    "schemas.AnswerCompletionResponse": "ad6720332d4f2a6169bd1a4d5b19696a6263b7a7aa0b66b200453150c9bb5a21",
     "schemas.AuditLogItemResponse": "d5017bf1b9fdbcf7d74fcd93bec45f1396063b14526dedf57e8953f997d7ff18",
     "schemas.AuditLogListResponse": "380aeccc82031af439fbf606612bc9c263f510249337514b4ee89e0fff442c83",
     "schemas.AuthSessionListResponse": "03b379c091e02c99a47116a86e597eb9864b178538c9a67d7e77fb41b309f33c",
@@ -71,7 +72,7 @@
     "schemas.MemoryAddResponse": "58272debc8fe0f522022db0c3460da10401f8aebee4f21be5e5bf468e52ecb90",
     "schemas.MemoryQueryRequest": "45c7b29b62554a7aa2c1037d1bf92228276a8a5316616df08662ae7d48010793",
     "schemas.MemoryQueryResponse": "7f9de4b432aff1984d634da90351c5c2c42b88932e1cb1cdef78db73b1a12e7e",
-    "schemas.MessageResponse": "56243f12b2ea8fb3473f951a7ba7ee9d4f854274e2c5b590e92f934d86c74afb",
+    "schemas.MessageResponse": "96c94c6b78263a2a1f0e9be1d62d87cd92b8d0165875aa4ac8549f225f8100c0",
     "schemas.RagDocumentInput": "33c94f94bea36e51d56b12675c1a0b5c8376ef2da7e896ab55e7088c57286e82",
     "schemas.RagDocumentVersionSummary": "94f92c5578ec394d2cd44b2d3957f1763113df8615983dde977a511110d2d95e",
     "schemas.RagHit": "eec222895dc1e539e6558da5c31f5874bb6483314b39229428a5478e7591865d",

@@ -11,6 +11,7 @@ from uuid import uuid4
 from app.config import get_settings
 from app.db import get_db_connection
 from app.services.usage_accounting import task_usage_source, task_usage_totals
+from app.services.session_message_history import load_session_messages
 from app.schemas.trace import TraceStep, parse_trace_steps
 from app.services.task_status_service import (
     normalize_task_status,
@@ -1495,17 +1496,7 @@ def list_sessions(user_id: str, limit: int = 20, offset: int = 0) -> list[dict]:
 
 def get_session_messages(session_id: str, user_id: str) -> list[dict]:
     with get_db_connection() as connection:
-        rows = connection.execute(
-            """
-            SELECT id, session_id, task_id, role, content, created_at
-            FROM messages
-            WHERE session_id = ? AND user_id = ?
-            ORDER BY created_at ASC
-            """,
-            (session_id, user_id),
-        ).fetchall()
-
-    return [dict(row) for row in rows]
+        return load_session_messages(connection, session_id, user_id)
 
 
 def get_task_messages(task_id: str, user_id: str) -> list[dict]:

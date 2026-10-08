@@ -281,7 +281,13 @@ export function ChatColumn({
             : t.roles.assistantShort}
         </div>
         <div className="message-card">
-          {message.role === "assistant" && message.task_id ? <AnswerNoticeView codes={noticesByTask.get(message.task_id) ?? []} /> : null}
+          {message.role === "assistant" ? (
+            <AnswerNoticeView codes={resolveLatestAnswerNotices(
+              storedTraces.get(message.task_id ?? "") ?? [],
+              message.task_id === pendingUserTaskId ? activeTraceSteps : [],
+              message.completion,
+            )} />
+          ) : null}
           <div className="message-card-body">
             {message.role === "user" ? (
               <p className="message-plain">{message.content}</p>

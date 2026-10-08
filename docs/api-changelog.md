@@ -26,3 +26,5 @@
 - 2026-10-07 · API 0.1.0：新增本人任务实验性 checkpoint 候选查询；分支重跑请求新增可选 checkpoint_step_id，完整重跑、Trace/SSE/export 形状兼容，恢复仅限内建顺序计划；OpenAPI 51 操作 / 88 组件，Trace.meta 的快照/复用信息为可选兼容扩展。
 
 - 2026-10-08 · API 0.1.0：最终回答 Trace.meta 增加可选 agent_stop_reason / provider_finish_reason；成功保存后用既有 trace 事件更新最终步骤，再发送 done。Trace ID 不变、metadata 更新递增 seq；delta/回放/JSON v1.0/Markdown 兼容。completed 表示执行与保存结束，不证明答案或用户目标完整；OpenAPI 51 操作 / 88 组件指纹未变。
+
+- 2026-10-08 · API 0.1.0：会话消息 GET 响应增加可选 nullable completion（seq 与两个白名单结束原因），兼容旧客户端；消息正文及 JSON v1.0/Markdown 导出形状不变，历史提示不再依赖任务分页或筛选；OpenAPI 51 操作 / 89 组件。

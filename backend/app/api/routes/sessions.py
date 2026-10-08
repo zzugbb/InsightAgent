@@ -1,7 +1,7 @@
 import json
 import re
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 import app.services.chat_persistence_service as chat_persistence_service
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -282,6 +282,13 @@ class SessionResponse(BaseModel):
     updated_at: str
 
 
+class AnswerCompletionResponse(BaseModel):
+    seq: int | None = Field(default=None, strict=True, ge=0, le=9_007_199_254_740_991)
+    agent_stop_reason: Literal["no_tools", "max_rounds", "max_tool_calls", "observation_limit",
+                               "repeated_action", "invalid_decision"] | None = None
+    provider_finish_reason: Literal["stop", "length", "content_filter", "tool_calls", "function_call"] | None = None
+
+
 class MessageResponse(BaseModel):
     id: str
     session_id: str
@@ -289,6 +296,9 @@ class MessageResponse(BaseModel):
     role: str
     content: str
     created_at: str
+    completion: AnswerCompletionResponse | None = Field(
+        default=None, description="助手消息对应最终回答的简要结束信息；缺失时不推断完整性",
+    )
 
 
 class SessionMessagesResponse(BaseModel):

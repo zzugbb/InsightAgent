@@ -118,7 +118,7 @@ curl -I http://127.0.0.1:3001
 
 ## e2e 路径
 
-[回答完整性提示](answer-completion.md)：静态 `-k answer_completion`（6 个）、独立数据库 `backend/scripts/test_answer_completion_postgres.py`（10 个；包含历史 completion 传递/隔离与旧 Trace 容错，Docker/本机 HTTP 提权并自动清理）；会话静态 `-k conversation_context`（11 个，白名单与 JSON 预算）；前端 `answer-notices.node.test.ts`（5 个）。浏览器用 `npx playwright test e2e/answer-completion.spec.ts --project=chromium --workers=1 --reporter=list --output=/tmp/insightagent-answer-completion-e2e-results`，需要本机服务/浏览器提权；1440px 英文/390px 中文，Enter 发送、刷新、详情与返回聊天，仅业务 API fixture。
+[回答完整性提示](answer-completion.md)：静态 `-k answer_completion`（9 个）、独立数据库 `backend/scripts/test_answer_completion_postgres.py`（13 个；包含消息分页/筛选独立性、历史 completion 传递/隔离与旧 Trace 容错，Docker/本机 HTTP 提权并自动清理）；会话静态 `-k conversation_context`（11 个，白名单与 JSON 预算）；前端 `answer-notices.node.test.ts`（9 个，消息/任务/活动流版本优先）。浏览器用 `npx playwright test e2e/answer-completion.spec.ts --project=chromium --workers=1 --reporter=list --output=/tmp/insightagent-answer-completion-e2e-results`，需要本机服务/浏览器提权；1440px 英文/390px 中文，Enter 发送、超过一页任务、筛选、刷新、详情与返回聊天，仅业务 API fixture。
 
 [任务终态边界](task-completion.md)：静态 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task_terminal_usage`（5 个）；集成 `backend/.venv/bin/python backend/scripts/test_task_terminal_postgres.py`（10 个，需要 Docker/本机随机端口提权，自动清理）。覆盖生成结束/回退/保存跨时限、迟到决策、取消竞争、失败已知用量与汇总/导出；前端仅规划记录用 `usage-accounting.node.test.ts` 验证。仅本地模型替身，已接入 backend-e2e。
 

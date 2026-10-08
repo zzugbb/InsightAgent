@@ -10,6 +10,12 @@ export type TraceStepKind =
   | "tool"
   | "rag";
 
+export type AnswerCompletionPayload = {
+  seq?: number | null;
+  agent_stop_reason?: string | null;
+  provider_finish_reason?: string | null;
+};
+
 export type TraceStepMeta = {
   plan_node_id?: string;
   depends_on?: string[];

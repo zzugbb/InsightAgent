@@ -9,7 +9,7 @@ const task = { id: "task", session_id: "session", prompt: "Recorded task", statu
   created_at: "2026-10-08T00:00:00Z", updated_at: "2026-10-08T00:00:01Z" };
 
 for (const width of [1440, 390]) {
-  test(`answer completion notices persist in chat and task detail at ${width}px`, async ({ page }) => {
+  test(`answer completion survives task pagination filtering reload and detail at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await seedBrowserAuth(page, { access_token: "fixture", refresh_token: "fixture", session_id: "auth" });
     const locale = width === 390 ? "zh" : "en";
@@ -23,6 +23,8 @@ for (const width of [1440, 390]) {
     page.on("pageerror", (error) => errors.push(error.message));
     page.on("console", (entry) => { if (["error", "warning"].includes(entry.type())) errors.push(entry.text()); });
     let executed = false;
+    const recentPage = Array.from({ length: 50 }, (_, i) => ({ ...task, id: `recent-${i}`,
+      prompt: `Newer task ${i}`, trace_json: null }));
     await page.route("**/api/**", async (route) => {
       const path = new URL(route.request().url()).pathname;
       if (path.endsWith("/stream")) {
@@ -40,11 +42,16 @@ for (const width of [1440, 390]) {
       if (path === "/api/settings") payload = { mode: "mock", provider: "mock", model: "mock-gpt", api_key_configured: false };
       if (path === "/api/sessions") payload = { items: [{ id: "session", title: "Answer fixture", created_at: task.created_at, updated_at: task.updated_at }], total: 1, limit: 10, offset: 0, has_more: false };
       if (path === "/api/tasks" && route.request().method() === "POST") payload = { task_id: "task", session_id: "session", status: "queued" };
-      else if (path === "/api/tasks") payload = { items: executed ? [task] : [], total: executed ? 1 : 0, limit: 50, offset: 0, has_more: false };
+      else if (path === "/api/tasks") {
+        const filtered = Boolean(new URL(route.request().url()).searchParams.get("query"));
+        payload = { items: executed && !filtered ? recentPage : [], total: executed && !filtered ? 51 : 0,
+          limit: 50, offset: 0, has_more: executed && !filtered };
+      }
       if (path === "/api/tasks/task") payload = task;
       if (path.endsWith("/messages")) payload = { messages: executed ? [
         { id: "user", role: "user", content: "Recorded task", task_id: "task", created_at: task.created_at },
-        { id: "assistant", role: "assistant", content: "Recorded answer.", task_id: "task", created_at: task.updated_at },
+        { id: "assistant", role: "assistant", content: "Recorded answer.", task_id: "task", created_at: task.updated_at,
+          completion: { seq: 3, agent_stop_reason: "max_rounds", provider_finish_reason: "length" } },
       ] : [] };
       if (path.endsWith("/trace")) payload = { task_id: "task", steps, status: "completed", status_normalized: "completed" };
       if (path.endsWith("/trace/delta")) payload = { task_id: "task", steps, next_cursor: 3, has_more: false };
@@ -61,15 +68,26 @@ for (const width of [1440, 390]) {
     await expect(page.locator(".message-row.assistant")).toContainText("Recorded answer.");
     await page.reload();
     await expect(page.getByTestId("answer-notices")).toContainText(lengthText);
+    await page.getByTestId("chat-open-task-center").click();
+    const filteredResponse = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === "/api/tasks" && url.searchParams.get("query") === "missing-task";
+    });
+    await page.getByTestId("task-center-keyword-filter").fill("missing-task");
+    expect((await (await filteredResponse).json()).items).toEqual([]);
+    await expect(page.locator(".task-center-table-row")).toHaveCount(0);
+    await page.getByTestId("task-center-close").click();
+    await expect(page.getByTestId("answer-notices")).toContainText(roundText);
+    await expect(page.getByTestId("answer-notices")).toContainText(lengthText);
     await page.goto("/tasks/task");
     await expect(page.getByTestId("task-detail-status-badge")).toContainText(/completed|已完成/i);
     await expect(page.getByTestId("answer-notices")).toContainText(roundText);
     await expect(page.getByTestId("answer-notices")).toContainText(lengthText);
-    await page.screenshot({ path: `/tmp/insightagent-answer-completion-detail-${width}.png`, animations: "disabled" });
+    await page.screenshot({ path: `/tmp/insightagent-message-completion-detail-${width}.png`, animations: "disabled" });
     await page.getByRole("link", { name: locale === "zh" ? "返回工作台" : "Back to Workbench" }).click();
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByTestId("answer-notices")).toContainText(lengthText);
-    await page.screenshot({ path: `/tmp/insightagent-answer-completion-chat-${width}.png`, animations: "disabled" });
+    await page.screenshot({ path: `/tmp/insightagent-message-completion-chat-${width}.png`, animations: "disabled" });
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     await expect(page.locator("body")).not.toContainText("Application error");
     expect(errors).toEqual([]);

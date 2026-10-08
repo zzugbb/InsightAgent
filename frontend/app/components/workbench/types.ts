@@ -1,3 +1,5 @@
+import type { AnswerCompletionPayload } from "../../../lib/types/trace";
+
 export type ToolRegistryProfileOptionDetail = {
   name: string;
   enabled_tool_names: string[];
@@ -131,6 +133,7 @@ export type SessionMessage = {
   role: string;
   content: string;
   created_at: string;
+  completion?: AnswerCompletionPayload | null;
 };
 
 export type TaskGovernanceSummary = {

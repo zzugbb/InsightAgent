@@ -4,8 +4,7 @@ from dataclasses import dataclass
 import json
 
 from app.db import get_db_connection
-from app.providers.completion_signals import normalize_finish_reason
-from app.services.answer_completion import TOOL_STOP_REASONS
+from app.services.answer_completion import FINAL_ANSWER_COMPLETION_SQL, completion_signals
 
 MAX_TURNS = 6
 MAX_MESSAGE_CHARS = 4_000
@@ -52,13 +51,7 @@ def bound_conversation_turns(rows):
                 content = content[:MAX_MESSAGE_CHARS - 16] + "[…truncated…]"
             turn.append({"role": role, "content": content})
         # Only runtime enum values survive; never copy Trace text, tools, or arbitrary metadata.
-        completion = {}
-        stop = row.get("agent_stop_reason")
-        if isinstance(stop, str) and stop in TOOL_STOP_REASONS:
-            completion["agent_stop_reason"] = stop
-        finish = normalize_finish_reason(row.get("provider_finish_reason"))
-        if finish is not None:
-            completion["provider_finish_reason"] = finish
+        completion = completion_signals(row)
         if completion:
             turn[-1]["completion"] = completion
         # Even JSON escaping of a single pair must fit; retain the newest pair.
@@ -87,7 +80,7 @@ def load_conversation_context(*, task_id, session_id, user_id):
             return ConversationContext([])
         cutoff = anchor["created_at"]
         rows = connection.execute(
-            """WITH recent_turns AS MATERIALIZED (
+            f"""WITH recent_turns AS MATERIALIZED (
                SELECT u.content AS user_content, a.content AS assistant_content,
                       t.trace_json, t.created_at, t.id
                FROM tasks t
@@ -113,13 +106,7 @@ def load_conversation_context(*, task_id, session_id, user_id):
                       LEFT(final.meta ->> 'provider_finish_reason', 32) AS provider_finish_reason
                FROM recent_turns r
                LEFT JOIN LATERAL (
-                 SELECT step -> 'meta' AS meta
-                 FROM jsonb_array_elements(
-                   CASE WHEN pg_input_is_valid(r.trace_json, 'jsonb') AND r.trace_json IS JSON ARRAY
-                        THEN r.trace_json::jsonb ELSE '[]'::jsonb END
-                 ) WITH ORDINALITY AS trace(step, position)
-                 WHERE step -> 'meta' ->> 'step_type' = 'final_answer'
-                 ORDER BY position DESC LIMIT 1
+                 {FINAL_ANSWER_COMPLETION_SQL}
                ) final ON TRUE
                ORDER BY r.created_at DESC, r.id DESC""",
             (MAX_MESSAGE_CHARS + 1, session_id, user_id, cutoff,

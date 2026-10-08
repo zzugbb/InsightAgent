@@ -206,6 +206,68 @@ class AnswerCompletionPostgresTests(unittest.TestCase):
             connection.commit()
         self.assertEqual(load_conversation_context(task_id=current, session_id=self.session, user_id="owner").messages, [])
 
+    def test_message_completion_survives_task_pagination_and_filtering_without_export_changes(self):
+        trace = [{"id": "answer", "seq": 9, "type": "observation", "content": "prior answer",
+                  "meta": {"step_type": "final_answer", "provider_finish_reason": "length",
+                           "agent_stop_reason": "max_rounds", "secret": "private completion metadata"}}]
+        prior = self.seed_answer(json.dumps(trace))
+        for _ in range(51):
+            persistence.create_task(self.session, "newer task", "owner", status="completed")
+        with self.client(CapturingProvider()) as client:
+            listing = client.get("/api/tasks", params={"session_id": self.session, "limit": 50}).json()
+            self.assertNotIn(prior, [item["id"] for item in listing["items"]])
+            self.assertEqual(client.get("/api/tasks", params={"session_id": self.session,
+                "query": "absent keyword"}).json()["items"], [])
+            response = client.get(f"/api/sessions/{self.session}/messages")
+            self.assertEqual(response.status_code, 200)
+            answer = next(m for m in response.json()["messages"] if m["task_id"] == prior and m["role"] == "assistant")
+            self.assertEqual(answer["completion"], {"seq": 9, "agent_stop_reason": "max_rounds", "provider_finish_reason": "length"})
+            self.assertEqual(answer["content"], "prior answer")
+            self.assertNotIn("private completion metadata", response.text)
+            exported = client.get(f"/api/sessions/{self.session}/export/json").json()
+            self.assertTrue(all("completion" not in message for message in exported["messages"]))
+            self.assertEqual(next(m for m in exported["messages"] if m["role"] == "assistant")["content"], "prior answer")
+            self.assertEqual(client.get(f"/api/sessions/{self.session}/export/markdown").status_code, 200)
+
+    def test_message_completion_cannot_join_foreign_task_or_session_and_never_marks_user_messages(self):
+        trace = json.dumps([{"meta": {"step_type": "final_answer", "provider_finish_reason": "length"}, "seq": 4}])
+        foreign_task = self.seed_answer(trace, user="other")
+        different_session = persistence.ensure_session("different", "owner")
+        different_task = self.seed_answer(trace, session=different_session)
+        for task in (foreign_task, different_task, None):
+            persistence.create_message(self.session, "owner", "assistant", "unmatched answer", task)
+        owned = self.seed_answer(trace)
+        with self.client(CapturingProvider()) as client:
+            messages = client.get(f"/api/sessions/{self.session}/messages").json()["messages"]
+            for message in messages:
+                if message["role"] != "assistant" or message["task_id"] != owned:
+                    self.assertIsNone(message["completion"])
+            self.assertEqual(next(m for m in messages if m["task_id"] == owned and m["role"] == "assistant")["completion"]["provider_finish_reason"], "length")
+            self.assertEqual(client.get(f"/api/sessions/{different_session}/messages").status_code, 200)
+            from app.main import app
+            from app.api.deps import get_current_user
+            original = app.dependency_overrides[get_current_user]
+            try:
+                app.dependency_overrides[get_current_user] = lambda: {"id": "other", "role": "user"}
+                self.assertEqual(client.get(f"/api/sessions/{self.session}/messages").status_code, 404)
+            finally:
+                app.dependency_overrides[get_current_user] = original
+
+    def test_message_completion_tolerates_legacy_trace_and_rejects_noninteger_sequence(self):
+        for trace, expected in [(None, None), ("not json", None), ('{"steps": []}', None),
+            ('[{"x": 1e1000000}]', None),
+            (json.dumps([{"seq": "999", "meta": {"step_type": "final_answer", "provider_finish_reason": "length"}}]),
+             {"seq": None, "agent_stop_reason": None, "provider_finish_reason": "length"}),
+            (json.dumps([{"seq": True, "meta": {"step_type": "final_answer"}}]), None),
+            (json.dumps([{"seq": 4, "meta": {"step_type": "final_answer", "provider_finish_reason": "unknown"}}]),
+             {"seq": 4, "agent_stop_reason": None, "provider_finish_reason": None})]:
+            with self.subTest(trace=trace):
+                task = self.seed_answer(trace)
+                with self.client(CapturingProvider()) as client:
+                    messages = client.get(f"/api/sessions/{self.session}/messages").json()["messages"]
+                    answer = next(m for m in messages if m["task_id"] == task and m["role"] == "assistant")
+                    self.assertEqual(answer["completion"], expected)
+
 
 if __name__ == "__main__":
     raise SystemExit(run_isolated_postgres(AnswerCompletionPostgresTests))
