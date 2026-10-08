@@ -53,14 +53,14 @@ docker build -f frontend/Dockerfile.pilot \
 
 ### 当前本地候选记录（2026-10-08）
 
-- 两份镜像均从干净工作区的应用提交 `218f94d3ec62c76d050ec5ac66ba362ec5089bdc` 构建，revision label 为 `218f94d`；覆盖核心对齐和近期终态、反馈参数、规划用量修复。后续仅更新验证文档的提交不改变此应用来源。
-- 构建配方 SHA256：后端 `4c6e03c3972c713fbd9bc8f6e1848435806217188c2e2c322cf74fcf7e462b49`；前端 `59387de5c78de9643507a368d56686a8021a8e7b73f255e7f45a331913ae3ec4`；后端 84 项依赖锁 `63bfdbdcdec309134535512227921c083b6ad4f2c735968fc6451a83846ac49d`。
-- Python 基础镜像：`python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d`；Node 基础镜像：`node:24-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6`。本机 ARM64 构建通过，后端锁文件核验与前端生产构建通过。
-- 后端本地 tag：`insightagent-backend:pilot-218f94d`，ID `sha256:68c27c1013c04f5727b3fbc7c4c03c0577d800e424f8c650487c775a5ceeb541`，用户 `10001:10001`；前端：`insightagent-frontend:pilot-218f94d`，ID `sha256:5f740a3bfd07961c1ab4e225c7774fdafb6186fe06b800968244b5dbb8c2a634`，用户 `node`，构建 API 地址 `https://api.pilot.example.com`。
-- 后端额外来源核对：按相对路径排序，逐个拼接路径 UTF-8、NUL 与文件内容后计算 SHA256；宿主 `backend/app` 与禁网只读镜像 `/app/app` 的 78 个 `.py` 文件均为 `3992a157d936ce465b94e39b2a21e9e70a064f3c7c3aef3b2398ad85e2d37f4a`。标签本身不能证明镜像内容，源码摘要仅覆盖这些 Python 文件。
-- 固定测试依赖：`postgres@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416`、`chromadb/chroma@sha256:fc8dc8e11fb252b3bc610f6affe6e0ac883252519f4f6021a08a2e31d9a295f4`。两项隔离联调均 PASS：禁网 embedding 得到 384 维向量；真实 PostgreSQL/Chroma 下完成 1 次幂等后台导入、1 条召回、2 个完成任务、Trace/delta/JSON v1.0/Markdown 核对、复用 2 个工具步骤并清零 usage、原任务不变及 1 个排队取消；Compose 重建全部容器后登录/会话/任务/Trace/messages/知识保留。测试容器、网络和 Compose 测试卷均已清理。
-- 原始本地来源：`/tmp/insightagent-pilot-218f94d-backend-retry.log`、`/tmp/insightagent-pilot-218f94d-frontend-build.log`、`/tmp/insightagent-pilot-218f94d-source-proof.log`、`/tmp/insightagent-pilot-218f94d-smoke.log`、`/tmp/insightagent-pilot-218f94d-compose-smoke.log`。应用静态门禁见下方验证基线；临时日志不作为长期归档，本节保存来源、摘要和实测结论，后续目标部署另存自身记录。
-- 本轮文档同步后的 hygiene 3/3 PASS：compileall、diff whitespace、备份计划未修改；来源 `/tmp/insightagent-pilot-218f94d-hygiene.md` 与 `.json`。
+- 后端从干净应用提交 `0209651385e38097747d0698b1be88901e731ddc` 构建，包含执行证据与检索绑定提示修复；tag `insightagent-backend:pilot-0209651`，revision label `0209651`，ID `sha256:6e819a52ad6ba75485cdaeb4659630dc0371c5c4e2d655635cb16697024bc313`，ARM64，用户 `10001:10001`。
+- 前端应用源码/锁文件/构建配方相对 `218f94d` 未变（仅 README 更新，`git diff --exit-code 218f94d HEAD -- frontend ':(exclude)frontend/README.md'` 通过）；复用 `insightagent-frontend:pilot-218f94d`，revision label `218f94d`，ID `sha256:5f740a3bfd07961c1ab4e225c7774fdafb6186fe06b800968244b5dbb8c2a634`，ARM64，用户 `node`，API 地址 `https://api.pilot.example.com`。
+- 配方 SHA256 保持：后端 `4c6e03c3972c713fbd9bc8f6e1848435806217188c2e2c322cf74fcf7e462b49`；前端 `59387de5c78de9643507a368d56686a8021a8e7b73f255e7f45a331913ae3ec4`；后端 84 项依赖锁 `63bfdbdcdec309134535512227921c083b6ad4f2c735968fc6451a83846ac49d`。Python 基础镜像 `python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d`；前端既有 Node 来源 `node:24-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6`。
+- 按相对路径排序，逐个拼接路径 UTF-8、NUL 与文件内容后计算 SHA256；宿主 `backend/app` 与禁网只读镜像 `/app/app` 的 78 个 `.py` 文件均为 `3f5679b28404f14a17211bd80ddc96f37d3743f1e228363b6ecb5123745c9d86`。标签本身不能证明内容，摘要仅覆盖这些 Python 文件。
+- 新配对隔离联调 PASS：禁网 embedding 384 维；生产模式、真实 PostgreSQL/Chroma 下后台幂等导入/召回、任务 SSE/Trace/delta/JSON v1.0/Markdown、步骤恢复与 2 个工具结果复用/usage 清零、排队取消、前端 HTML/CSS/浏览器 API 地址均通过。Agent HTTP 协议专项 7 场景：5 完成/2 失败、13 规划/5 回答请求，历史/会话隔离、两种正文驱动反馈与来源/版本、空正文/429 用量隔离和导出一致。资源清理后才报告成功，scope `local_production_protocol_fixture`；模型仅本地替身，不消耗真实 Key。
+- 当前来源 `/tmp/insightagent-pilot-0209651-backend-retry.log`、`/tmp/insightagent-pilot-0209651-source-proof.log` / `.json`、`/tmp/insightagent-pilot-0209651-smoke.log`；首次 embedding HTTPS 握手超时后相同配方重试成功，模型下载/hash/预热保留原校验。测试依赖摘要继续使用下方命令中的固定值。
+- 本轮镜像/文档 hygiene 3/3 PASS，来源 `/tmp/insightagent-pilot-0209651-hygiene.md` / `.json`；备份计划未修改。
+- Compose 全容器重建持久化保留旧 `218f94d` 双镜像基线，来源 `/tmp/insightagent-pilot-218f94d-compose-smoke.log`；本轮无数据库/持久化/Compose/前端应用变化，未重跑该专项。当前后端门禁 2/2：2217/2217、模块 9/9；核心 PostgreSQL/Chroma 11/11，前端保留上一 node 217/217/lint/双构建基线。本机真实模型的合成验收范围单独见[验收记录](real-model-acceptance.md)。
 
 本地镜像 ID 不能充当目标仓库摘要。候选未推送或部署；跨架构、真实模型质量、TLS/访问边界和升级回滚仍未验证。
 
@@ -68,7 +68,7 @@ docker build -f frontend/Dockerfile.pilot \
 
 ```bash
 backend/.venv/bin/python scripts/smoke_pilot_images.py \
-  --backend-image insightagent-backend:pilot-218f94d \
+  --backend-image insightagent-backend:pilot-0209651 \
   --frontend-image insightagent-frontend:pilot-218f94d \
   --expected-api-base-url https://api.pilot.example.com \
   --postgres-image postgres@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416 \
@@ -137,7 +137,7 @@ backend/.venv/bin/python scripts/pilot_compose.py down \
 
 ```bash
 backend/.venv/bin/python scripts/smoke_pilot_compose.py \
-  --backend-image insightagent-backend:pilot-218f94d \
+  --backend-image insightagent-backend:pilot-0209651 \
   --frontend-image insightagent-frontend:pilot-218f94d \
   --expected-api-base-url https://api.pilot.example.com \
   --postgres-image postgres@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416 \
@@ -146,7 +146,7 @@ backend/.venv/bin/python scripts/smoke_pilot_compose.py \
 
 脚本先解析原生产清单并核对 remote、前端无密钥、无源码挂载/启动命令覆盖；随后仅在随机命名 fixture 项目中覆盖为 mock、本地镜像 tag 和随机 loopback 端口，不发出真实模型请求。实际验证健康启动、前端 API 地址、后台导入/检索、任务/Trace/导出、步骤恢复与取消；然后移除全部容器、保留卷并重新创建，核对登录、会话、任务/Trace/messages 和知识召回保留。结束时仅删除自己的测试容器、网络和卷，检查清理后才报告 PASS，摘要 scope 为 `local_compose_mock_recreate`。
 
-2026-10-08 当前候选实际验证通过，原始记录为 `/tmp/insightagent-pilot-218f94d-compose-smoke.log`。无服务配置/低敏自测 `scripts/test_pilot_compose.py` 7/7 已纳入 tooling；`compose.pilot.yml` 的变更触发 release-gate/backend-e2e/frontend-e2e，release gate auto 保守选择全部阶段。应用提交的 full release gate 10/10 来源为 `/tmp/insightagent-planning-call-usage-release.md` 与 `.json`，包含后端 2210/2210、module boundary 9/9、前端 217/217、lint 0 error/2 个既有 warning 与 Turbopack/webpack 双构建；应用代码未变，未重复运行完整静态门禁。Compose 联调不覆盖多轮模型反馈或全部浏览器交互；模型反馈新增上方镜像 HTTP 协议专项，各 UI 范围保留专项基线。目标镜像拉取、TLS、真实模型、升级回滚及备份恢复仍未验证。
+2026-10-08 旧 `218f94d` 配对的 Compose 持久化验证通过，原始记录为 `/tmp/insightagent-pilot-218f94d-compose-smoke.log`。无服务配置/低敏自测 `scripts/test_pilot_compose.py` 7/7 已纳入 tooling；`compose.pilot.yml` 的变更触发 release-gate/backend-e2e/frontend-e2e，release gate auto 保守选择全部阶段。应用提交的 full release gate 10/10 来源为 `/tmp/insightagent-planning-call-usage-release.md` 与 `.json`，包含后端 2210/2210、module boundary 9/9、前端 217/217、lint 0 error/2 个既有 warning 与 Turbopack/webpack 双构建；该次应用代码未变；本次后端修复后的门禁及新配对来源见上方记录，本轮未重跑 Compose 持久化。Compose 联调不覆盖多轮模型反馈或全部浏览器交互；模型反馈新增上方镜像 HTTP 协议专项，各 UI 范围保留专项基线。目标镜像拉取、TLS、真实模型、升级回滚及备份恢复仍未验证。
 
 ## 目标环境演练记录
 

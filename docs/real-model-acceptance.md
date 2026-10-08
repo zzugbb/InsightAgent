@@ -49,6 +49,6 @@
 
 正常检索/计算 **2/2** 通过，Trace/delta/导出、正文/来源/版本和用量一致；严格三场景报告为 **2/3**，未知日期场景的回答正确但规划回退。正常 RAG 来源 `/tmp/insightagent-real-rag-acceptance-fixed.json` / `.log`；规划失败注入来源 `/tmp/insightagent-real-fallback-acceptance.json` / `.log`，scope 为 `real_final_provider_with_injected_planning_timeout`，不是全程真实规划。修复前证据 `/tmp/insightagent-real-rag-acceptance.json` / `.log` 保留，包含一次规则回退的错误执行声明及一次安全拒绝的绑定错误。
 
-新增执行证据静态 **7/7**（先记录 5 个失败测试再实现）、独立 PostgreSQL/Chroma 核心 **11/11**；后端门禁 **2/2**，full slice **2217/2217**、模块边界 **9/9**。来源 `/tmp/insightagent-execution-evidence-{red,static,postgres,release}.log` 及 release `.md` / `.json`。本轮 hygiene 3/3 PASS，来源 `/tmp/insightagent-execution-evidence-hygiene.md` / `.json`；本机后端已重启加载修复，健康检查与前端访问 HTTP 200。前端未修改，保留上一门禁基线。本次应用修复尚未进入 `pilot-218f94d` 镜像；发布前需刷新后端候选并复验。
+新增执行证据静态 **7/7**（先记录 5 个失败测试再实现）、独立 PostgreSQL/Chroma 核心 **11/11**；后端门禁 **2/2**，full slice **2217/2217**、模块边界 **9/9**。来源 `/tmp/insightagent-execution-evidence-{red,static,postgres,release}.log` 及 release `.md` / `.json`。本轮 hygiene 3/3 PASS，来源 `/tmp/insightagent-execution-evidence-hygiene.md` / `.json`；本机后端已重启加载修复，健康检查与前端访问 HTTP 200。前端未修改，保留上一门禁基线。本次修复已进入后端 `pilot-0209651`，配对未变的前端 `pilot-218f94d` 完成生产模式/禁网 embedding 与 Agent 协议联调；源码摘要相等、测试资源清理通过，来源 `/tmp/insightagent-pilot-0209651-{backend-retry,source-proof,smoke}.log`。本机真实模型实测与镜像本地替身验证分别保留范围，完整候选来源见[试点记录](pilot-deployment-preflight.md)。
 
 真实供应商曾两次首轮规划约 60 秒超时，当前样本不足以证明稳定性、延迟或吞吐承诺。验收会话与独立合成知识库保留供复核；未知消耗与供应商账单仍需核对，不将合成资料计为业务用户签收。

@@ -22,14 +22,14 @@
 - 保留用量计算后端 **8/8** / 前端 **6/6**（`/tmp/insightagent-usage-accounting-{static,frontend}.log`）及公开工具证据 **3/3**、HTTP 并发 **7/7**（`/tmp/insightagent-tool-evidence-{postgres,http-regression}.log`）；本轮未重跑这些专项。
 - 已验证前端基线：输入法/键盘三浏览器桌面/手机 **6/6**、知识导入 Chromium **7/7**、布局复核 **2/2**、Trace **2/2**；来源 `/tmp/insightagent-composer-keyboard-e2e.log`、`/tmp/insightagent-knowledge-import-e2e.log`、`/tmp/insightagent-knowledge-import-layout.log`、`/tmp/insightagent-trace-flow-e2e.log`。前轮镜像联调仅核对浏览器 API 地址，未重跑这些交互专项；输入法事件 fixture 不代替操作系统人工验收。
 - 历史 service-backed 基线：完整 Chromium **77 passed / 1 skipped**、完整重跑 PostgreSQL **11/11**、步骤恢复 **9/9**、内建并发 **6/6**、DAG **7/7**、RAG **21/21** 与 400 切块实写，均保留原验证范围。
-- 2026-10-08 最近已验证的候选镜像来自应用提交 `218f94d`，覆盖核心对齐和近期修复；ARM64 双构建、禁网 384 维 embedding、生产配置/mock 任务与知识链路、Compose 全容器重建后持久数据读回均 PASS。来源 `/tmp/insightagent-pilot-218f94d-{backend-retry,frontend-build,source-proof,smoke,compose-smoke}.log`；完整镜像 ID/源码摘要见试点部署记录。两项基础联调的范围仍为 mock 任务与持久化；真实模型效果与目标部署验收仍待实证。 当前执行证据/检索规划修复尚未进入该镜像，发布前需刷新后端候选并按受影响范围复验。
-- 镜像 Agent 协议专项 **7/7**：通过实际 HTTP Provider 核对历史传递/会话隔离、两种 RAG 正文驱动的反馈分支、来源/版本、空正文回退/失败及 429 请求间用量隔离；5 个任务完成、2 个失败，13 次规划/5 次回答请求，Trace/delta/导出/用量一致。来源 `/tmp/insightagent-pilot-agent-protocol.log`，仅本地协议替身；无服务自测 **9/9**、清理失败不输出 PASS 的回归已纳入 tooling，成功摘要在资源清理后输出；前轮 tooling **1/1**、hygiene **3/3** PASS，来源 `/tmp/insightagent-pilot-agent-{tooling,hygiene}.md` / `.json`。
+- 当前[本地候选镜像](docs/pilot-deployment-preflight.md)：后端 `pilot-0209651` 覆盖执行证据/检索规划修复，ARM64 构建和 78 个 Python 文件源码摘要一致；前端应用代码未变，复用 `pilot-218f94d`。新配对禁网 embedding、生产模式任务/RAG 与 Agent HTTP 协议联调 PASS，清理核验通过；来源 `/tmp/insightagent-pilot-0209651-{backend-retry,source-proof,smoke}.log`。Compose 重建持久化保留原 `218f94d` 配对基线，本轮未重跑；真实模型实测仍为本机开发服务，目标部署待验。
+- 镜像 Agent 协议专项 **7/7**：通过实际 HTTP Provider 核对历史传递/会话隔离、两种 RAG 正文驱动的反馈分支、来源/版本、空正文回退/失败及 429 请求间用量隔离；5 个任务完成、2 个失败，13 次规划/5 次回答请求，Trace/delta/导出/用量一致。来源 `/tmp/insightagent-pilot-0209651-smoke.log`，仅本地协议替身；无服务自测 **9/9**、清理失败不输出 PASS 的回归已纳入 tooling，成功摘要在资源清理后输出；前轮 tooling **1/1**、hygiene **3/3** PASS，来源 `/tmp/insightagent-pilot-agent-{tooling,hygiene}.md` / `.json`。
 - 2026-10-08 [真实模型配置验收](docs/real-model-acceptance.md)部分通过：智谱 `glm-5.3` 极短流式请求成功，真实任务 **3/3**（计算、历史续算及登录工作台发送）完成；Trace/delta/导出/消息与提供方用量一致。三任务共 **6,405 tokens**，加连通验证共 **6,530 tokens**；本机开发服务实测，未计作候选镜像或目标部署验证。真实 RAG 合成资料检索/反馈计算 2/2 通过；未知日期回答正确但首轮超时回退（严格报告 2/3），注入规划超时的真实回答明确未执行计算；业务资料质量、失败恢复体验与账单成本仍待验收；目标 HTTPS/升级回滚、恢复 RPO/RTO 与用户签收未验证，项目总完成度不估百分比。
 
 ## 当前开发计划
 
 1. `agent-core-alignment` 本地实现/契约已封板；终态、失败规划用量、回答提示/增量与反馈参数维护已完成，后续按实际使用问题核对必要修复。
-2. `project-completion-audit` 持续收尾：原候选镜像本地复验已完成，本次后端修复后待刷新候选；后续按可复现的主链路问题维护；有效模型配置已验证，后续补业务资料/任务质量与供应商稳定性，刷新后端候选镜像，并补目标部署/恢复与用户验收实证。当前没有确认必须新增的功能主线，写入并行及 HTTP/DAG checkpoint 继续延期。
+2. `project-completion-audit` 持续收尾：原候选镜像本地复验已完成，本次修复已进入新后端候选并通过配对联调；后续按可复现的主链路问题维护；有效模型配置已验证，后续补业务资料/任务质量与供应商稳定性，补目标部署/恢复与用户验收实证。当前没有确认必须新增的功能主线，写入并行及 HTTP/DAG checkpoint 继续延期。
 3. ESLint 10 保留为上游兼容后的维护候选，当前不强制覆盖 peer 约束。
 
 ## 稳定契约
