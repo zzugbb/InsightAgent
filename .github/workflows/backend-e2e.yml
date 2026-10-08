@@ -103,6 +103,9 @@ jobs:
       - name: Run observation-driven Agent PostgreSQL integration
         run: python backend/scripts/test_agent_feedback_postgres.py
 
+      - name: Run core conversation and RAG scenarios PostgreSQL integration
+        run: python backend/scripts/test_agent_core_scenarios_postgres.py
+
       - name: Run tool dependency PostgreSQL integration
         run: python backend/scripts/test_tool_dependencies_postgres.py
 

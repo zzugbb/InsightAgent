@@ -5,8 +5,8 @@
 ## 当前状态
 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization`、`next-major-upgrade-readiness`。
-- 最近封板：`next-major-upgrade-readiness` 已 100% 封板；Next `16.3.5` / React `19.2.8`、原生 flat ESLint 配置、React Compiler `refs` / `set-state-in-effect` 无例外、Turbopack 默认与 webpack fallback 均已验证。
-- 当前主线：`agent-core-alignment`，按项目定位补齐反馈决策与 Trace 真实性；[实现边界](docs/agent-core-alignment.md)已落地，本地主链与桌面/手机验证通过。知识库内的 TXT/Markdown 导入、版本复核与目标库检索入口已落地；下一步核对多轮上下文、RAG 来源追溯和条件分支场景，主线尚未整体封板。
+- 最近封板：`agent-core-alignment` 的本地实现与契约验证已封板：有界对话上下文、工具反馈决策、RAG 正文/来源证据、Trace 关系与知识文件导入均完成。可进入后续维护或下一条按实际需求选定的主线；真实模型效果验收仍属于外部待验项。
+- 当前阶段：[Agent 核心对齐](docs/agent-core-alignment.md)本地实现/契约已封板；后续按实际使用问题维护，真实模型质量与目标部署验收待资源具备。
 - A2 [试点镜像与部署入口](docs/pilot-deployment-preflight.md)已准备：84 个后端依赖版本锁定、非 root 默认 embedding 构建缓存通过禁网验证；新增生产 `compose.pilot.yml`、低敏预检/操作入口与健康启动顺序。隔离 mock 下重建全部容器后，登录、会话、任务/Trace 与 Chroma 知识保留；目标部署、TLS、真实模型与升级回滚仍待实测。
 - A3 本地恢复基础已落地：两份 Compose 的 Chroma 卷改挂当前镜像实际持久路径 `/data`，新增[离线备份与隔离恢复流程](docs/local-stack-backup-restore.md)；独立 fixture 已读回 PostgreSQL 与 Chroma 测试数据。目标环境恢复与 RPO/RTO 仍待验证。
 - A4 [后台 RAG 导入](docs/rag-background-ingest.md)的持久化/分批进度与[完整任务分支重跑](docs/task-reruns.md)已完成本地闭环；[任务内工具并发](docs/task-tool-parallel.md)支持内建检索/计算有界并发；[工具依赖与结果引用](docs/tool-dependencies.md)支持显式 DAG、重复工具、拓扑波次与公开预览标量绑定；[HTTP 读取并发](docs/http-read-parallel.md)支持明确声明只读的固定 GET、配置冻结和生命周期协调。[实验性步骤恢复](docs/task-checkpoints.md)已实现内建顺序计划的独立分支、成功前缀复用与当前设置复核。OpenAPI 为 51 操作 / 88 组件；写入工具并行及 HTTP/DAG checkpoint 明确延期，目标运行与用户验收待完成。
@@ -15,20 +15,23 @@
 
 ## 当前验证基线
 
-- 2026-10-08 full release gate **10/10 PASS**，来源 `/tmp/insightagent-knowledge-import-release.md` 与 `.json`；后端 full slice **2135/2135**、module boundary **9/9**，前端 node **200/200**（含文件校验 10 个）、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建通过。
-- 本轮知识导入 Chromium **7/7**（1440px/390px、批量预览、进度/版本复核、目标库检索、原载荷重试、返回编辑、文件读取竞态和权限/连接边界）；来源 `/tmp/insightagent-knowledge-import-e2e.log`。截图布局复核 **2/2**，来源 `/tmp/insightagent-knowledge-import-layout.log`；业务 API 使用 fixture，未重新验证实际 Chroma 或真实模型。
-- 2026-10-07 隔离 PostgreSQL：Agent 反馈 **6/6**、步骤恢复回归 **9/9**、DAG 依赖回归 **7/7**；Trace 浏览器专项桌面/390px 手机 **2/2**，来源 `/tmp/insightagent-agent-feedback-postgres.log`、`/tmp/insightagent-agent-checkpoint-regression.log`、`/tmp/insightagent-agent-dependencies-regression.log`、`/tmp/insightagent-trace-flow-e2e.log`。临时资源清理；业务模型仅本地替身。
-- 历史 service-backed 基线：完整 Chromium **77 passed / 1 skipped**、完整重跑 PostgreSQL **11/11**、内建并发 **6/6**、HTTP **7/7**、RAG **21/21** 与 400 切块实写，本轮未把这些历史结果当作重新验证。
-- 既有镜像/Compose 与备份恢复 fixture 证据保留在[试点记录](docs/pilot-deployment-preflight.md)和[恢复流程](docs/local-stack-backup-restore.md)；这些既有镜像不包含当前反馈循环与知识文件导入改动，也不代表目标部署验收。
-- 用户无真实 key/部署环境；未发起真实模型请求。当前模型决策质量、试点 HTTPS/升级回滚、恢复 RPO/RTO 与签收均未验证，项目总完成度不估百分比。
+- 2026-10-08 full release gate **10/10 PASS**，来源 `/tmp/insightagent-core-scenarios-release.md` 与 `.json`；后端 full slice **2148/2148**（上下文/知识证据新增 13 个）、module boundary **9/9**；前端 node **200/200**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建通过。
+- 本轮核心场景 PostgreSQL/Chroma **9/9**（含实际知识写入/检索、上下文隔离/排队边界、两条条件分支与来源导出）；反馈回归 **6/6**、步骤恢复回归 **9/9**。来源 `/tmp/insightagent-core-scenarios-postgres.log`、`/tmp/insightagent-context-feedback-regression.log`、`/tmp/insightagent-context-checkpoint-regression.log`；业务模型仅本地替身。
+- 已验证前端基线：知识导入 Chromium **7/7**、1440px/390px 布局复核 **2/2**，来源 `/tmp/insightagent-knowledge-import-e2e.log`、`/tmp/insightagent-knowledge-import-layout.log`；Trace 浏览器 **2/2**，来源 `/tmp/insightagent-trace-flow-e2e.log`。本轮无前端实现变更，未将历史浏览器结果当作重新验证。
+- 历史 service-backed 基线：完整 Chromium **77 passed / 1 skipped**、完整重跑 PostgreSQL **11/11**、内建并发 **6/6**、HTTP **7/7**、DAG **7/7**、RAG **21/21** 与 400 切块实写，均保留原验证范围。
+- 既有镜像/Compose 与备份恢复证据见试点部署和恢复文档；这些镜像不包含当前核心对齐改动，不代表目标部署验收。
+- 用户无真实 key/部署环境；未发起真实模型请求。决策/回答质量、试点 HTTPS/升级回滚、恢复 RPO/RTO 与签收均未验证；本地封板不代表外部验收完成，项目总完成度不估百分比。
 
 ## 当前开发计划
 
-1. `agent-core-alignment`：完善已有 Agent 与 Trace 的核心契约；反馈决策、Trace 关系与知识文件导入已实现，下一步核对多轮上下文、RAG 来源追溯和工具条件分支三个核心场景。
+1. `agent-core-alignment` 本地实现/契约已封板；后续按实际使用问题维护，下一条开发主线待需求核对后选定。
 2. `project-completion-audit` 保留外部未验证项：有效 key、目标部署/恢复与用户验收待资源具备后继续；不阻止本地核心开发。写入并行及 HTTP/DAG checkpoint 继续延期。
 3. ESLint 10 保留为上游兼容后的维护候选，当前不强制覆盖 peer 约束。
 
 ## 稳定契约
+
+- 非 canonical mock 的普通任务在启动时读取本任务创建前已完成的同用户/同会话问答；最多 6 轮、单消息 4,000 字符、序列化历史 16,000 字符。首轮规划、后续决策与最终回答使用同一快照；工具执行/规则回退保留当前原始输入。Trace 仅追加上下文数量/截断摘要；mock 演示与 checkpoint 独立分支保持原行为。
+- 模型额外接收已脱敏 RAG Trace 片段/来源/文档版本，最多 6 片段、每片段 1,200 字符、序列化证据 8,000 字符，标注为不可信数据。计数型工具 Observation、既有 SSE/Trace/导出形状兼容；模型引用质量待真实提供方验证。
 
 - 知识库提供 UTF-8 TXT/Markdown 文件预览与后台导入（每次 1–20 文件，单文件 256 KB / 64,000 字符，总大小 512 KB）；文件名作为来源和文档 ID，同名文件归为同一文档并保留内容版本。提交中和结果不确定时冻结输入，重试复用原载荷/幂等键；明确放弃结果后可返回编辑。复核自动定位版本，检索测试携带目标库；复用既有 API 与共享库管理员权限。
 
@@ -185,7 +188,7 @@ docker compose -f compose.full.yml up -d
 
 ## 下一步
 
-- 当前优先完成[Agent 核心对齐](docs/agent-core-alignment.md)；知识文件导入已落地，三个核心场景继续核对。外部模型、部署/恢复与签收待资源具备后验收。
+- [Agent 核心对齐](docs/agent-core-alignment.md)本地实现与契约验证已封板；三个核心场景已完成核对。真实模型效果、目标部署/恢复与签收待资源具备后验收。
 
 ## 文档维护约定
 

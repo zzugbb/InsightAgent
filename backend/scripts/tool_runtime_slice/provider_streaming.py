@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from .context import *
+from app.services.conversation_context import ConversationContext
 
 
 class ProviderStreamingMixin:
@@ -1498,8 +1501,11 @@ class ProviderStreamingMixin:
             final_answer_step["content"],
         )
 
+    @patch(
+        "app.services.chat_execution_service.load_conversation_context", return_value=ConversationContext([])
+    )
     def test_stream_task_execution_reuses_runtime_provider_identity_when_provider_object_has_no_attrs(
-        self,
+        self, _history,
     ) -> None:
         runtime_settings = StoredSettings(
             mode="remote",

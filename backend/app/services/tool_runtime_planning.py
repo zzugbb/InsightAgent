@@ -984,6 +984,7 @@ def build_tool_plan_artifacts(
     *,
     provider: object | None = None,
     registry_provider: ToolRegistryProvider | None = None,
+    planning_prompt: str | None = None,
 ) -> ToolPlanArtifacts:
     allowed_tool_names = get_enabled_planning_tool_names(
         registry_provider=registry_provider,
@@ -1006,7 +1007,7 @@ def build_tool_plan_artifacts(
         )
     try:
         provider_plan = _build_provider_tool_plan(
-            prompt,
+            planning_prompt if planning_prompt is not None else prompt,
             provider=provider,
             registry_provider=registry_provider,
         )

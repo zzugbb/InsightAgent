@@ -1,10 +1,10 @@
 ---
 name: InsightAgent 开发计划
-overview: 按原始产品定位推进 agent-core-alignment；反馈决策与 Trace 真实性已实现，本地验证通过；TXT/Markdown 知识导入入口已实现，三个核心场景待核对，外部模型/部署验收未验证。
+overview: agent-core-alignment 本地实现/契约已封板；上下文、RAG 证据、反馈决策、Trace 与知识导入完成，真实模型/目标部署验收未验证。
 current_focus:
   mainline: agent-core-alignment
-  status: 反馈决策、Trace 关系展示与知识文件导入已实现；核心场景待核对，主线尚未整体封板
-  latest_change: 2026-10-08 知识库内 TXT/Markdown 文件预览、后台导入、冻结载荷重试、版本复核与目标库检索；复用现有任务 API，外部验收留待条件具备
+  status: 本地实现/契约已封板；后续按实际使用问题维护，真实模型/部署待验收
+  latest_change: 2026-10-08 补齐有界完成轮次上下文及 RAG 正文/来源证据；实际 PostgreSQL/Chroma 核心场景 9/9、反馈 6/6 与恢复 9/9 回归，完成本地封板
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -26,6 +26,7 @@ stable_contracts:
   - Workbench Inspector 语义筛选只调整前端本地 trace 筛选状态；保留时间线/流程图视图，清理旧 search/kind 干扰，不改变 SSE、trace/delta、任务 API 或 export payload
   - Task Center failure source 诊断 chips 与状态筛选只调整前端本地状态；状态、失败摘要和观测筛选统一优先使用 status_normalized，显式 failure_hint/failure_source 优先于 trace 文本推断，不改变任务列表 API 与 trace/export payload
   - Task Center 与任务详情页 operator next-action 提示只由现有 status、failure hint/source 与 semantic failure stats 本地派生；Audit Logs operator next-action 提示只由现有 event_type、event_detail 与 task_id 本地派生；不新增后端字段，不改变任务/审计 API、SSE、trace 或 export payload
+  - 模型会话快照仅含本任务创建前完成的同用户/会话问答，最多 6 轮/单消息 4000/历史 JSON 16000；RAG 证据最多 6 片段/单片段 1200/JSON 8000，规则回退与工具执行保留本次原始输入
   - 知识文件导入复用 ingest-jobs，UTF-8 TXT/Markdown 1–20 文件、256 KB/64,000 字符单文件、512 KB 总文件；文件名为 source/document_id，结果不确定时冻结并复用原载荷/幂等键；版本复核与检索均定位目标库，shared 写入权限不变
   - Knowledge Governance operator next-action、共享范围说明与破坏性操作禁用只由现有 query 状态、chroma_reachable、knowledge_base_id 和用户角色本地派生；Knowledge Governance <-> RAG 往返仅切换、聚焦并展开已有前端弹窗，不新增后端字段，不改变 shared RAG 权限或 API shape
   - Runtime Debug RAG 状态加载失败支持原位刷新，缓存状态在刷新失败时继续可见；失败恢复与跨库反馈隔离仅使用现有 query/mutation 状态和 reset，保留输入草稿，不改变 RAG 请求/响应、权限或审计契约
@@ -56,7 +57,7 @@ stable_contracts:
   - Next 16.3.5 与 eslint-config-next 精确对齐，React / React DOM 固定 19.2.8；React Compiler refs / set-state-in-effect 无例外；ESLint 9.39.5 在 React/import/jsx-a11y 插件正式兼容 ESLint 10 前保持锁定
   - data/insightagent.plan.back.md 是只读备份计划，永远不修改
 validation_baseline:
-  source: 2026-10-08 knowledge-import full release gate 10/10、文件导入 Chromium fixture 7/7 与布局复核 2/2；2026-10-07 Agent PostgreSQL 6/6、checkpoint 9/9、DAG 7/7 与 Trace 2/2 保留；真实模型/目标环境未验证
+  source: 2026-10-08 core-scenarios full release gate 10/10，核心 PostgreSQL/Chroma 9/9、反馈 6/6、checkpoint 9/9；历史知识导入 7/7 和 Trace 2/2 保留；真实模型/目标环境未验证
   current_audit: 历史 glm-5.1 provider-usage 完成任务 10 条，含工具/RAG Trace；一条历史任务 JSON/Markdown 导出构建通过；此前最小 GLM 调用 HTTP 429，未重试；本轮无真实 key，不发起请求
   backup_restore_fixture: scripts/local_stack_snapshot.py 安全测试通过；修正 Compose Chroma /data 挂载后，隔离 fixture 的 PostgreSQL 测试行与 Chroma 测试文档均从新项目卷恢复读回；目标环境 RPO/RTO 未验证
   tooling_current: 生产 Compose 预检自测 7/7，literal 密钥/环境优先级/模型缺失/数据库一致性/保留卷均进入门禁；compose.pilot.yml 已纳入 CI workflow、auto 全阶段与 artifact guard 路径
@@ -68,12 +69,13 @@ validation_baseline:
   task_tool_parallel: 默认 1（串行），1–4 配置仅并发内建与明确声明的 HTTP 读取；15 个专项与 6 个 PostgreSQL 场景通过，进程最多 8 个读取线程；取消/超时丢弃迟到结果
   task_checkpoints: 实验性内建顺序计划，成功前缀复用、独立分支与失败重试；6 个静态专项、9/9 PostgreSQL，HTTP/DAG checkpoint 延期；新 Trace 标注来源且复用 token/cost 归零
   task_reruns: 完整任务分支支持编辑输入、独立会话、幂等与来源分页；7 个既有专项进入门禁，11/11 PostgreSQL 既有回归通过；原任务/Trace/usage 不变
-  backend_current: full slice 2135/2135、module boundary 9/9，含新增反馈专项 6 个；OpenAPI 51 操作/88 组件不变
-  release_gate: /tmp/insightagent-knowledge-import-release.md 与 .json，10/10 PASS；Turbopack/webpack 双构建通过
+  backend_current: full slice 2148/2148、module boundary 9/9，含上下文/知识证据新增 13 个；OpenAPI 51 操作/88 组件不变
+  release_gate: /tmp/insightagent-core-scenarios-release.md 与 .json，10/10 PASS；Turbopack/webpack 双构建通过
   frontend: node 200/200（文件校验 10 个）；lint 0 error/2 既有 warning；文件导入 Chromium 7/7，桌面/手机布局复核 2/2
-  e2e_current: 本轮知识导入浏览器 API fixture 7/7，布局复核 2/2；实际 Chroma 与历史完整 Chromium 77 passed/1 skipped 未重跑，不冒充本轮证据
+  e2e_current: 本轮 PostgreSQL/Chroma 核心场景 9/9（实际检索），反馈 6/6 和恢复 9/9；浏览器保留已有知识导入/Trace 专项，完整 Chromium 未重跑
   hygiene: py_compile、git diff --check、git diff --cached --check、backup plan diff clean
 completed_mainlines:
+  - agent-core-alignment：本地实现/契约封板；有界对话上下文、模型 RAG 证据、Observation 决策、Trace 关系和文件导入，真实模型效果验收仍待 key
   - provider-tool-expansion：provider search 归一化、planner 多协议 tool call、JSON 字符串参数、reconnect 错误码
   - production-runtime-hardening：SSE/failure audit diagnostic、前端审计详情 reason、reconnect provider 错误消息映射，后续运维体验已补 /health.operations 与 release/artifact/trend operator-facing 摘要及契约门禁
   - source-size-maintenance：tool runtime/test slice、chat persistence 与 frontend globals.css 已拆分并纳入规模边界
@@ -86,10 +88,10 @@ completed_mainlines:
   - runtime-dependency-modernization：Node 24 ESM、Python 3.14 FastAPI、Next 15.5.25、ESLint CLI flat config、审计安全补丁锁定与最终 service-backed e2e
   - next-major-upgrade-readiness：Next 16.3.5 / React 19.2.8、原生 flat ESLint、React Compiler 规则无例外、Turbopack/webpack 双构建与 full Chromium 验证；ESLint 10 作为上游兼容动作显式保留
 next_candidate_mainlines:
-  - 暂不引入模板中心、分支对比或更多基础设施；先完成当前核心对齐
+  - 后续按实际使用问题维护；下一条开发主线待需求核对后选定
   - eslint-10-adoption：仅待上游正式兼容后受控升级
 next_steps:
-  - 反馈决策、Trace 展示与知识文件导入已落地；核对多轮上下文、知识库来源和条件分支场景
+  - 核心对齐本地实现/契约已封板；按实际使用问题维护与核对下一条必要主线
   - 用户已结束旧持续收尾目标；真实 key/目标环境未具备时不重复请求，外部模型/部署/恢复/签收留作待验收项
 logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要、验证口径、维护规则和主线地图不应被整段删除。
 ---
@@ -100,8 +102,8 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 - SSE、Trace、会话 Memory、RAG、鉴权与任务持久化等基础能力已具备；原计划中的 Observation 决策和 Trace 关系展示现纳入核心对齐，不能据此宣称原始完整版目标全部完成。
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization` 与 `next-major-upgrade-readiness` 均已 100% 封板。
-- 最近封板：`next-major-upgrade-readiness` 已 100% 封板；Next 16 / React 19.2、原生 flat ESLint、React Compiler 规则无例外、双构建与 full Chromium 已验证，未修改外部运行时契约。
-- 当前主线：`agent-core-alignment`，按项目定位补齐反馈决策与 Trace 真实性；[实现边界](../../docs/agent-core-alignment.md)已落地，本地主链与桌面/手机验证通过。知识库内的 TXT/Markdown 导入、版本复核与目标库检索入口已落地；下一步核对多轮上下文、RAG 来源追溯和条件分支场景，主线尚未整体封板。
+- 最近封板：`agent-core-alignment` 的本地实现与契约验证已封板：有界对话上下文、工具反馈决策、RAG 正文/来源证据、Trace 关系与知识文件导入均完成。可进入后续维护或下一条按实际需求选定的主线；真实模型效果验收仍属于外部待验项。
+- 当前阶段：[Agent 核心对齐](../../docs/agent-core-alignment.md)本地实现/契约已封板；后续按实际使用问题维护，真实模型质量与目标部署验收待资源具备。
 - A2 [试点镜像与部署入口](../../docs/pilot-deployment-preflight.md)已准备：84 个后端依赖版本锁定、非 root 默认 embedding 构建缓存通过禁网验证；新增生产 `compose.pilot.yml`、低敏预检/操作入口与健康启动顺序。隔离 mock 下重建全部容器后，登录、会话、任务/Trace 与 Chroma 知识保留；目标部署、TLS、真实模型与升级回滚仍待实测。
 - A4 [后台 RAG 导入](../../docs/rag-background-ingest.md)的持久化/分批进度与[完整任务分支重跑](../../docs/task-reruns.md)已完成本地闭环；[任务内工具并发](../../docs/task-tool-parallel.md)支持内建检索/计算有界并发；[工具依赖与结果引用](../../docs/tool-dependencies.md)支持显式 DAG、重复工具、拓扑波次与公开预览标量绑定；[HTTP 读取并发](../../docs/http-read-parallel.md)支持明确声明只读的固定 GET、配置冻结和生命周期协调。[实验性步骤恢复](../../docs/task-checkpoints.md)已实现内建顺序计划的独立分支、成功前缀复用与当前设置复核。OpenAPI 为 51 操作 / 88 组件；写入工具并行及 HTTP/DAG checkpoint 明确延期，目标运行与用户验收待完成。
 - 非阻塞维护候选：`eslint-10-adoption` 的 React/import/jsx-a11y 三个插件 peer 范围均排除 ESLint 10；React 官方修复尚未发布，预检的 1 个外部兼容动作概括这组约束，不强制覆盖 peer。
@@ -119,16 +121,16 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 当前验证基线
 
-- 2026-10-08 full release gate **10/10 PASS**，来源 `/tmp/insightagent-knowledge-import-release.md` 与 `.json`；后端 full slice **2135/2135**、module boundary **9/9**，前端 node **200/200**（含文件校验 10 个）、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建通过。
-- 本轮知识导入 Chromium **7/7**（1440px/390px、批量预览、进度/版本复核、目标库检索、原载荷重试、返回编辑、文件读取竞态和权限/连接边界）；来源 `/tmp/insightagent-knowledge-import-e2e.log`。截图布局复核 **2/2**，来源 `/tmp/insightagent-knowledge-import-layout.log`；业务 API 使用 fixture，未重新验证实际 Chroma 或真实模型。
-- 2026-10-07 隔离 PostgreSQL：Agent 反馈 **6/6**、步骤恢复回归 **9/9**、DAG 依赖回归 **7/7**；Trace 浏览器专项桌面/390px 手机 **2/2**，来源 `/tmp/insightagent-agent-feedback-postgres.log`、`/tmp/insightagent-agent-checkpoint-regression.log`、`/tmp/insightagent-agent-dependencies-regression.log`、`/tmp/insightagent-trace-flow-e2e.log`。临时资源清理；业务模型仅本地替身。
-- 历史 service-backed 基线：完整 Chromium **77 passed / 1 skipped**、完整重跑 PostgreSQL **11/11**、内建并发 **6/6**、HTTP **7/7**、RAG **21/21** 与 400 切块实写，本轮未把这些历史结果当作重新验证。
-- 既有镜像/Compose 与备份恢复 fixture 证据保留在[试点记录](../../docs/pilot-deployment-preflight.md)和[恢复流程](../../docs/local-stack-backup-restore.md)；这些既有镜像不包含当前反馈循环与知识文件导入改动，也不代表目标部署验收。
-- 用户无真实 key/部署环境；未发起真实模型请求。当前模型决策质量、试点 HTTPS/升级回滚、恢复 RPO/RTO 与签收均未验证，项目总完成度不估百分比。
+- 2026-10-08 full release gate **10/10 PASS**，来源 `/tmp/insightagent-core-scenarios-release.md` 与 `.json`；后端 full slice **2148/2148**（上下文/知识证据新增 13 个）、module boundary **9/9**；前端 node **200/200**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建通过。
+- 本轮核心场景 PostgreSQL/Chroma **9/9**（含实际知识写入/检索、上下文隔离/排队边界、两条条件分支与来源导出）；反馈回归 **6/6**、步骤恢复回归 **9/9**。来源 `/tmp/insightagent-core-scenarios-postgres.log`、`/tmp/insightagent-context-feedback-regression.log`、`/tmp/insightagent-context-checkpoint-regression.log`；业务模型仅本地替身。
+- 已验证前端基线：知识导入 Chromium **7/7**、1440px/390px 布局复核 **2/2**，来源 `/tmp/insightagent-knowledge-import-e2e.log`、`/tmp/insightagent-knowledge-import-layout.log`；Trace 浏览器 **2/2**，来源 `/tmp/insightagent-trace-flow-e2e.log`。本轮无前端实现变更，未将历史浏览器结果当作重新验证。
+- 历史 service-backed 基线：完整 Chromium **77 passed / 1 skipped**、完整重跑 PostgreSQL **11/11**、内建并发 **6/6**、HTTP **7/7**、DAG **7/7**、RAG **21/21** 与 400 切块实写，均保留原验证范围。
+- 既有镜像/Compose 与备份恢复证据见试点部署和恢复文档；这些镜像不包含当前核心对齐改动，不代表目标部署验收。
+- 用户无真实 key/部署环境；未发起真实模型请求。决策/回答质量、试点 HTTPS/升级回滚、恢复 RPO/RTO 与签收均未验证；本地封板不代表外部验收完成，项目总完成度不估百分比。
 
 ## 当前主线
 
-- 当前主线：`agent-core-alignment`，按项目定位补齐反馈决策与 Trace 真实性；[实现边界](../../docs/agent-core-alignment.md)已落地，本地主链与桌面/手机验证通过。知识库内的 TXT/Markdown 导入、版本复核与目标库检索入口已落地；下一步核对多轮上下文、RAG 来源追溯和条件分支场景，主线尚未整体封板。
+- 当前阶段：[Agent 核心对齐](../../docs/agent-core-alignment.md)本地实现/契约已封板；后续按实际使用问题维护，真实模型质量与目标部署验收待资源具备。
 - 非阻塞维护候选：`eslint-10-adoption` 等待 [eslint-plugin-react 官方兼容性议题](https://github.com/jsx-eslint/eslint-plugin-react/issues/3977) 与 [修复 PR](https://github.com/jsx-eslint/eslint-plugin-react/pull/4022) 对应的正式发布，并核对 import/jsx-a11y 兼容版本；届时补依赖红测后再受控升级。
 - 后续实现继续保持外部 SSE/trace/export/display/e2e 契约稳定。
 - 新 provider/source 协议仍按 `real-tool-execution` 与 `provider-tool-expansion` 封板基线增量补红测和局部归一化，不扩大外部契约。

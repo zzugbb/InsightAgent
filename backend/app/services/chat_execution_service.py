@@ -21,6 +21,8 @@ from app.services.chat_persistence_service import (
     update_task_trace_steps,
 )
 from app.services.chroma_memory_service import try_append_task_memory
+from app.services.conversation_context import ConversationContext, load_conversation_context
+from app.services.agent_knowledge_context import with_knowledge_observations
 from app.services.provider_service import ProviderSelectionError, get_llm_provider
 from app.services.settings_service import get_stored_settings
 from app.services.task_checkpoint_service import checkpoint_plan, restored_prefix, validate_resume
@@ -802,6 +804,11 @@ def stream_task_execution(
         )
         raise_if_should_abort(force_status_probe=True)
 
+        conversation = (load_conversation_context(task_id=task_id, session_id=session_id, user_id=user_id)
+                        if provider_name != "mock" and checkpoint_seed is None else ConversationContext([]))
+        model_prompt = conversation.with_prompt(prompt)
+        raise_if_should_abort(force_status_probe=True)
+
         yield sse_event(
             "start",
             {
@@ -824,6 +831,7 @@ def stream_task_execution(
         else:
             tool_plan_artifacts = build_tool_plan_artifacts(
                 prompt, provider=provider, registry_provider=planning_registry_provider,
+                **({"planning_prompt": model_prompt} if conversation.messages else {}),
             )
             tool_plan = tool_plan_artifacts.tool_plan
         plan_content = build_tool_plan_summary(
@@ -857,6 +865,8 @@ def stream_task_execution(
                 settings=runtime_settings
             ),
         }
+        if provider_name != "mock" and checkpoint_seed is None:
+            plan_meta["conversation_context"] = conversation.summary
         saved_plan = None if use_feedback else checkpoint_plan(tool_plan, planning_registry_provider)
         if saved_plan is not None:
             plan_meta["checkpoint_plan"] = saved_plan
@@ -988,7 +998,8 @@ def stream_task_execution(
             source_steps = [step["id"] for step in trace_steps
                             if (step.get("meta") or {}).get("agent_round") == agent_round
                             and step.get("type") == "action"]
-            decision = feedback_loop.decide(prompt=prompt, observations=tool_observations, provider=provider)
+            decision = feedback_loop.decide(prompt=model_prompt,
+                observations=with_knowledge_observations(tool_observations, trace_steps), provider=provider)
             raise_if_should_abort(force_status_probe=True)
             decision_content = build_tool_plan_summary(decision.plan, registry_provider=tool_registry_provider) if decision.plan else f"Agent tools stopped: {decision.reason}. Generate answer from available observations."
             decision_meta = {"model": provider_model, "step_type": "planning", "label": "agent_decision",
@@ -1054,8 +1065,9 @@ def stream_task_execution(
         )
 
         provider_prompt = build_tool_prompt_with_observations(
-            prompt=prompt,
-            tool_observations=tool_observations,
+            prompt=model_prompt,
+            tool_observations=(with_knowledge_observations(tool_observations, trace_steps)
+                               if provider_name != "mock" else tool_observations),
         )
         stream_chunk_count = 0
         provider_usage: ProviderUsage | None = None
