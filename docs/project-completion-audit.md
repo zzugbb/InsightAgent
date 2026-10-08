@@ -52,7 +52,7 @@
 
 ## 当前收尾维护
 
-2026-10-08 GitHub `frontend-e2e` #194（`65f1fde`）/#195（`baf7671`）在 full Chromium 阶段失败 2 例：`composer-keyboard.spec.ts` 1440px/390px。根因是 Playwright `CI=1` 使用生产 `npm run build && npm run start`，页面无开发态 `nextjs-portal`，`not.toContainText("Runtime Error")` 在 locator 缺失时失败；业务断言（输入法/Enter/发送/回答）已通过。修复为 `nextjs-portal [data-nextjs-dialog]` 计数为 0（与同仓库其它 e2e 一致）。连带 artifact guard `missing_count` 因 full 阶段失败跳过后置 tooling 步骤，属次生现象。原先文档记录的输入法三浏览器 **6/6** 为用户本机 `npm run dev` 结果，修复后 dev 三浏览器复验待用户 Mac；PR CI 复验待 GitHub Actions。
+2026-10-08 GitHub `frontend-e2e` #194/#195：`composer-keyboard.spec.ts` 生产构建断言已在上游 PR 修复；workflow 次生问题已加固——e2e 主步骤失败后 tooling 自测 `if: always()` 仍生成 artifact guard 占位摘要，避免 `missing_count=2` 掩盖根因；诊断重跑改为同 `test-results` 目录 `--last-failed` 并由 `ci_rerun_frontend_e2e_diagnostics.sh` 在 step summary 标出真实重跑结果（不 `continue-on-error`）。main 仍 `fail-on-missing`。dev 三浏览器输入法复验待用户 Mac；叠放 PR 不触发 GitHub CI，workflow 变更以 VM tooling 自测为准。
 
 2026-10-08 [规划等待与失败恢复](real-model-acceptance.md)（替身）：首轮规划阻塞窗口补 SSE heartbeat 与取消探测，PostgreSQL 专项 4/4；真实 glm 约 60 秒体验与候选镜像重建仍待用户本机。同日 [规划等待排查](real-model-acceptance.md)离线耗时 11/11 保留。交付结论仍为 **暂不可交付外部试点**。
 

@@ -60,6 +60,16 @@ main() {
   assert_contains "TASK_QUEUE_POLL_INTERVAL_SEC: \"0.1\"" "${FRONTEND_WORKFLOW}"
   assert_contains "Start backend on :8011 for frontend queue e2e" "${FRONTEND_WORKFLOW}"
   assert_contains "Run frontend queue e2e" "${FRONTEND_WORKFLOW}"
+  assert_contains "bash scripts/ci_rerun_frontend_e2e_diagnostics.sh \\" "${FRONTEND_WORKFLOW}"
+  assert_not_contains "continue-on-error: true" "${FRONTEND_WORKFLOW}"
+  if ! awk '/Validate e2e tooling fixtures \(frontend scope\)/ {getline; if ($0 ~ /if: always\(\)/) found=1} END {exit !found}' "${FRONTEND_WORKFLOW}"; then
+    echo "expected frontend tooling step to use if: always()" >&2
+    exit 1
+  fi
+  if ! awk '/Validate e2e tooling fixtures \(backend scope\)/ {getline; if ($0 ~ /if: always\(\)/) found=1} END {exit !found}' "${BACKEND_WORKFLOW}"; then
+    echo "expected backend tooling step to use if: always()" >&2
+    exit 1
+  fi
   assert_contains "bash scripts/ci_run_frontend_e2e.sh \\" "${FRONTEND_WORKFLOW}"
   assert_contains "--phase queue \\" "${FRONTEND_WORKFLOW}"
   assert_contains "--api-base-url http://127.0.0.1:8011 \\" "${FRONTEND_WORKFLOW}"

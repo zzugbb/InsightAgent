@@ -30,6 +30,15 @@ assert_contains() {
   fi
 }
 
+assert_not_contains() {
+  local unexpected="$1"
+  local file="$2"
+  if grep -Fq -- "${unexpected}" "${file}"; then
+    echo "did not expect '${unexpected}' in ${file}" >&2
+    exit 1
+  fi
+}
+
 run_tests() {
   TMP_DIR="$(mktemp -d)"
   trap 'rm -rf "${TMP_DIR}"' EXIT
@@ -61,7 +70,8 @@ run_tests() {
   assert_contains "PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001/app\\ path" "${TMP_DIR}/quoted.out"
 
   expect_pass bash "${SCRIPT_PATH}" --phase rerun-last-failed --api-base-url http://127.0.0.1:8000 --frontend-base-url http://127.0.0.1:3001 --dry-run > "${TMP_DIR}/rerun.out"
-  assert_contains "--last-failed --output=test-results/last-failed" "${TMP_DIR}/rerun.out"
+  assert_contains "--last-failed" "${TMP_DIR}/rerun.out"
+  assert_not_contains "--output=test-results/last-failed" "${TMP_DIR}/rerun.out"
 
   echo "ci_run_frontend_e2e tests passed"
 }
