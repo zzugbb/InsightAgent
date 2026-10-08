@@ -960,11 +960,16 @@ def _build_provider_tool_plan(
             planning_provider_attempted=True,
             planning_provider_used=False,
         )
-    normalized_plan = _normalize_provider_tool_plan(
-        items,
-        prompt=prompt,
-        registry_provider=registry_provider,
-    )
+    try:
+        normalized_plan = _normalize_provider_tool_plan(
+            items,
+            prompt=prompt,
+            registry_provider=registry_provider,
+        )
+    except ToolDependencyError as exc:
+        # The model call completed even though its graph cannot be executed.
+        exc.planning_provider_usage = provider_usage
+        raise
     if strict:
         primary = _get_enabled_planning_primary_tool_name(registry_provider=registry_provider)
         normalized_count = sum(node["name"] != primary for node in (normalized_plan or []))

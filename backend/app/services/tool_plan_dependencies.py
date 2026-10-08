@@ -4,7 +4,7 @@ from copy import deepcopy
 import math
 import re
 
-from app.providers.base import ProviderCallError
+from app.providers.base import ProviderCallError, ProviderUsage
 
 MAX_NODES = 32
 MAX_EDGES = 128
@@ -21,6 +21,8 @@ class ToolDependencyError(ProviderCallError):
                           if input_unavailable else "The tool dependency plan is invalid. Please retry the request."),
             retryable=False,
         )
+        # Populated only after a provider response failed planning validation.
+        self.planning_provider_usage: ProviderUsage | None = None
 
 
 def has_dependencies(items):

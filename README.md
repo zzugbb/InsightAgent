@@ -7,7 +7,7 @@
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization`、`next-major-upgrade-readiness`。
 - 最近封板：`agent-core-alignment` 的本地实现与契约验证已封板：有界对话上下文、工具反馈决策、RAG 正文/来源证据、Trace 关系与知识文件导入均完成。可进入后续维护或下一条按实际需求选定的主线；真实模型效果验收仍属于外部待验项。
 - 当前阶段：[Agent 核心对齐](docs/agent-core-alignment.md)本地实现/契约已封板；后续按实际使用问题维护，真实模型质量与目标部署验收待资源具备。
-- 当前维护完成：[工具反馈边界](docs/agent-core-alignment.md)反馈循环按工具实际输入补齐跨轮防重复：依赖参数绑定后再次检查，同模板新结果可继续，并发批次在启动前整批检查。终止复用 repeated_action 与已有回答限制提示；历史消息的 completion、终态/用量与导出沿用既有契约。
+- 当前维护完成：[失败规划用量](docs/usage-accounting.md)首次或后续模型规划返回非法依赖图时，保存该次实际 ProviderUsage 并累计已有规划用量；部分字段保持未知，不估算缺失消耗。非法图仍整图拒绝、任务失败，不执行新工具或最终回答。此前跨轮实际输入防重复与历史回答提示继续保留。
 - A2 [试点镜像与部署入口](docs/pilot-deployment-preflight.md)已准备：84 个后端依赖版本锁定、非 root 默认 embedding 构建缓存通过禁网验证；新增生产 `compose.pilot.yml`、低敏预检/操作入口与健康启动顺序。隔离 mock 下重建全部容器后，登录、会话、任务/Trace 与 Chroma 知识保留；目标部署、TLS、真实模型与升级回滚仍待实测。
 - A3 本地恢复基础已落地：两份 Compose 的 Chroma 卷改挂当前镜像实际持久路径 `/data`，新增[离线备份与隔离恢复流程](docs/local-stack-backup-restore.md)；独立 fixture 已读回 PostgreSQL 与 Chroma 测试数据。目标环境恢复与 RPO/RTO 仍待验证。
 - A4 [后台 RAG 导入](docs/rag-background-ingest.md)的持久化/分批进度与[完整任务分支重跑](docs/task-reruns.md)已完成本地闭环；[任务内工具并发](docs/task-tool-parallel.md)支持内建检索/计算有界并发；[工具依赖与结果引用](docs/tool-dependencies.md)支持显式 DAG、重复工具、拓扑波次与公开预览标量绑定；[HTTP 读取并发](docs/http-read-parallel.md)支持明确声明只读的固定 GET、配置冻结和生命周期协调。[实验性步骤恢复](docs/task-checkpoints.md)已实现内建顺序计划的独立分支、成功前缀复用与当前设置复核。OpenAPI 为 51 操作 / 89 组件；写入工具并行及 HTTP/DAG checkpoint 明确延期，目标运行与用户验收待完成。
@@ -16,8 +16,8 @@
 
 ## 当前验证基线
 
-- 2026-10-08 full release gate **10/10 PASS**，来源 `/tmp/insightagent-feedback-input-release.md` / `.json`；后端 full slice **2202/2202**、module boundary **9/9**；前端 node **217/217**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建通过。
-- 本轮反馈实际输入：静态 **10/10**、独立 PostgreSQL **10/10**；DAG **7/7**、并发生命周期 **6/6** 回归通过；来源 `/tmp/insightagent-feedback-input-{static,postgres,dag-regression,parallel-regression}.log`。覆盖绑定/普通参数互换、同模板新结果、并发整批阻止、Trace/停止提示与规划用量；模型仅本地替身。
+- 2026-10-08 full release gate **10/10 PASS**，来源 `/tmp/insightagent-invalid-plan-usage-release.md` / `.json`；后端 full slice **2204/2204**、module boundary **9/9**；前端 node **217/217**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建通过。
+- 本轮失败规划用量：反馈静态 **11/11**、依赖图静态 **26/26**、独立 PostgreSQL 反馈 **13/13**；DAG **7/7**、成功保存/终态竞争 **6/6** 回归通过；来源 `/tmp/insightagent-invalid-plan-usage-{static,dependency-static,postgres,dag-regression,terminal-regression}.log`。覆盖首次/后续非法图、完整/部分/缺失用量、失败持久化与 Trace/delta/export 一致性；保留实际输入防重复场景，模型仅本地替身。
 - 保留历史消息 completion 专项（静态回答/会话 **9/11**、PostgreSQL **13/13**、前端计算 **9/9**）与 Chromium 桌面英文/手机中文 **2/2**，来源 `/tmp/insightagent-message-completion-*.log`；本轮未重跑浏览器。历史会话/Chroma 核心 **9/9**、终态 **10/10** 范围保留。
 - 保留用量计算后端 **8/8** / 前端 **6/6**（`/tmp/insightagent-usage-accounting-{static,frontend}.log`）及公开工具证据 **3/3**、HTTP 并发 **7/7**（`/tmp/insightagent-tool-evidence-{postgres,http-regression}.log`）；本轮未重跑这些专项。
 - 已验证前端基线：输入法/键盘三浏览器桌面/手机 **6/6**、知识导入 Chromium **7/7**、布局复核 **2/2**、Trace **2/2**；来源 `/tmp/insightagent-composer-keyboard-e2e.log`、`/tmp/insightagent-knowledge-import-e2e.log`、`/tmp/insightagent-knowledge-import-layout.log`、`/tmp/insightagent-trace-flow-e2e.log`。本轮未重跑浏览器，保留原基线；输入法事件 fixture 不代替操作系统人工验收。
@@ -27,11 +27,13 @@
 
 ## 当前开发计划
 
-1. `agent-core-alignment` 本地实现/契约已封板；终态、用量、回答提示与反馈实际输入维护已完成，后续按实际使用问题核对必要修复。
+1. `agent-core-alignment` 本地实现/契约已封板；终态、失败规划用量、回答提示与反馈实际输入维护已完成，后续按实际使用问题核对必要修复。
 2. `project-completion-audit` 保留外部未验证项：有效 key、目标部署/恢复与用户验收待资源具备后继续；不阻止本地核心开发。写入并行及 HTTP/DAG checkpoint 继续延期。
 3. ESLint 10 保留为上游兼容后的维护候选，当前不强制覆盖 peer 约束。
 
 ## 稳定契约
+
+- 规划模型已返回但依赖图校验失败时，保存其实际用量并与先前规划相加；部分字段及成本合计保持未知，上游 total 单列保留。无有效用量不估算，非法图仍返回原错误并终结任务。
 
 - 会话消息 completion 为可选兼容扩展（seq、两个白名单结束原因）；只匹配同用户/会话的 assistant 所属任务，旧/损坏 Trace 不推断，任务分页或筛选不影响历史回答提示。消息正文与导出 v1.0 不变。
 - 工具阶段停止原因传给最终回答；最终 Trace.meta 可选记录 agent_stop_reason/provider_finish_reason，聊天/任务详情只对白名单限制或截断原因提示。正常/未知原因不推断完整性；completed 表示执行结束，不能证明用户目标全部满足。

@@ -1285,6 +1285,14 @@ def stream_task_execution(
         )
     except ProviderCallError as exc:
         capture_final_finish_reason()
+        rejected_planning_usage = build_terminal_usage(
+            planning_usage=None, final_usage=None,
+            provider_usage=getattr(exc, "planning_provider_usage", None),
+            prompt_price=float(getattr(runtime_config, "usage_prompt_token_price_per_1k", 0)),
+            completion_price=float(getattr(runtime_config, "usage_completion_token_price_per_1k", 0)),
+        )
+        if rejected_planning_usage is not None:
+            planning_usage_payload = sum_planning_usage(planning_usage_payload, rejected_planning_usage)
         release_task_slot()
         completed_count = complete_task(
             task_id=task_id,

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 import json
 
+from app.providers.base import ProviderResponse, ProviderUsage
 from app.services import tool_runtime as runtime
 from app.services import tool_runtime_planning as planning
 from app.services.tool_plan_dependencies import (
@@ -34,6 +35,19 @@ def normalize(nodes, provider=None):
 
 class ToolDependenciesMixin:
     run_dependency_plan = TaskParallelMixin.run_parallel_plan
+
+    def test_tool_dependency_rejected_provider_graph_preserves_only_call_usage(self):
+        usage = ProviderUsage(10, 2, 12)
+        content = json.dumps({"tools": [calc("broken", depends_on=["missing"])]})
+        provider = SimpleNamespace(provider="offline-fixture",
+                                   generate=lambda prompt: ProviderResponse(content, "fixture", "fixture", usage))
+        for strict in (False, True):
+            with self.subTest(strict=strict), self.assertRaises(ToolDependencyError) as caught:
+                planning._build_provider_tool_plan("fixture", provider=provider, strict=strict)
+            self.assertIs(caught.exception.planning_provider_usage, usage)
+            self.assertEqual(caught.exception.code, "tool_dependency_plan_invalid")
+            self.assertIsNone(caught.exception.detail)
+        self.assertIsNone(ToolDependencyError(input_unavailable=True).planning_provider_usage)
 
     def test_tool_dependency_legacy_deduplicates_but_explicit_graph_keeps_same_tool_nodes(self):
         legacy = [{"name": "calc_eval", "input": {"expression": value}} for value in ("1+2", "3*2")]

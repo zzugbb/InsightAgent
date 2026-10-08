@@ -97,13 +97,16 @@ def sum_planning_usage(left, right):
         return dict(right)
     result = dict(left)
     for field in ("prompt_tokens", "completion_tokens", "total_tokens"):
-        result[field] = int(left.get(field, 0)) + int(right.get(field, 0))
+        values = (left.get(field), right.get(field))
+        result[field] = sum(values) if all(type(value) is int and value >= 0 for value in values) else None
     for field in ("prompt_tokens_source", "completion_tokens_source"):
-        result[field] = "provider" if left.get(field) == right.get(field) == "provider" else "estimated"
+        result[field] = (None if result[field.removesuffix("_source")] is None
+                         else "provider" if left.get(field) == right.get(field) == "provider" else "estimated")
     result["usage_source"] = "provider" if "provider" in (left.get("usage_source"), right.get("usage_source")) else "estimated"
     costs = [left.get("cost_estimate"), right.get("cost_estimate")]
     result["cost_estimate"] = round(sum(costs), 8) if all(isinstance(cost, (int, float)) for cost in costs) else None
-    if all(isinstance(part.get("provider_total_tokens"), int) for part in (left, right)):
+    if all(type(part.get("provider_total_tokens")) is int and part["provider_total_tokens"] >= 0
+           for part in (left, right)):
         result["provider_total_tokens"] = left["provider_total_tokens"] + right["provider_total_tokens"]
     else:
         result.pop("provider_total_tokens", None)

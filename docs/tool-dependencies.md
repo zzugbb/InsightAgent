@@ -26,7 +26,7 @@ Provider 规划器可声明有向无环图（DAG）：同一种工具可出现�
 该例依次执行 `2+3`、`5.0 * 2`、查询 `value 10.0`。绑定源会自动加入依赖，因此 `search` 可省略 `depends_on`。前向引用允许；无依赖项先运行，每批就绪项按原计划中的相对顺序处理。旧计划继续按名称去重，显式图按节点 ID 保留重复工具。
 
 - ID 为 1–64 个 ASCII 字符，以字母开头，其余允许字母、数字、下划线、连字符。
-- 最多 32 个工具节点、128 条依赖边；未知、重复、自身引用、缺失 ID、循环依赖和不允许的工具会在任何工具执行前拒绝整图，返回 `tool_dependency_plan_invalid`，不会降级成部分执行或规则计划。
+- 最多 32 个工具节点、128 条依赖边；未知、重复、自身引用、缺失 ID、循环依赖和不允许的工具会在任何工具执行前拒绝整图，返回 `tool_dependency_plan_invalid`，不会降级成部分执行或规则计划。模型已返回的实际规划用量仍计入失败任务；首次和反馈规划均适用，缺失字段不估算，见[用量口径](usage-accounting.md)。
 - `depends_on` 必须为无重复 ID 的数组；`input_bindings` 为对象，当前目标仅支持 `query` / `expression`，归一化后的工具输入必须包含对应字段。
 - path 为 1–8 层数组：对象键为 1–80 字符字符串，数组索引为 0–1000 的整数；布尔索引、属性访问和代码表达式不参与解析。
 
@@ -46,7 +46,7 @@ Provider 规划器可声明有向无环图（DAG）：同一种工具可出现�
 
 显式节点 action 的 `Trace.meta` 增加可选 `plan_node_id`、`depends_on`，后者包含结果绑定推导出的依赖。`plan_node_id` 是本计划中的引用 ID，与持久化 `TraceStep.id` 不同；工具 input 为本次实际解析后的输入。前向引用会改变工具执行顺序，Trace.seq 按实际拓扑执行及既有 RAG follow-up 顺序递增；同波并发合并按计划相对顺序。
 
-SSE 事件名称、Trace/delta 外层结构、JSON v1.0/Markdown 导出与权限规则保持兼容。没有新增 HTTP 接口；OpenAPI 仍为 50 操作 / 86 组件。前端继续按 step_id 消费既有事件和 Trace，无需生成本地节点 ID。
+SSE 事件名称、Trace/delta 外层结构、JSON v1.0/Markdown 导出与权限规则保持兼容。没有新增 HTTP 接口；OpenAPI 当前为 51 操作 / 89 组件。前端继续按 step_id 消费既有事件和 Trace，无需生成本地节点 ID。
 
 ## 验证与实现位置
 
@@ -56,7 +56,7 @@ backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k tool_depe
 backend/.venv/bin/python backend/scripts/test_tool_dependencies_postgres.py
 ```
 
-25 个静态专项覆盖图校验、前向引用、重复工具、输入/投影边界、拓扑顺序、并发分支、失败重试与 AST 校验；7 个 PostgreSQL 场景覆盖实际规划/任务流、Trace/delta/export、错误审计、串行回退、取消与超时。后者已接入 backend-e2e workflow。真实提供方的图生成质量与目标环境性能待实证；HTTP/DAG checkpoint 和写入工具并行明确延期，内建顺序计划恢复见[步骤恢复](task-checkpoints.md)。
+26 个静态专项覆盖图校验、前向引用、重复工具、输入/投影边界、拓扑顺序、并发分支、失败重试与 AST 校验；7 个 PostgreSQL 场景覆盖实际规划/任务流、Trace/delta/export、错误审计、串行回退、取消与超时。后者已接入 backend-e2e workflow。真实提供方的图生成质量与目标环境性能待实证；HTTP/DAG checkpoint 和写入工具并行明确延期，内建顺序计划恢复见[步骤恢复](task-checkpoints.md)。
 
 - `backend/app/services/tool_plan_dependencies.py`：图校验、拓扑波次、结果绑定。
 - `backend/app/services/tool_runtime_planning.py`：Provider 协议说明、候选工具归一化与图错误透传。

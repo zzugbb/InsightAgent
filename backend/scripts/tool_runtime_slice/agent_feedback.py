@@ -132,3 +132,16 @@ class AgentFeedbackMixin:
         result = sum_planning_usage(result, {**left, "provider_total_tokens": None})
         self.assertNotIn("provider_total_tokens", result)
         self.assertEqual(result["prompt_tokens"], 30)
+
+    def test_agent_feedback_partial_planning_usage_keeps_unknown_totals(self):
+        left = {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12,
+                "prompt_tokens_source": "provider", "completion_tokens_source": "provider",
+                "usage_source": "provider", "provider_total_tokens": 12, "cost_estimate": 0.01}
+        right = {**left, "prompt_tokens": 7, "completion_tokens": None, "total_tokens": None,
+                 "completion_tokens_source": None, "provider_total_tokens": 9, "cost_estimate": None}
+        result = sum_planning_usage(left, right)
+        self.assertEqual(result["prompt_tokens"], 17)
+        self.assertEqual(result["provider_total_tokens"], 21)
+        self.assertEqual(result["prompt_tokens_source"], "provider")
+        for field in ("completion_tokens", "total_tokens", "completion_tokens_source", "cost_estimate"):
+            self.assertIsNone(result[field])

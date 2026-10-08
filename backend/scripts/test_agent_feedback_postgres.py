@@ -56,9 +56,10 @@ class ConditionalProvider(MockLLMProvider):
 
 
 class GraphFeedbackProvider(ConditionalProvider):
-    def __init__(self, plans):
+    def __init__(self, plans, *, usages=None):
         super().__init__()
         self.plans, self.answer_prompts = plans, []
+        self.usages = usages
 
     def generate(self, prompt):
         if not prompt.startswith("You are the Task Planner for InsightAgent."):
@@ -66,7 +67,8 @@ class GraphFeedbackProvider(ConditionalProvider):
         self.planning_prompts.append(prompt)
         index = len(self.planning_prompts) - 1
         plan = self.plans[index] if index < len(self.plans) else []
-        return ProviderResponse(json.dumps({"tools": plan}), self.model, self.provider, ProviderUsage(10, 2, 12))
+        usage = self.usages[index] if self.usages is not None else ProviderUsage(10, 2, 12)
+        return ProviderResponse(json.dumps({"tools": plan}), self.model, self.provider, usage)
 
     def stream_generate(self, prompt):
         self.answer_prompts.append(prompt)
@@ -94,6 +96,59 @@ class AgentFeedbackPostgresTests(unittest.TestCase):
         with patch("app.services.chat_execution_service.get_llm_provider", return_value=provider), \
              TaskParallelPostgresTests.client(self) as client:
             yield client
+
+    def assert_invalid_graph_usage(self, *, followup=False, usage=ProviderUsage(10, 2, 12)):
+        invalid = [{**calc("3*2"), "id": "broken", "depends_on": ["missing"]}]
+        plans = [[calc("2+3")], invalid] if followup else [invalid]
+        usages = [ProviderUsage(10, 2, 12), usage] if followup else [usage]
+        provider = GraphFeedbackProvider(plans, usages=usages)
+        with self.client(provider) as client:
+            task = self.create(client)
+            stream = client.get(f"/api/tasks/{task}/stream").text
+            self.assertIn("tool_dependency_plan_invalid", stream)
+            self.assertNotIn("event: done", stream)
+            result = self.task(client, task)
+            self.assertEqual(result["status_normalized"], "failed")
+            steps = self.steps(client, task)
+            self.assertEqual(sum((step["meta"].get("tool") or {}).get("name") == "calc_eval"
+                                 for step in steps), int(followup))
+            self.assertEqual(provider.answer_prompts, [])
+            self.assertEqual(queue.get_task_queue_snapshot(max_concurrent=32)["active_count"], 0)
+            self.assertEqual(client.get(f"/api/tasks/{task}/trace/delta?after_seq=0&limit=100").json()["steps"], steps)
+            exported = client.get(f"/api/tasks/{task}/export/json").json()
+            self.assertEqual(exported["trace"]["steps"], steps)
+            payload = json.loads(result["usage_json"]) if result["usage_json"] else None
+            return payload
+
+    def test_initial_invalid_graph_keeps_returned_planning_usage(self):
+        payload = self.assert_invalid_graph_usage()
+        self.assertEqual(payload["planning_total_tokens"], 12)
+        self.assertEqual(payload["planning_provider_total_tokens"], 12)
+        self.assertEqual(payload["overall_total_tokens"], 12)
+        self.assertNotIn("completion_tokens", payload)
+
+    def test_feedback_invalid_graph_counts_both_planning_calls_once(self):
+        payload = self.assert_invalid_graph_usage(followup=True)
+        self.assertEqual(payload["planning_prompt_tokens"], 20)
+        self.assertEqual(payload["planning_completion_tokens"], 4)
+        self.assertEqual(payload["planning_total_tokens"], 24)
+        self.assertEqual(payload["planning_provider_total_tokens"], 24)
+        self.assertEqual(payload["overall_total_tokens"], 24)
+        self.assertNotIn("completion_tokens", payload)
+
+    def test_invalid_graph_partial_or_missing_usage_never_estimates_consumption(self):
+        for followup in (False, True):
+            with self.subTest(followup=followup):
+                payload = self.assert_invalid_graph_usage(followup=followup, usage=ProviderUsage(7, None, 9))
+                self.assertEqual(payload["planning_prompt_tokens"], 17 if followup else 7)
+                self.assertIsNone(payload["planning_completion_tokens"])
+                self.assertIsNone(payload["planning_total_tokens"])
+                self.assertIsNone(payload["planning_cost_estimate"])
+                self.assertEqual(payload["planning_provider_total_tokens"], 21 if followup else 9)
+                self.assertIsNone(payload["overall_total_tokens"])
+        self.assertIsNone(self.assert_invalid_graph_usage(usage=None))
+        payload = self.assert_invalid_graph_usage(followup=True, usage=None)
+        self.assertEqual(payload["planning_total_tokens"], 12)
 
     def assert_graph_feedback(self, plans, expressions, reason, *, decision_calls=2):
         provider, calls = GraphFeedbackProvider(plans), []
