@@ -8,7 +8,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地，并继续消费后端统一 preview/output/result-summary、trace/export 字段。
 - 最近封板：`agent-core-alignment` 的本地实现与契约验证已封板：有界对话上下文、工具反馈决策、RAG 正文/来源证据、Trace 关系与知识文件导入均完成。可进入后续维护或下一条按实际需求选定的主线；真实模型效果验收仍属于外部待验项。
 - 当前阶段：[Agent 核心对齐](../docs/agent-core-alignment.md)本地实现/契约已封板；后续按实际使用问题维护，真实模型质量与目标部署验收待资源具备。
-- 当前维护完成：[任务总用量](../docs/usage-accounting.md)已修复仪表盘与会话汇总遗漏规划/反馈消耗的问题；总量、来源筛选和旧数据回退口径统一，保留任务明细。
+- 当前维护完成：[任务成功保存](../docs/task-completion.md)将状态/Trace/usage、回答消息及会话更新时间一起提交；修复写入失败仍显示成功的问题，取消竞争不留下成功消息。
 - A2 [试点镜像与部署入口](../docs/pilot-deployment-preflight.md)已准备：84 个后端依赖版本锁定、非 root 默认 embedding 构建缓存通过禁网验证；新增生产 `compose.pilot.yml`、低敏预检/操作入口与健康启动顺序。隔离 mock 下重建全部容器后，登录、会话、任务/Trace 与 Chroma 知识保留；目标部署、TLS、真实模型与升级回滚仍待实测。
 - A3 本地恢复基础：Compose 的 Chroma 数据卷已对齐镜像 `/data` 路径，隔离快照恢复后 PostgreSQL/Chroma fixture 均读回；前端登录、任务/Trace 与知识库的目标环境恢复验收仍待部署环境，详见[操作记录](../docs/local-stack-backup-restore.md)。
 - A4 [后台 RAG 导入](../docs/rag-background-ingest.md)的持久化/分批进度与[完整任务分支重跑](../docs/task-reruns.md)已完成本地闭环；[任务内工具并发](../docs/task-tool-parallel.md)支持内建检索/计算有界并发；[工具依赖与结果引用](../docs/tool-dependencies.md)支持显式 DAG、重复工具、拓扑波次与公开预览标量绑定；[HTTP 读取并发](../docs/http-read-parallel.md)支持明确声明只读的固定 GET、配置冻结和生命周期协调。[实验性步骤恢复](../docs/task-checkpoints.md)已实现内建顺序计划的独立分支、成功前缀复用与当前设置复核。OpenAPI 为 51 操作 / 88 组件；写入工具并行及 HTTP/DAG checkpoint 明确延期，目标运行与用户验收待完成。
@@ -17,10 +17,10 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 当前验证基线
 
-- 2026-10-08 full release gate **10/10 PASS**，来源 `/tmp/insightagent-usage-accounting-release.md` / `.json`；后端 full slice **2175/2175**（任务用量专项新增 8 个）、module boundary **9/9**；前端 node **206/206**（会话用量专项新增 6 个）、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建通过。
-- 本轮任务用量 PostgreSQL 专项 **3/3**，覆盖多轮任务/SSE/summary/dashboard/趋势/榜单/会话导出、混合来源筛选、旧数据回退与用户隔离；来源 `/tmp/insightagent-usage-accounting-postgres.log`。后端/前端计算专项 **8/8**、**6/6**，来源 `/tmp/insightagent-usage-accounting-{static,frontend}.log`；模型仅本地替身。
-- 保留模型流 **6/6**、反馈/并发生命周期各 **6/6**（`/tmp/insightagent-stream-completion-{postgres,feedback,parallel}.log`）和公开工具证据 **3/3**、HTTP 并发 **7/7**、会话/Chroma **9/9**（`/tmp/insightagent-tool-evidence-{postgres,http-regression,core-regression}.log`）；本轮未重跑这些专项。
-- 已验证前端基线：输入法/键盘三浏览器桌面/手机 **6/6**、知识导入 Chromium **7/7**、布局复核 **2/2**、Trace **2/2**；来源 `/tmp/insightagent-composer-keyboard-e2e.log`、`/tmp/insightagent-knowledge-import-e2e.log`、`/tmp/insightagent-knowledge-import-layout.log`、`/tmp/insightagent-trace-flow-e2e.log`。本轮仅调整前端会话用量计算，未重跑浏览器；输入法事件 fixture 不代替操作系统人工验收。
+- 2026-10-08 full release gate **10/10 PASS**，来源 `/tmp/insightagent-task-completion-release.md` / `.json`；后端 full slice **2180/2180**（成功事务专项新增 5 个）、module boundary **9/9**；前端 node **206/206**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建通过。
+- 本轮原子完成 PostgreSQL 专项 **6/6**、静态 **5/5**，覆盖消息/会话写失败回滚、并发与终态竞争、提交可见性、回放/导出和下一轮上下文；来源 `/tmp/insightagent-task-completion-{postgres,static}.log`。模型流 **6/6**、用量 **3/3**、步骤恢复 **9/9** 回归来源 `/tmp/insightagent-task-completion-{stream,usage,checkpoint}-regression.log`；模型仅本地替身。
+- 保留用量计算后端 **8/8** / 前端 **6/6**（`/tmp/insightagent-usage-accounting-{static,frontend}.log`）、反馈/并发生命周期各 **6/6**（`/tmp/insightagent-stream-completion-{feedback,parallel}.log`）及公开工具证据 **3/3**、HTTP 并发 **7/7**、会话/Chroma **9/9**（`/tmp/insightagent-tool-evidence-{postgres,http-regression,core-regression}.log`）；本轮未重跑这些专项。
+- 已验证前端基线：输入法/键盘三浏览器桌面/手机 **6/6**、知识导入 Chromium **7/7**、布局复核 **2/2**、Trace **2/2**；来源 `/tmp/insightagent-composer-keyboard-e2e.log`、`/tmp/insightagent-knowledge-import-e2e.log`、`/tmp/insightagent-knowledge-import-layout.log`、`/tmp/insightagent-trace-flow-e2e.log`。本轮无前端实现变更，未重跑浏览器；输入法事件 fixture 不代替操作系统人工验收。
 - 历史 service-backed 基线：完整 Chromium **77 passed / 1 skipped**、完整重跑 PostgreSQL **11/11**、步骤恢复 **9/9**、内建并发 **6/6**、DAG **7/7**、RAG **21/21** 与 400 切块实写，均保留原验证范围。
 - 既有镜像/Compose 与备份恢复证据见试点部署和恢复文档；这些镜像不包含当前核心对齐改动，不代表目标部署验收。
 - 用户无真实 key/部署环境；未发起真实模型请求。决策/回答质量、试点 HTTPS/升级回滚、恢复 RPO/RTO 与签收均未验证；本地封板不代表外部验收完成，项目总完成度不估百分比。
@@ -33,6 +33,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 稳定契约
 
+- 正常任务成功状态、Trace/usage、assistant 消息与会话更新时间在同一事务提交；回答保存失败则回滚并终结为失败，终态/执行实例竞争落败不插入回答。Memory 与 done 在提交后执行；独立消息接口及外部字段形状不变。详见[成功保存契约](../docs/task-completion.md)。
 - 任务/会话汇总、趋势、榜单、会话导出与前端会话统计优先读取有效 overall 用量，字段缺失时按 final + planning 回退，避免重复计数；来源筛选包含规划阶段，任务原始明细与 API 形状不变。详见[用量口径](../docs/usage-accounting.md)。
 - 远端模型流必须收到 [DONE] 或已知首 choice finish_reason 才算正常结束；无信号 EOF 返回既有 remote_provider_stream_interrupted，保留全部已生成 Trace/递增 seq，不写成功 assistant 或 Memory，不自动重放；空帧不递归，正常结束无文本仍报 remote_provider_empty_response。详见[流结束契约](../docs/provider-stream-completion.md)。
 - HTTP 工具成功后的模型证据仅取 Trace 中公开的 effective_result_output_keys，复用脱敏，不读取原始响应、输入或注册表配置；最多 6 项/单项 JSON 3000/总 JSON 8000 字符，裁剪保持有效 JSON 并标记 truncated；供反馈与最终回答使用，计数 Observation 与 SSE/Trace/export 不变。

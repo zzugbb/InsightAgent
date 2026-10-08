@@ -1155,6 +1155,7 @@ def stream_task_execution(
             user_id=user_id,
             usage=usage_payload,
             execution_owner_id=TASK_EXECUTION_OWNER_ID,
+            assistant_content=final_content,
         )
         if terminal_write_lost(completed_count):
             raise_if_should_abort(force_status_probe=True)
@@ -1165,13 +1166,6 @@ def stream_task_execution(
                 user_message="Task reached terminal state before completion could be recorded.",
             )
 
-        create_message(
-            session_id=session_id,
-            user_id=user_id,
-            task_id=task_id,
-            role="assistant",
-            content=final_content,
-        )
         try_append_task_memory(
             session_id,
             task_id=task_id,

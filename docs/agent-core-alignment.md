@@ -31,6 +31,7 @@
 - Trace.meta 可选追加 `agent_round`、`agent_decision`、`agent_from_step_ids`；SSE 事件名、Trace ID/seq、delta 和 JSON v1.0/Markdown 导出形状兼容。
 - 成功任务的用量汇总包含首轮规划、后续决策（包括空列表/被拒绝响应）与最终回答；提供方缺失字段沿用估算规则。没有模型调用的限额终止步骤 token/cost 为 0。
 - [任务/会话用量统计](usage-accounting.md)消费已持久化的 overall 总量，字段缺失时回退 final + planning；Dashboard、会话汇总与导出保持相同口径，来源筛选包含规划阶段，不改变任务明细。
+- [正常任务成功保存](task-completion.md)将 completed/Trace/usage、assistant 消息与会话更新时间一起提交，避免成功状态可见但下一轮缺失回答；失败回滚与终态竞争沿用既有处理。
 - 多轮任务不生成单轮 checkpoint 快照；`AGENT_MAX_ROUNDS=1` 和已有 checkpoint 分支仍保留原有资格。完整任务分支重跑不受影响。
 
 ## Trace Flow 展示契约

@@ -115,6 +115,9 @@ jobs:
       - name: Run whole-task usage PostgreSQL integration
         run: python backend/scripts/test_usage_accounting_postgres.py
 
+      - name: Run atomic task completion PostgreSQL integration
+        run: python backend/scripts/test_task_completion_postgres.py
+
       - name: Run tool dependency PostgreSQL integration
         run: python backend/scripts/test_tool_dependencies_postgres.py
 

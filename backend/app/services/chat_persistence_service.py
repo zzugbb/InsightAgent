@@ -948,6 +948,34 @@ def create_task(
     return resolved_task_id
 
 
+def _insert_chat_message(
+    connection,
+    session_id: str,
+    user_id: str,
+    role: str,
+    content: str,
+    task_id: str | None,
+    current_time: str,
+) -> str:
+    message_id = str(uuid4())
+    connection.execute(
+        """
+        INSERT INTO messages(id, user_id, session_id, task_id, role, content, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (message_id, user_id, session_id, task_id, role, content, current_time),
+    )
+    connection.execute(
+        """
+        UPDATE sessions
+        SET updated_at = ?
+        WHERE id = ? AND user_id = ?
+        """,
+        (current_time, session_id, user_id),
+    )
+    return message_id
+
+
 def create_message(
     session_id: str,
     user_id: str,
@@ -955,27 +983,9 @@ def create_message(
     content: str,
     task_id: str | None = None,
 ) -> str:
-    message_id = str(uuid4())
-    current_time = _now_iso()
-
     with get_db_connection() as connection:
-        connection.execute(
-            """
-            INSERT INTO messages(id, user_id, session_id, task_id, role, content, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (message_id, user_id, session_id, task_id, role, content, current_time),
-        )
-        connection.execute(
-            """
-            UPDATE sessions
-            SET updated_at = ?
-            WHERE id = ? AND user_id = ?
-            """,
-            (current_time, session_id, user_id),
-        )
+        message_id = _insert_chat_message(connection, session_id, user_id, role, content, task_id, _now_iso())
         connection.commit()
-
     return message_id
 
 
@@ -1237,7 +1247,12 @@ def complete_task(
     status: str = "completed",
     usage: dict[str, object] | None = None,
     execution_owner_id: str | None = None,
+    assistant_content: str | None = None,
 ) -> int:
+    if assistant_content is not None and (
+        not isinstance(assistant_content, str) or normalize_task_status(status) != "completed"
+    ):
+        raise ValueError("assistant_content requires a completed task and string content")
     current_time = _now_iso()
     normalized_trace_steps = _normalize_trace_steps(trace_steps)
     usage_blob = json.dumps(usage, ensure_ascii=False) if usage is not None else None
@@ -1289,6 +1304,7 @@ def complete_task(
                 execution_heartbeat_at = NULL
             WHERE {status_guard}
               AND id = ? AND user_id = ?
+            {"RETURNING session_id" if assistant_content is not None else ""}
             """,
             (
                 status,
@@ -1304,8 +1320,14 @@ def complete_task(
                 user_id,
             ),
         )
+        updated_count = max(0, int(getattr(cursor, "rowcount", 0) or 0))
+        if assistant_content is not None and updated_count:
+            task = cursor.fetchone()
+            _insert_chat_message(
+                connection, task["session_id"], user_id, "assistant", assistant_content, task_id, current_time,
+            )
         connection.commit()
-        return max(0, int(getattr(cursor, "rowcount", 0) or 0))
+        return updated_count
 
 
 def create_session_record(title: str | None = None, user_id: str = "") -> dict:
