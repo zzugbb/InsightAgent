@@ -7,7 +7,7 @@ from contextlib import ExitStack, redirect_stdout
 from unittest.mock import patch
 
 from pilot_task_smoke import check_task_contracts
-from smoke_pilot_images import read_stream, run_smoke
+from smoke_pilot_images import container_volumes, read_stream, run_smoke
 
 
 class ApiFixture:
@@ -103,6 +103,70 @@ class PilotTaskSmokeTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "temporary Docker resources could not be removed"):
                 run_smoke("backend", "frontend", "postgres", "chroma", "https://api.example.test")
         self.assertEqual(output.getvalue(), "")
+
+    def run_cleanup_fixture(self, calls, *, volume_stays=False):
+        # Records Docker calls; every started container reports one anonymous volume.
+
+        def docker(*args, **_):
+            calls.append(args)
+            if args[0] == "inspect" and "Mounts" in args[2]:
+                return "anon-" + args[-1]
+            return "fixture"
+
+        def exists(*args):
+            if args[0] == "exec":
+                return True
+            return volume_stays and args[:2] == ("volume", "inspect") and args[2].endswith("-postgres")
+
+        stubs = {
+            "docker": docker,
+            "docker_exists": exists,
+            "host_port": lambda *_: 8080,
+            "request_json": lambda *_, **__: {"status": "ok", "environment": "production",
+                "chroma": {"reachable": True}, "access_token": "fixture", "id": "session"},
+            "wait_until": lambda _, probe, **__: probe(),
+            "_frontend_ready": lambda *_: True,
+            "check_cors": lambda *_: None,
+            "check_frontend": lambda *_: None,
+            "check_browser_api": lambda *_: None,
+            "check_task_contracts": lambda *_, **__: {"completed_tasks": 2},
+        }
+        output = io.StringIO()
+        with ExitStack() as stack, redirect_stdout(output):
+            for name, stub in stubs.items():
+                stack.enter_context(patch("smoke_pilot_images." + name, side_effect=stub))
+            if volume_stays:
+                stack.enter_context(patch("smoke_pilot_images.time.sleep"))
+                stack.enter_context(patch("smoke_pilot_images.time.monotonic", side_effect=[0, 1, 11]))
+            run_smoke("backend", "frontend", "postgres", "chroma", "https://api.example.test")
+        return output.getvalue()
+
+    def test_cleanup_removes_anonymous_volumes_of_this_run(self):
+        calls = []
+        output = self.run_cleanup_fixture(calls)
+        removals = [call for call in calls if call[0] == "rm"]
+        self.assertEqual(len(removals), 4)
+        self.assertTrue(all(call[:3] == ("rm", "-f", "-v") for call in removals))
+        self.assertFalse([call for call in calls if call[:2] == ("volume", "rm")])
+        self.assertFalse([call for call in calls if "prune" in call])
+        self.assertIn("cleanup verified", output)
+
+    def test_leftover_volume_is_retried_by_name_then_fails_closed(self):
+        calls = []
+        output = io.StringIO()
+        with redirect_stdout(output), self.assertRaisesRegex(RuntimeError, r"volumes=1\)$"):
+            self.run_cleanup_fixture(calls, volume_stays=True)
+        retries = [call for call in calls if call[:2] == ("volume", "rm")]
+        self.assertTrue(retries)
+        self.assertTrue(all(len(call) == 3 and call[2].startswith("anon-ia-pilot-smoke-")
+                            and call[2].endswith("-postgres") for call in retries))
+        self.assertFalse([call for call in calls if "prune" in call])
+        self.assertNotIn("PASS", output.getvalue())
+
+    def test_container_volumes_parses_inspect_output_without_raising(self):
+        with patch("smoke_pilot_images.docker", return_value="anon-a\n\nanon-b\n") as docker:
+            self.assertEqual(container_volumes("c"), ["anon-a", "anon-b"])
+        self.assertEqual(docker.call_args.kwargs, {"check": False})
 
     def test_successful_fixture_reports_limited_mock_scope(self):
         result = ApiFixture().run()

@@ -33,6 +33,13 @@ def docker_exists(*args: str) -> bool:
     ).returncode == 0
 
 
+def container_volumes(container: str) -> list[str]:
+    """Volumes mounted by one of this run's containers (the smoke never mounts named volumes)."""
+    template = '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}}{{"\\n"}}{{end}}{{end}}'
+    output = docker("inspect", "--format", template, container, check=False)
+    return [name.strip() for name in output.splitlines() if name.strip()]
+
+
 def write_env(path: Path, values: dict[str, str]) -> None:
     path.touch(mode=0o600)
     path.chmod(0o600)
@@ -254,8 +261,12 @@ def run_smoke(
                     request_text=request_text, read_stream=read_stream, wait_until=wait_until,
                 )
         finally:
+            # postgres declares a VOLUME and `docker rm -f` without -v leaves it behind as an
+            # anonymous volume, so record this run's mounts first, remove with -v, then verify.
+            volumes: list[str] = []
             for container in reversed(started):
-                docker("rm", "-f", container, check=False)
+                volumes.extend(v for v in container_volumes(container) if v not in volumes)
+                docker("rm", "-f", "-v", container, check=False)
             if created_network:
                 docker("network", "rm", network, check=False)
             deadline = time.monotonic() + 10
@@ -264,13 +275,18 @@ def run_smoke(
                     container for container in started if docker_exists("container", "inspect", container)
                 ]
                 remaining_network = created_network and docker_exists("network", "inspect", network)
-                if not remaining_containers and not remaining_network:
+                remaining_volumes = [volume for volume in volumes if docker_exists("volume", "inspect", volume)]
+                if not remaining_containers and not remaining_network and not remaining_volumes:
                     break
                 if time.monotonic() >= deadline:
                     raise RuntimeError(
                         "temporary Docker resources could not be removed "
-                        f"(containers={len(remaining_containers)}, network={remaining_network})"
+                        f"(containers={len(remaining_containers)}, network={remaining_network}, "
+                        f"volumes={len(remaining_volumes)})"
                     )
+                if not remaining_containers:
+                    for volume in remaining_volumes:
+                        docker("volume", "rm", volume, check=False)
                 time.sleep(0.2)
     print("PASS: pilot images, production backend/CORS, PostgreSQL/Chroma, frontend HTML/CSS/browser API, background RAG, task SSE/Trace/delta/export, checkpoint and queued cancellation; cleanup verified")
     print(json.dumps({"scope": "local_production_protocol_fixture" if with_agent_fixture else "local_production_mock",
