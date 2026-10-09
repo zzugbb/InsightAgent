@@ -53,13 +53,7 @@
 
 ## 最终验证与实现位置
 
-当前规划调用维护：提供方静态 **8/8**、独立 PostgreSQL 反馈/规划 **20/20**，用量汇总 **3/3**、终态 **10/10**、远端流 **6/6**；来源 `/tmp/insightagent-planning-call-usage-{static,postgres,accounting-regression,terminal-regression,stream-regression}.log`。真实本机 HTTP 验证空正文及 429 的消费记录/请求隔离，保留反馈必填输入、绑定、防重复与非法图用量场景；均为本地替身。完整门禁 `/tmp/insightagent-planning-call-usage-release.md` / `.json`：**10/10 PASS**，后端 **2210/2210**、模块边界 **9/9**、前端 **217/217**、双构建和 lint 通过（两个既有 warning）。本轮未修改前端或重跑浏览器。
-
-后续维护验证来源：`/tmp/insightagent-tool-evidence-release.md` / `.json`，full gate **10/10**（后端 **2155/2155**、前端 **200/200**）；`/tmp/insightagent-tool-evidence-postgres.log` 公开 HTTP 证据 **3/3**，实际请求/持久化验证相同命中数不同正文的分支、单轮回答、来源与脱敏。反馈 **6/6**、HTTP 并发 **7/7**、会话/Chroma 核心 **9/9** 回归日志均为 `/tmp/insightagent-tool-evidence-*-regression.log`；本地替身不能证明真实模型效果。
-
-2026-10-08 最终来源：`/tmp/insightagent-core-scenarios-release.md` / `.json`，full release gate **10/10**（后端 **2148/2148**、module boundary **9/9**、前端 **200/200**、双构建；lint 两个既有 warning）；`/tmp/insightagent-core-scenarios-postgres.log` 核心场景 **9/9**，含真实 Chroma 写入/检索、两个本地条件分支、上下文隔离/排队边界/旧指令回退、Trace/delta/导出来源一致性。模型仅本地替身。
-
-回归来源：`/tmp/insightagent-context-feedback-regression.log` **6/6**，`/tmp/insightagent-context-checkpoint-regression.log` **9/9**。既有前端基线为 Trace 桌面/手机 **2/2**、文件导入 **7/7** 与布局复核 **2/2**，保留原日志来源；本轮没有前端实现变更，未重跑浏览器。
+历史核心场景使用隔离 PostgreSQL/Chroma 与本地 Provider，覆盖上下文隔离、实际检索/正文驱动反馈、公开 HTTP 结果与脱敏、Trace/delta/导出、取消及终态。原始核心 9/9、后续规划反馈 20/20、HTTP 证据 3/3 属于各自历史专项，不作为本轮重跑。最新整体门禁见[验证基线](validation-baseline.md)，真实模型结果见[验收记录](real-model-acceptance.md)。
 
 - `backend/app/services/conversation_context.py`：有界会话快照与低敏摘要。
 - `backend/app/services/agent_knowledge_context.py`：模型 RAG 证据的来源白名单与预算。

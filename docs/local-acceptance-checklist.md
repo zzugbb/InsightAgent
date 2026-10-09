@@ -34,8 +34,8 @@ bash scripts/local_acceptance.sh --with-real-glm --with-pilot-image-rebuild
 
 ## 与专项的关系
 
-- PR #1 dev 三浏览器 `composer-keyboard`：需 `npm run dev` + Playwright，未纳入默认 gate（见 runbook）。
-- PR #3 规划等待替身：`test_provider_planning_wait_postgres.py` 已含于 backend-e2e；本脚本不重复跑 Docker 专项除非自行添加。
+- Mac dev 三浏览器 `composer-keyboard`：需 `npm run dev` + Playwright，未纳入默认 gate（见 runbook）。
+- 规划等待替身：`test_provider_planning_wait_postgres.py` 已含于 backend-e2e；本脚本不重复跑 Docker 专项除非自行添加。
 - 项 B/C/D 缺输入时脚本标 `skipped` / `缺输入`，不判失败。
 
 ## 安全

@@ -58,6 +58,8 @@ def _safe_database_locator(database_url: str) -> str:
         return "<missing INSIGHT_AGENT_DATABASE_URL>"
     try:
         parsed = urlsplit(database_url)
+        hostname = parsed.hostname or ""
+        port = parsed.port
     except Exception:  # noqa: BLE001
         return "<configured postgres url>"
     if parsed.scheme not in {"postgres", "postgresql"}:
@@ -71,9 +73,9 @@ def _safe_database_locator(database_url: str) -> str:
     elif parsed.password is not None:
         auth = "***"
 
-    host = parsed.hostname or ""
-    if parsed.port is not None:
-        host = f"{host}:{parsed.port}"
+    host = f"[{hostname}]" if ":" in hostname else hostname
+    if port is not None:
+        host = f"{host}:{port}"
     if auth:
         host = f"{auth}@{host}"
 
@@ -82,8 +84,8 @@ def _safe_database_locator(database_url: str) -> str:
             parsed.scheme,
             host,
             parsed.path,
-            parsed.query,
-            parsed.fragment,
+            "",  # Connection options may contain passwords or private key paths.
+            "",
         )
     )
 

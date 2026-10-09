@@ -17,7 +17,7 @@
 - 保留同用户/同会话、任务创建前已完成的配对；最多 6 轮、单消息 4,000、历史 JSON 16,000 字符，completion 计入该预算。消息、task.prompt、Memory 追加、API/SSE/导出正文不变。
 - 数据库先限制最近 7 个候选配对，再提取 Trace 中最后一个 `final_answer` 步骤的两个原因字段，每字段最多 32 字符；应用层再次校验枚举。不复制 Trace 内容、工具载荷或其他 metadata。
 - PostgreSQL 16 的 JSON 输入校验保护损坏/非数组/不可转 jsonb 的旧记录；无合法结束原因时仍保留原问答，不根据正文推断。正常 `stop` / `no_tools` 也不作为目标完成证明。
-- 本地测试验证信号传递和隔离；真实模型是否正确使用这些提示仍待有效 key 验收。
+- 本地测试验证信号传递和隔离；真实模型是否正确使用这些提示须按具体任务验收，当前样本见[真实模型记录](real-model-acceptance.md)。
 
 ## 展示规则
 
@@ -27,11 +27,11 @@
 
 聊天比较消息 completion、已加载任务 Trace 与活动流最终回答的 seq：较新记录优先；同序号时消息优先于任务列表，活动流优先于消息。任务不在最近 50 条或被筛选隐藏时，仍可直接从历史消息显示提示，不增加逐消息请求；旧服务未返回 completion 时沿用 Trace。前端仅信任白名单代码，不把上游任意原因当作文案。
 
-提示说明可观察到的执行限制，不判断答案语义质量；是否正确回答、是否正确引用及是否遵循停止提示仍须真实模型验证。没有真实 key/部署环境时保持未验证。
+提示说明可观察到的执行限制，不判断答案语义质量；是否正确回答、是否正确引用及是否遵循停止提示仍须真实模型验证。未覆盖的模型场景与目标部署保持未验证。
 
 ## 实现与验证
 
-当前回退增量维护：回答 PostgreSQL **14/14**、取消/超时/失败用量 **10/10**、原子保存/终态竞争 **6/6**，来源 `/tmp/insightagent-fallback-trace-{postgres,terminal-regression,completion-regression}.log`。先发出的空 final_answer 与最终正文保持同一 ID，最终 seq 更大；游标停在空回答时，delta 返回最终正文/用量，SSE、回放、消息与导出一致，回放不会再次调用模型。覆盖未知与 length 原因。完整门禁 `/tmp/insightagent-fallback-trace-release.md` / `.json` **10/10 PASS**，后端 **2204/2204**、前端 **217/217**、模块边界 **9/9**、双构建和 lint 通过（两个既有 warning）。模型为本地替身；本轮未改前端或重跑浏览器。
+历史回答 PostgreSQL 14/14、终态用量 10/10、原子完成 6/6 覆盖空流回退后递增 seq、消息/导出一致、取消竞争及历史白名单容错。历史 Chromium 2/2 覆盖桌面/390px、超过 50 个任务与筛选独立性，使用业务 API fixture。最新完整门禁与来源见[验证基线](validation-baseline.md)。
 
 - `backend/app/providers/completion_signals.py` / `openai_compatible_provider.py`：首 choice 原因白名单、调用间重置。
 - `backend/app/services/answer_completion.py` / `chat_execution_service.py`：停止上下文、最终步骤原因、终态/seq 与 SSE。
@@ -47,8 +47,5 @@ node --test --experimental-strip-types app/components/workbench/answer-notices.n
 npx playwright test e2e/answer-completion.spec.ts --project=chromium --workers=1 --reporter=list --output=/tmp/insightagent-answer-completion-e2e-results
 ```
 
-历史消息专项：回答静态 **9/9**、会话静态 **11/11**、回答完整性 PostgreSQL **13/13**、前端计算 **9/9**；来源 `/tmp/insightagent-message-completion-{static,context,postgres,frontend}.log`。覆盖白名单/安全整数、超过 50 个任务的历史提示、筛选独立性、用户/会话/角色隔离、旧 Trace 容错、导出不变，以及连续对话信号传递。数据库/模型仅本机隔离 fixture。
 
-Chromium **2/2**，1440×900 英文、390×900 中文；发送 → 任务列表首 50 条排除本任务 → 刷新 → 筛选为空 → 关闭任务中心 → 详情 → 返回聊天，提示一直存在。页面身份/非空/无错误 overlay、控制台与横向溢出检查通过；截图 `/tmp/insightagent-message-completion-{chat,detail}-{1440,390}.png`，已目视复核。Browser plugin not available，按前端调试技能使用项目 Playwright；仅业务 API fixture，未验证真实模型或其他浏览器。正常 Enter 发送，未屏蔽开发 overlay。
-
-历史发布门禁 `/tmp/insightagent-message-completion-release.md` / `.json`：**10/10 PASS**，后端 **2198/2198**、模块边界 **9/9**、前端 **217/217**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建通过；新增专项已进入 backend-e2e 和静态门禁，浏览器专项沿用 frontend Chromium 发现范围。会话/Chroma 历史核心回归 **9/9** 来源 `/tmp/insightagent-history-completion-core-regression.log`；终态/反馈历史专项范围见[任务完成契约](task-completion.md)。
+上述专项使用本地模型/业务 API 替身，不能证明所有真实回答遵守提示；真实样本与风险见[验收记录](real-model-acceptance.md)。

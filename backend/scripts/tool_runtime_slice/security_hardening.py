@@ -10,6 +10,32 @@ from fastapi.testclient import TestClient
 
 
 class SecurityHardeningMixin:
+    def test_security_database_locator_omits_connection_options(self) -> None:
+        from app.db import _safe_database_locator
+
+        locator = _safe_database_locator(
+            "postgresql://demo:fixture-password@db:5432/insightagent"
+            "?password=fixture-query-secret&sslkey=/private/client.key#fixture-fragment"
+        )
+        self.assertEqual(locator, "postgresql://demo:***@db:5432/insightagent")
+        for value in ("fixture-password", "fixture-query-secret", "client.key", "fixture-fragment"):
+            self.assertNotIn(value, locator)
+
+    def test_security_database_locator_handles_invalid_authority(self) -> None:
+        from app.db import _safe_database_locator
+
+        for url in ("postgresql://demo:fixture-secret@db:bad/db", "postgresql://[broken/db"):
+            with self.subTest(url=url):
+                self.assertEqual(_safe_database_locator(url), "<configured postgres url>")
+
+    def test_security_database_locator_preserves_ipv6_address(self) -> None:
+        from app.db import _safe_database_locator
+
+        self.assertEqual(
+            _safe_database_locator("postgresql://demo:fixture-secret@[::1]:5432/db?sslmode=require"),
+            "postgresql://demo:***@[::1]:5432/db",
+        )
+
     def test_security_rejects_whitespace_wrapped_default_jwt_secret_in_production(
         self,
     ) -> None:

@@ -26,7 +26,7 @@
 | `parallel_group_id` | 本次并发窗口的随机标识，与来源任务/会话无关 |
 | `parallel_group_size` | 本窗口工具数量 |
 
-既有 Trace.meta 允许扩展字段；JSON v1.0 和 Markdown 导出沿用原有结构及脱敏策略。没有新增接口或修改 OpenAPI 操作/组件指纹，当前仍为 50 操作 / 86 组件。
+既有 Trace.meta 允许扩展字段；JSON v1.0 和 Markdown 导出沿用原有结构及脱敏策略。没有新增接口或修改 OpenAPI 操作/组件指纹，当前为 51 操作 / 89 组件。
 
 ## 取消、超时与失败
 

@@ -22,7 +22,7 @@
 
 | 领域 | 现有证据 | 判定 |
 | --- | --- | --- |
-| 主链路与契约 | `README.md` 记录 Chat、任务、SSE、Trace、Memory/RAG、鉴权、导出和治理；上一主线的后端 full slice 2020/2020、前端 node 184/184、full Chromium 64 passed / 1 skipped，release gate 10/10 PASS。 | 本地/CI 基线充分；不等于外部用户验收。 |
+| 主链路与契约 | [项目 README](../README.md) 与技术专题记录 Chat、任务、SSE、Trace、Memory/RAG、鉴权、导出和治理；上一主线的后端 full slice 2020/2020、前端 node 184/184、full Chromium 64 passed / 1 skipped，release gate 10/10 PASS。 | 本地/CI 基线充分；不等于外部用户验收。 |
 | 远端提供方 | `backend/app/providers/` 有 remote provider；`frontend/e2e/workbench-remote-errors.spec.ts` 用本地 mock remote server 覆盖错误、限流、流中断与取消；历史审计查到 10 条 GLM provider-usage 成功任务及工具/RAG Trace。 | 当前有效配置的流式连通、计算/历史、工作台发送及合成 RAG 反馈/引用已通过；业务质量与供应商稳定性仍待验证。 |
 | 运维信号 | `/health.operations` 汇总部署、备份、演练、SLO 与运行态配置；release gate 有低敏 operator summary。 | 健康摘要存在；配置声明不能替代备份、恢复或值班演练记录。 |
 
@@ -53,7 +53,7 @@
 
 ## 当前收尾维护
 
-2026-10-09 按用户新增的五项检查完成[封板后专项维护](post-seal-usability-audit.md)：修复真实工具入口读取测试故障标记、登录文案、窄屏布局及 ID 展示。后端2221/2221、模块9/9、前端217/217及双构建通过；本轮未调用真实供应商，维护提交尚未推送，旧镜像未包含修改。原封板与外部范围裁决保留。
+2026-10-09 按用户新增的五项检查完成[封板后专项维护](post-seal-usability-audit.md)：修复真实工具入口读取测试故障标记、登录文案、窄屏布局及 ID 展示。后端2221/2221、模块9/9、前端217/217及双构建通过；本轮未调用真实供应商，维护提交尚未推送，旧镜像未包含修改。最新配置/文档维护与继承基线集中于[验证记录](validation-baseline.md)。原封板与外部范围裁决保留。
 
 本地主线已封板，当前没有经复现而必须继续修复的已确认代码缺口。真实 GLM 验收保留未满足工具执行要求的原场景，成功分支不覆盖失败结论；后续有新样本或明确问题时再维护。
 

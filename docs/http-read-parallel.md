@@ -43,7 +43,7 @@ HTTP header/query/body 模板仍使用本次实际用户上下文，来源配置
 
 协调线程在取消/超时后停止消费窗口，不等待已发出的请求；底层 HTTP 请求不能强制中断，会占用读取线程直到返回或请求超时。迟到事件、结果与依赖节点不得继续写入或启动。该行为不能撤销远端副作用。
 
-沿用 `tool_start/tool_end/state/error`、Trace.meta 并发分组、拓扑节点字段和 JSON v1.0/Markdown 结构。execution_summary 仅新增可选布尔 `parallel_read_only`；它表示配置声明，实际是否并发仍看 action 的 `execution_mode`。URL、认证头与返回内容继续经既有投影/脱敏，原始密钥不进入 Trace/导出。OpenAPI 保持 50 操作 / 86 组件。
+沿用 `tool_start/tool_end/state/error`、Trace.meta 并发分组、拓扑节点字段和 JSON v1.0/Markdown 结构。execution_summary 仅新增可选布尔 `parallel_read_only`；它表示配置声明，实际是否并发仍看 action 的 `execution_mode`。URL、认证头与返回内容继续经既有投影/脱敏，原始密钥不进入 Trace/导出。OpenAPI 当前为 51 操作 / 89 组件。
 
 ## 验证
 

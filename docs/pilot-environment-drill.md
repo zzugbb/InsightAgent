@@ -32,7 +32,7 @@
 
 ```bash
 # 仅新建项目名，勿用开发默认项目
-backend/.venv/bin/python scripts/pilot_backup_restore_drill.sh \
+bash scripts/pilot_backup_restore_drill.sh \
   --project insightagent-drill-$(date +%Y%m%d) \
   --snapshot-dir /tmp/insightagent-drill-snapshot
 ```

@@ -1,117 +1,35 @@
 # InsightAgent Frontend
 
-Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React Flow 的 Agent 工作台。Node.js 使用 24.x。
+Next.js 工作台把会话、回答和执行证据关联展示。前端负责交互、实时状态与历史回放，工具结果和任务终态以服务端记录为准。
 
-## 当前状态
+[项目概览](../README.md) · [架构](../docs/architecture.md) · [配置](../docs/configuration.md) · [契约](../docs/runtime-contracts.md)
 
-- **`project-completion-audit` 本地开发与工程收尾已封板（2026-10-09）**。部署、目标用户签收与真实业务验收按用户决策延期；本地封板不表示外部试点或生产就绪。
-- 封板后完成用户要求的五项专项维护：移除真实工具入口的测试故障注入，检查仓库提交内容，改善中英文登录文案、窄屏布局与必要 ID 的展示/复制。详情见[专项检查](../docs/post-seal-usability-audit.md)。没有新增工具能力或改变 API/SSE/Trace/export 形状。
-- 已推送应用与验收工具基线 `1b850bc` 的 CI 绿来源为用户确认；本轮维护提交尚未推送，不能沿用旧 CI 作为本轮验证。
-- 已知真实模型边界保留：原四场景 3/4 完整通过、编辑分支恢复 1/1；原上下文续算规划回退未执行要求的工具。自然语言执行声明、合成样本与提供方用量不证明全面正确、业务质量或账单成本。见[真实模型验收](../docs/real-model-acceptance.md)。
-- 旧后端 `pilot-42ccf1f` + 前端 `pilot-9e78810` 仅保留原联调证据，未包含本轮修改；本轮未重建镜像。未来部署前需重新构建、核对源码摘要并联调。
-- 继续按实际问题维护；写入工具并行、HTTP/DAG checkpoint 延期，ESLint 10 为非阻塞候选。
+## 本地运行
 
-## 当前验证基线
+使用 Node.js 24+，在项目根目录执行：
 
-2026-10-09 五项专项维护基于 `180ffdc` 后的工作区源码验证；本地结果与远端 CI 分开。
+```bash
+npm --prefix frontend ci
+npm --prefix frontend run dev
+```
 
-- 后端门禁 **2/2 PASS**：full slice **2221/2221**、模块 **9/9**；故障标记回归先失败后通过，`-k run_tool` **349/349**。来源 `/tmp/insightagent-ui-audit-backend.{md,json,log}` 与 `insightagent-ui-audit-tools.log`。
-- 前端门禁 **4/4 PASS**：node **217/217**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双生产构建；隔离副本执行，应用/工具源码摘要匹配，未复制私人环境或影响开发构建。来源 `/tmp/insightagent-ui-audit-frontend.{md,json,log}` 与 `insightagent-ui-audit-source.json`。
-- Chromium Trace **2/2**（1440/390px，含窄 Inspector 筛选边界与末项选择）、原布局 **2/2**；Chrome 登录/注册、工作台、任务中心、详情与五类弹窗走查，390px 无页面横向溢出，768px 登录页核对，完整 ID 复制通过。首次发送按钮被开发工具遮挡的问题已修复并复跑。详见[专项检查](../docs/post-seal-usability-audit.md)。
-- 本轮 hygiene **4/4 PASS**、七份活跃/验收文档本地链接核对通过，来源 `/tmp/insightagent-ui-audit-hygiene.{md,json,log}`。后端已加载修复，8000/3001 HTTP 200、原 Chroma reachable；未操作原存储容器/卷，备份计划与 next-env 无变更。
-- 保留此前 tooling **1/1**、RAG 静态 **17/17**、隔离 RAG **1/1**、规划恢复 **5/5**、导出静态 **1/1**及 drill 静态自测基线，本轮未重跑这些专项；原真实 GLM **3/4**与分支恢复 **1/1**、Mac 键盘 **6/6**沿用原证据。本轮没有新增真实供应商调用或镜像/Compose 验证。
+开发地址为 `http://127.0.0.1:3001`；后端默认 `http://127.0.0.1:8000`。`NEXT_PUBLIC_API_BASE_URL` 由浏览器使用，生产构建时写入 bundle，部署后仅修改容器环境不能替换旧地址。此变量必须是公开地址，不能放 Key 或带凭据 URL。生产 standalone 配方见 [Dockerfile.pilot](Dockerfile.pilot) 与[部署指南](../docs/pilot-deployment-preflight.md)。
 
-## 下一步前端计划
+已有服务先核对端口与健康状态，避免重复启动；一键启动脚本的重启行为与 Docker 权限见[运行手册](../docs/development-runbook.md)。
 
-- 当前本地收尾主线已完成，可进入日常维护或由用户明确的新主线；没有必须继续开发的已确认功能。
-- 仅在实际复现问题时修复，并维护既有 API/SSE/Trace/export 契约与主题模块边界。
-- 真实业务资料、用户签收和目标环境部署/恢复在条件具备后单独启动；写入并行与 HTTP/DAG checkpoint 继续延期，ESLint 10 待上游兼容后评估。
+## 页面与能力
 
-## 稳定契约
+| 页面 / 入口 | 职责 |
+| --- | --- |
+| 登录 / 注册 | 中英文身份入口、登录态检查与 refresh 轮换；界面描述实际对话、工具和知识能力。 |
+| Workbench | 会话列表、Markdown/公式回答、流式发送与取消、queued/running 接管。 |
+| Trace / Context Inspector | 时间线与流程图、工具公开结果、依赖与并发关系、同步诊断与用量。 |
+| 任务中心 / 详情 | 搜索、状态与失败筛选、来源往返、历史回放、任务导出与分支重跑。 |
+| 知识库 | 文件预览与后台导入、来源/文档版本、共享权限、检索测试和治理。 |
+| 运行调试 | Memory 与 RAG 的状态、手工写入及检索，不等于自动长期记忆链。 |
+| 模型设置 / 用量 / 审计 | remote 配置校验、工具来源诊断、队列压力、用量趋势和失败审计。 |
 
-- 规划响应校验失败或调用以空正文报错时，保存其实际用量并与先前规划相加；首轮规则回退仍可用，后续调用错误终结任务；部分字段及成本合计保持未知，上游 total 单列保留。无有效用量不估算，非法图仍返回原错误并终结任务。
-
-- 会话消息 completion 为可选兼容扩展（seq、两个白名单结束原因）；只匹配同用户/会话的 assistant 所属任务，旧/损坏 Trace 不推断，任务分页或筛选不影响历史回答提示。消息正文与导出 v1.0 不变。
-- 最终回答正文/用量保存递增 Trace.seq，包含空流后的非流式回退，增量查询可见最新结果；工具阶段停止原因传给最终回答；最终 Trace.meta 可选记录 agent_stop_reason/provider_finish_reason，聊天/任务详情只对白名单限制或截断原因提示。正常/未知原因不推断完整性；completed 表示执行结束，不能证明用户目标全部满足。
-- 流结束、回退生成完成及成功提交前复核取消/超时；失败和执行器超时保存已记录规划用量及上游返回的最终用量，缺失字段不因部分文字而补估。前端仅有规划记录时保留最终回答用量未知；终态竞争不覆盖其他执行实例或外部取消结果。
-- 正常任务成功状态、Trace/usage、assistant 消息与会话更新时间在同一事务提交；回答保存失败则回滚并终结为失败，终态/执行实例竞争落败不插入回答。Memory 与 done 在提交后执行；消息正文及任务终态/SSE/export 字段形状不变。详见[成功保存契约](../docs/task-completion.md)。
-- 任务/会话汇总、趋势、榜单、会话导出与前端会话统计优先读取有效 overall 用量，字段缺失时按 final + planning 回退，避免重复计数；来源筛选包含规划阶段，任务原始明细与 API 形状不变。详见[用量口径](../docs/usage-accounting.md)。
-- 远端模型流必须收到 [DONE] 或已知首 choice finish_reason 才算正常结束；无信号 EOF 返回既有 remote_provider_stream_interrupted，保留全部已生成 Trace/递增 seq，不写成功 assistant 或 Memory，不自动重放；空帧不递归，正常结束无文本仍报 remote_provider_empty_response。详见[流结束契约](../docs/provider-stream-completion.md)。
-- HTTP 工具成功后的模型证据仅取 Trace 中公开的 effective_result_output_keys，复用脱敏，不读取原始响应、输入或注册表配置；最多 6 项/单项 JSON 3000/总 JSON 8000 字符，裁剪保持有效 JSON 并标记 truncated；供反馈与最终回答使用，计数 Observation 与 SSE/Trace/export 不变。
-- 聊天输入在 composition 生命周期、原生 isComposing 或兼容 keyCode=229 时将 Enter 留给输入法；正常 Enter 发送、Shift+Enter 换行与发送禁用规则保持一致，不改变后端请求或 SSE/Trace 契约。
-- 非 canonical mock 的普通任务在启动时读取本任务创建前已完成的同用户/同会话问答；最多 6 轮、单消息 4,000 字符、序列化历史 16,000 字符。历史 assistant 上下文可选附带最终回答 Trace 的白名单 completion 信号，并计入同一预算；正常结束不证明目标完成，缺失/损坏记录不推断原因。首轮规划、后续决策与最终回答使用同一快照；工具执行/规则回退保留当前原始输入。Trace 仅追加上下文数量/截断摘要；mock 演示与 checkpoint 独立分支保持原行为。
-- 模型额外接收已脱敏 RAG Trace 片段/来源/文档版本，最多 6 片段、每片段 1,200 字符、序列化证据 8,000 字符，标注为不可信数据。计数型工具 Observation、既有 SSE/Trace/导出形状兼容；真实提供方合成资料的来源/版本引用已验证，业务资料与引用鲁棒性仍待验收。
-
-- 知识库提供 UTF-8 TXT/Markdown 文件预览与后台导入（每次 1–20 文件，单文件 256 KB / 64,000 字符，总大小 512 KB）；文件名作为来源和文档 ID，同名文件归为同一文档并保留内容版本。提交中和结果不确定时冻结输入，重试复用原载荷/幂等键；明确放弃结果后可返回编辑。复核自动定位版本，检索测试携带目标库；复用既有 API 与共享库管理员权限。
-
-- 跨轮重复检查使用工具名与实际输入；依赖绑定节点在解析后、工具启动前复核，同轮重复节点与工具内部重试保持原行为。反馈决策默认最多 3 轮（AGENT_MAX_ROUNDS=1 保持单轮），安全 Observation 驱动后续行动；后续 query/expression 必须提供非空文本或合法结果绑定，不从提示补缺失参数；多轮任务不生成单轮 checkpoint。Trace 记录轮次/决策来源并汇总所有规划用量；流程图虚线为记录顺序、实线为依赖/决策来源，详情不截断。
-
-- 任务 failed 状态轮询不能提前终止仍在接收的 SSE；保留提供方具体错误事件，避免被通用“流已关闭”覆盖。取消/超时仍按既有流程终止本地连接。
-
-- HTTP 并发需 execution.parallel_read_only=true 且固定 GET/无请求体；资格绑定工厂 runner，配置与上下文冻结，未声明工具保持串行。GET 只读性由配置者确认，见[HTTP 读取契约](../docs/http-read-parallel.md)。
-- 显式工具图最多 32 节点/128 边，绑定仅限已投影预览标量到 query/expression；图错误拒绝整图，失败/取消/超时阻止依赖调用。Trace.meta 的 plan_node_id/depends_on 为可选扩展，详见[依赖契约](../docs/tool-dependencies.md)。
-- 任务内并发默认关闭（`TASK_TOOL_MAX_CONCURRENT=1`）；仅就绪的内建检索/计算及明确配置只读的 HTTP GET 可并发，进程最多 8 个读取线程，Trace/终态写入由协调线程串行处理；并发事件允许交错，Trace.meta 增加兼容可选分组信息，详见[并发契约](../docs/task-tool-parallel.md)。
-- 完整分支重跑从本人已终结任务复制/编辑 prompt，不复制历史结果；实验性 checkpoint 保留输入/计划并复用内建顺序计划的成功前缀。两者均创建独立会话、幂等保存 queued 任务并由既有 stream 执行，原任务和 SSE/Trace/export shape 不变；复用步骤标注来源并清零本任务 token/cost，详见[步骤恢复](../docs/task-checkpoints.md)。
-
-- 后台导入新增可空 progress 确认计数，失败/中断保留已确认批次；默认每批 128 切块并遵守 Chroma 上限，每任务最多 5000 切块（超限 422，调用方分拆或降低 overlap）；进度不延长整任务超时，同步 ingest 与 SSE/Trace/export 保持原契约。
-
-- 后台 RAG 导入为兼容扩展：同键重试复用原任务，按当前知识库轮询提交者的任务，完成后刷新状态与治理列表；仅排队任务可取消，失败时保留输入并提示先复核数据。
-
-- SSE 事件：`start`、`state`、`trace`、`tool_start`、`tool_end`、`heartbeat`、`token`、`cancelled`、`timeout`、`done`、`error`。
-- 已配置 CORS 来源可读取后端生成的 `X-Request-ID`，便于把前端失败报告与后端低敏请求日志关联；SSE 业务失败仍以事件/Trace 为准。
-- 后端 OpenAPI 指纹基线仅检查结构漂移；前端对 SSE、Trace、export 的实际消费仍以现有 node/e2e 回归和人工兼容性审查为准。
-- `trace.step` 与后端 `TraceStep` 同构；`tool_start/tool_end` 与 action 节点通过 `step_id` 对齐。
-- Workbench 使用 `trace/delta` 做静默增量刷新，流结束后补拉最终快照。
-- result summary、safe output、failure hint 与 diagnostics 使用后端统一语义。
-- `trace_semantic` URL 参数兼容支持 `planner/retrieval/calculator/failure`；详情页语义切换与 operator next-action 提示仅使用既有 status、failure hint/source 与 semantic failure stats 做本地展示，状态文字/色调与轮询控制优先使用 `status_normalized`，均不改变任务、trace 或 export payload。
-- Workbench Inspector 语义筛选只调整本地 trace 筛选状态：保留时间线/流程图视图，清理旧 search/kind 干扰，不改变 SSE、trace/delta、任务 API 或 export payload。
-- Task Center failure source 诊断 chips 与状态筛选只调整前端本地状态；状态、失败摘要和观测筛选统一优先使用 `status_normalized`，显式 `failure_hint/failure_source` 优先于 trace 文本推断，不改变任务列表 API 与 trace/export payload。
-- Task Center 与任务详情页 operator next-action 提示只由现有 status、failure hint/source 与 semantic failure stats 本地派生；Audit Logs operator next-action 提示只由现有 event_type、event_detail 与 task_id 本地派生；不新增后端字段，不改变任务/审计 API、SSE、trace 或 export payload。
-- Knowledge Governance operator next-action、共享范围说明与清空/删除禁用只由现有 query 状态、`chroma_reachable`、知识库 ID 和用户角色本地派生；Knowledge Governance <-> RAG 往返仅切换、聚焦并展开已有弹窗，不改变 shared RAG 权限或 API shape。
-- Runtime Debug RAG 状态加载失败支持原位刷新，缓存状态在刷新失败时继续可见；失败恢复与跨库反馈隔离仅使用现有 query/mutation 状态和 reset，保留输入草稿，不改变 RAG 请求/响应、权限或审计契约。
-- Release gate trend 对缺少 `operator_summary` 的旧 artifact 按既有 result、step summary 与失败标签派生低敏兼容摘要；新格式仍执行严格 operator contract，不改变前端运行时契约。
-- 后端测试主题分片和规模余量门禁不改变前端 node/e2e 清单、SSE、trace 或 export 契约。
-- 后端 `-k` 零匹配诊断只影响测试 CLI 的错误可读性，不改变前端 node/e2e 清单或运行时契约。
-- 后端 `--list-tests` 只读取测试发现结果，不执行测试，也不改变前端 node/e2e 清单或运行时契约。
-- 后端维护选择器清单只校验测试发现覆盖，不改变前端 node/e2e 清单或运行时契约。
-- Release gate 失败摘要稳定性修复不改变前端构建命令、node/e2e 清单或运行时 payload。
-- Task Center、Audit Logs 与知识库治理的初始错误、陈旧数据错误与原位重试只调整 TanStack Query/presentation 状态，不改变任务、审计或 RAG API shape；初始失败不再误显示空态，陈旧数据仍可查看。
-- SSE close 后失败摘要兜底只在流关闭但本地尚未进入 terminal phase 时补拉任务/trace 并映射低敏 failure hint，不改变 SSE、任务、trace 或 export payload。
-- queued/running/cancel/reconnect 与 task recovery 前端语义保持稳定。
-
-## 能力索引
-
-- Workbench：会话、消息、任务中心、Trace/Context Inspector 与 running task recovery。
-- 任务回放：任务详情页、Trace 时间线/流程图、Failure 入口、operator next-action 提示、任务和会话 JSON/Markdown 导出。
-- 任务详情页支持通过 `trace_semantic` URL 参数直达语义 Trace，并在切换时更新可分享 URL、清理旧筛选；Task Center 与 Audit Logs failure drilldown 可直达 Failure 回放，列表、详情与审计统一 normalized 状态、显式失败诊断、operator next-action 和轮询控制。
-- 设置与治理：模型设置、provider/source diagnostics、task queue diagnostics、审计日志、usage dashboard、知识库治理。
-- Memory/RAG 调试：会话级 `memory_{session_id}` 调试入口、知识库 `kb_{user_hash}_{knowledge_base_id}` 状态/写入/检索入口。
-- 前端不新增 provider 专用显示分支，继续消费后端统一 preview/output/result-summary 与 trace/export 字段。
-
-## 当前已有内容
-
-- 三栏工作台：会话、消息、轨迹/上下文
-- Auth Gate：登录/注册、登录态校验、401 优先 refresh token 轮换并重试，失败后自动回登录
-- Workbench：聊天主视图、任务中心抽屉、任务详情页 `/tasks/[taskId]`
-- Inspector：Trace 时间线 / 流程图双视图、Context 概览、同步诊断、当前任务
-- 流式链路：SSE 状态、token 追加、trace 实时更新、`trace/delta` 自动静默轮询与结束补拉
-- running task 恢复：刷新页面或切回会话时自动接管 `queued/pending/running` 任务流
-- 导出：任务与会话 JSON / Markdown 导出
-- 模型设置：`mock / remote` 模式切换、校验、保存、错误码友好提示、provider/source diagnostics 与 task queue diagnostics 限额/全局与当前用户计数/可用槽位/压力状态/等待策略说明
-- RAG / Memory 调试：运行调试子页展示召回摘要、质量分布、筛选、来源摘要与 distance 解释
-- 知识库治理：列表、版本明细展开、文档组摘要、文档组删除、来源采样、shared 权限显隐、清空/删除
-- 审计日志：筛选、分页、详情、导出
-- usage dashboard：趋势、会话榜、任务榜与来源分布
-
-## 当前运行态重点
-
-- 实时流、持久化 trace 与导出回放当前共用同一套 `TraceStep` 消费主干，前端优先避免派生本地专用语义。
-- `tool_end.result_summary`、preview/output key、retrieval follow-up 与 registry diagnostics 已进入工作台主展示链，当前重点是继续跟随后端保持 helper/runtime 语义一致。
-- 任务失败线索已进入共享快照语义；Task Center、任务详情、Usage Dashboard 与 Audit Logs 复用同一失败摘要、来源分类、可读错误码、operator next-action 和 Failure 轨迹入口。
-- 远端错误/取消 e2e 的并发等待已对齐真实 UI 状态：任务详情 failure 计数等待稳定，trace retry ETA 限定可见 Context 面板，remote cancel 先验证冷却阻塞再等待恢复。
-- Usage Dashboard、Audit Logs、Task Center 与任务详情页已统一失败回放入口、Failure 计数与处置提示。
-- running task recovery、remote cancel、model settings diagnostics 与知识库治理 shared 权限是当前最容易回归的前端运行态重点。
-- 当前前端回归重点仍围绕 workbench 主链、remote errors、settings、usage dashboard 与 common tooling。
+任务详情 `/tasks/[taskId]` 支持 `trace_semantic` 参数直达语义筛选。分支重跑可编辑输入并创建独立会话；“从步骤继续”标为实验功能，只支持有快照的内建顺序计划，复用结果与新执行分开显示。
 
 ## 关键实现位置
 
@@ -137,82 +55,44 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `lib/api-client.ts`：REST 请求封装、Bearer 注入、refresh token 自动续期
 - `lib/types/trace.ts`：前端 TraceStep 类型
 
-## SSE 消费与契约对齐
+## SSE 消费与稳定契约
 
-当前前端按以下事件消费：
+事件为 `start / state / trace / tool_start / tool_end / heartbeat / token / cancelled / timeout / done / error`。trace 的 step 与服务端 REST 同构，tool 事件按 step_id 合并；允许并发事件交错，不依赖单一运行工具假设。
 
-- `start`
-- `state`
-- `trace`
-- `tool_start`
-- `tool_end`
-- `heartbeat`
-- `token`
-- `cancelled`
-- `timeout`
-- `done`
-- `error`
+Workbench 静默拉取 `trace/delta`，失败退避并在流结束后补拉；同步健康度显示在 Context。failed 状态轮询不提前截断仍活动的 SSE，具体错误优先保留；流关闭后必要时补拉既有任务/Trace。刷新与会话切换接管已有 queued/pending/running，不创建重复任务。
 
-对齐规则：
+状态/轮询使用 normalized 状态，失败摘要优先显式 hint/source；本地筛选和处置提示不改写服务端状态。流程图虚线仅为记录顺序，实线仅为声明依赖/决策来源；缺少历史字段不推断。回答结束提示消费白名单原因及最新 seq，completed 不代表目标全部满足。
 
-- `trace` 事件中的 `step` 与后端 REST `TraceStep` 同构。
-- `tool_start/tool_end` 会先驱动 action 节点状态，再由 `trace` 事件补齐持久化快照。
-- Workbench 会定时静默拉取 `trace/delta`，失败时退避重试，并在流结束后自动补拉一次。
-- 同步健康度会在 Inspector Context 区域展示，便于定位网络抖动或增量拉取异常。
+输入法组合中的 Enter 保留给输入法，普通 Enter 发送、Shift+Enter 换行。窄屏筛选换行、宽表格在容器内滚动；必要 ID 缩略显示，可查看/复制完整值，路由、配置与导出保留完整标识。详见[运行时契约](../docs/runtime-contracts.md)和[五项专项检查](../docs/post-seal-usability-audit.md)。
 
-## Memory（会话级）
+## Memory / RAG
 
-- collection 规则：`memory_{session_id}`
-- 状态读取：`GET /api/sessions/{session_id}/memory/status`
-- 写入调试：`POST /api/sessions/{session_id}/memory/add`
-- 检索调试：`POST /api/sessions/{session_id}/memory/query`
+- Memory：会话 collection `memory_{session_id}`；status/add/query 为手工调试入口。完整历史在 PostgreSQL。
+- RAG：知识库 collection `kb_{user_hash}_{knowledge_base_id}`，默认 ID 为 `default`；`shared-*` 写入由管理员权限控制。
+- 普通入口“设置 → 知识库 → 导入知识”支持 UTF-8 TXT/Markdown，预览后使用后台任务；同名文件归入同文档并保留版本，结果不确定时重试原载荷/幂等键。
+- 关闭弹窗停止前端轮询，已受理的后台任务继续执行；重新打开读回状态与确认进度。失败需复核已写入内容。
+- 检索测试带入目标库，展示来源、版本、distance 与召回摘要；这些字段辅助复核，不等于答案质量评分。
 
-## RAG（知识库）
+接口与预算见[后台导入](../docs/rag-background-ingest.md)和[后端接口范围](../backend/README.md#http-接口范围)。
 
-- 普通入口：设置 → 知识库 → 导入知识；支持 UTF-8 `.txt` / `.md` / `.markdown`。同名文件复用文档 ID，内容变化保留新旧版本；不同目录的同名文件应先重命名。导入完成后复核版本，知识库行的“检索测试”自动带入该库。
-- 状态：`GET /api/rag/status?knowledge_base_id=...`
-- 写入：`POST /api/rag/ingest`
-- 后台写入：`POST /api/rag/ingest-jobs`；状态列表/详情与排队取消使用对应 `ingest-jobs` 路由。运行调试窗口关闭后停止轮询，重新打开从服务端恢复状态与批次确认进度；失败时显示保留进度及复核入口，详见[后台导入说明](../docs/rag-background-ingest.md)。
-- 检索：`POST /api/rag/query`
-- 默认知识库 ID：`default`
-- 实际 collection：`kb_{user_hash}_{knowledge_base_id}`
+## 安全与设置
 
-## PostgreSQL / Memory / RAG 怎么看（前端通俗版）
+API Key 输入仅存于组件草稿，通过鉴权请求发给后端；摘要不返回 Key，保存后清空输入。access / refresh token 当前保存在浏览器 localStorage，不是 HttpOnly Cookie；部署须控制访问边界并保护同源脚本，详见[安全政策](../SECURITY.md)。
 
-- `PostgreSQL`：完整历史，支撑会话、消息、任务、trace、usage、导出。
-- `Memory`：当前会话便签，适合放“本次对话临时约束和结论”。
-- `RAG`：外部知识库，适合放手册、FAQ、产品文档。
+前端继续消费服务端统一 preview/output/result-summary，避免为不同 Provider 派生独立结果语义。对话、Trace 与导出可能包含用户业务内容，分享前按资料访问权限检查。
 
-## 本地运行
+## 验证与维护
 
 ```bash
-cd frontend
-npm install
-npm run dev
-```
-
-说明：
-
-- `npm run dev` / `npm run start` 固定监听 `127.0.0.1:3001`
-- 默认通过 `NEXT_PUBLIC_API_BASE_URL` 指向后端；未设置时使用 `http://127.0.0.1:8000`
-
-前端 e2e 常用命令：
-
-```bash
+npm --prefix frontend run lint
+bash scripts/ci_run_release_gate.sh --phase frontend
+# 在 frontend/ 下、按运行手册准备服务/权限后执行
 npm run test:e2e
 npm run test:e2e:smoke:matrix
 ```
 
-如需一键拉起依赖并启动前后端，可在仓库根目录执行：
+门禁包含 Node tests、lint、Turbopack 与 webpack 双生产构建；浏览器 fixture 和真实业务路径分开统计。应用基线 `103ea1f`：node 217/217、lint 0 error / 2 个既有 warning、双构建通过，Trace 桌面/手机和布局专项各 2/2。本轮未改前端应用，沿用该基线，最新核对见[验证记录](../docs/validation-baseline.md)。
 
-```bash
-./start_insightagent.command
-```
+本地收尾已封板，部署、真实资料与用户签收延期；当前按实际问题维护。Next.js / React / ESLint 精确版本见 [package.json](package.json) 与锁文件；ESLint 10 等上游兼容后再评估。写入工具并行、HTTP/DAG checkpoint 不在本轮范围。
 
-详细 e2e、服务启动、端口和提交权限以 [`docs/development-runbook.md`](../docs/development-runbook.md) 为准。
-
-## 当前约束
-
-- 当前前端优先保持与后端 SSE / trace / export 契约稳定对齐，不主动发散出新的本地语义分支。
-- registry-governance 已封板，settings/preflight/runtime trace/display/export 一致性保持稳定，不优先继续扩张旧 payload fallback。
-- 文档收敛只处理当前状态、验证基线、下一步计划/候选主线、稳定契约和高信号摘要；长期参考章节不应被整段删除。
+开发后同步三个 README 与实时计划；保留长期实现/契约参考，避免重复追加历史验证流水账。原始完整备份计划永远只读。

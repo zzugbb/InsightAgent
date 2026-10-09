@@ -1,11 +1,11 @@
-# Chroma 向量库（会话 Memory / 未来 RAG 可再拆服务）
+# 本地开发 Chroma 向量库（会话 Memory / 知识库 RAG），仅发布到 loopback
 # 启动：docker compose up -d chroma
 # 默认映射宿主机 8001 → 容器 8000；后端通过 CHROMA_HOST / CHROMA_PORT 连接（见 backend/.env.example）
 services:
   chroma:
     image: chromadb/chroma:latest
     ports:
-      - "8001:8000"
+      - "127.0.0.1:8001:8000"
     volumes:
       - chroma_data:/data
     environment:

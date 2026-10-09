@@ -22,7 +22,7 @@
 
 ## 验证与维护
 
-当前规划调用维护：`/tmp/insightagent-planning-call-usage-{static,postgres,accounting-regression,terminal-regression,stream-regression}.log`，提供方静态 **8/8**、反馈/规划 PostgreSQL **20/20**、用量汇总 **3/3**、终态 **10/10**、远端流 **6/6**。本机 HTTP 验证首轮/后续空正文的完整/部分/缺失用量，429 不复用上轮记录，保持原回退/失败、Trace/delta/export 与消息保存。完整门禁 `/tmp/insightagent-planning-call-usage-release.md` / `.json` **10/10 PASS**（后端 **2210/2210**、前端 **217/217**）；本轮未改前端或重跑浏览器，无真实模型调用。
+历史用量汇总 PostgreSQL 3/3 核对多轮 summary/dashboard/导出，后续规划反馈 20/20 覆盖空正文、非法图与 429 的完整/部分/缺失用量；均为本地 Provider/HTTP 替身。最新完整门禁见[验证基线](validation-baseline.md)。
 
 ```bash
 backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k usage_accounting
@@ -31,6 +31,5 @@ cd frontend
 node --test --experimental-strip-types app/components/workbench/usage-accounting.node.test.ts
 ```
 
-2026-10-08：后端静态 8/8、前端计算 6/6、独立 PostgreSQL 集成 3/3。真实任务的三次规划/决策共 36 token，回答 35 token，SSE/任务明细/汇总/趋势/排行榜/会话导出均按 71 token 对齐；另覆盖混合来源筛选、旧数据回退、排名与用户隔离。模型为本地替身。新专项已进入静态 release gate 与 backend-e2e。
 
-验证来源：`/tmp/insightagent-usage-accounting-{static,frontend,postgres}.log`；完整门禁 `/tmp/insightagent-usage-accounting-release.md` / `.json`（10/10 PASS、后端 2175/2175、前端 206/206）。保留历史验证来源。
+专项已纳入静态门禁与 backend-e2e；真实供应商已记录用量、放弃规划的未知消耗与账单边界见[真实模型验收](real-model-acceptance.md)。
