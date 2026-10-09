@@ -15,7 +15,7 @@
 
 ## 验证基线
 
-应用验证记录截至 2026-10-09。各项对应下表源码及环境；本轮界面维护以工作区结果为准，后端、真实模型及镜像沿用各自已有基线。写入工具并行、HTTP/DAG checkpoint 和 ESLint 10 不属于当前收尾。
+应用验证记录截至 2026-10-09。当前界面源码基线为 `b255509`，下表本地验证对应该提交的应用改动；后端、真实模型及镜像沿用各自已有基线。本地工程收尾完成，后续按可复现问题维护。写入工具并行、HTTP/DAG checkpoint 和 ESLint 10 不属于当前收尾。
 
 ### 源码与验证范围
 
@@ -26,8 +26,8 @@
 | 前端应用 `103ea1f` | node 217/217、lint 0 error / 2 既有 warning、Turbopack/webpack 双构建 | `/tmp/insightagent-ui-audit-frontend.{log,md,json}`、`insightagent-ui-audit-final-build-{turbo,webpack}.log` |
 | 浏览器 `103ea1f` | Chromium Trace 1440/390px 2/2、原布局 2/2；Chrome 登录/工作台/任务/治理、完整 ID 复制；Mac 键盘三浏览器/两尺寸 6/6 | `/tmp/insightagent-ui-audit-{trace,e2e}.log`；运行命令见[手册](development-runbook.md) |
 | 页面只读复核 `bc1346f` | Chrome 390×900：登录/注册、任务中心→详情、Failure 筛选；无页面横向溢出，覆盖层/console error 0；两个 ID 复制入口可见 | 本机开发页；复制内容与完整 e2e 沿用上一行 |
-| 当前界面维护（工作区，基于 `4d7d414`） | 前端门禁 4/4：node 217/217、lint 0 error / 2 既有 warning、Turbopack/webpack 双构建；hygiene 4/4 | `/tmp/insightagent-layout-frontend.{log,md,json}`、`/tmp/insightagent-layout-hygiene.{log,md,json}` |
-| 当前界面浏览器专项（工作区） | Chromium/Firefox/WebKit 共 27/27：21 项布局/交互与 6 项 Trace 流程图；工作台 1440/390px，登录 1920/390px、深浅主题、中英文、注册切换；模型设置 Enter 提交与关闭后草稿复位 | `/tmp/insightagent-layout-e2e-matrix.log`；隔离 HTTP fixture，不计作真实模型或真实后端写入验收 |
+| 当前界面维护 `b255509` | 前端门禁 4/4：node 217/217、lint 0 error / 2 既有 warning、Turbopack/webpack 双构建；hygiene 4/4 | `/tmp/insightagent-layout-frontend.{log,md,json}`、`/tmp/insightagent-layout-hygiene.{log,md,json}` |
+| 当前界面浏览器专项 `b255509` | Chromium/Firefox/WebKit 共 27/27：21 项布局/交互与 6 项 Trace 流程图；工作台 1440/390px，登录 1920/390px、深浅主题、中英文、注册切换；模型设置 Enter 提交与关闭后草稿复位 | `/tmp/insightagent-layout-e2e-matrix.log`；隔离 HTTP fixture，不计作真实模型或真实后端写入验收 |
 | 隔离验收工具 | RAG 静态 17/17、独立 PostgreSQL/Chroma 1/1，规划等待/取消/迟到结果/重跑 5/5，导出静态 1/1 与 drill 自测 | `/tmp/insightagent-oct09-{rag-static,rag-postgres,planning-postgres}.log`、`insightagent-finalcheck-*` |
 | 真实 GLM | 原四场景 3/4 完整通过，编辑表达式的独立分支恢复 1/1；原续算回退未实际调用计算工具 | [真实模型验收](acceptance.md#真实模型记录) |
 
@@ -43,7 +43,7 @@ tooling 首跑受沙箱 `/dev/fd` 限制，同命令提权复跑通过。后端�
 ### 镜像、CI 与外部验收
 
 - 历史配对 `pilot-42ccf1f` / `pilot-9e78810` 未包含 `103ea1f` 页面/工具维护与 `bc1346f` 摘要修复。旧 `0209651` / `218f94d` 配对有 ARM64 构建、禁网 384 维 embedding、生产 PostgreSQL/Chroma、SSE/Trace/导出、恢复/取消及 Agent HTTP 协议 7/7 证据；旧 `218f94d` 配对隔离 Compose 重建后数据保留通过。均为本地模型替身，最新镜像未重建。历史摘要/配方来源可从 `65f1fde` 与 `bc1346f` 的 Git 文档查询，不沿用旧 tag 直接发布。
-- 已推送基线 `1b850bc` 的 CI 绿由维护者确认，后续本地维护没有据此获得新的远端验证。提交是否推送、当前 CI 和运行健康应实时查询，不从本文历史状态推断。
+- 维护者于 2026-10-09 确认 `b255509` 已推送且 CI 绿色；本机检查时 `main` 与本地记录的 `origin/main` 一致、工作区干净。CI 状态由维护者提供，本轮未独立查询远端运行详情；后续文档提交不据此宣称获得新的 CI 验证。
 - 真实业务引用/冲突版本/无依据回答、目标任务签收与供应商账单按[验收指南](acceptance.md)另行核对；HTTPS/访问边界、升级回滚、双存储恢复、RPO/RTO 与责任人按[部署指南](pilot-deployment-preflight.md)实测。配置 PASS 不改变未验收结论。
 
 ## 本机检查入口
