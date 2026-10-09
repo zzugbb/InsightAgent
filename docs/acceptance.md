@@ -15,7 +15,7 @@
 
 ## 验证基线
 
-应用验证记录截至 2026-10-09。各项对应下表源码及环境，后续纯文档变更沿用这些应用基线。写入工具并行、HTTP/DAG checkpoint 和 ESLint 10 不属于当前收尾。
+应用验证记录截至 2026-10-09。各项对应下表源码及环境；本轮界面维护以工作区结果为准，后端、真实模型及镜像沿用各自已有基线。写入工具并行、HTTP/DAG checkpoint 和 ESLint 10 不属于当前收尾。
 
 ### 源码与验证范围
 
@@ -26,6 +26,8 @@
 | 前端应用 `103ea1f` | node 217/217、lint 0 error / 2 既有 warning、Turbopack/webpack 双构建 | `/tmp/insightagent-ui-audit-frontend.{log,md,json}`、`insightagent-ui-audit-final-build-{turbo,webpack}.log` |
 | 浏览器 `103ea1f` | Chromium Trace 1440/390px 2/2、原布局 2/2；Chrome 登录/工作台/任务/治理、完整 ID 复制；Mac 键盘三浏览器/两尺寸 6/6 | `/tmp/insightagent-ui-audit-{trace,e2e}.log`；运行命令见[手册](development-runbook.md) |
 | 页面只读复核 `bc1346f` | Chrome 390×900：登录/注册、任务中心→详情、Failure 筛选；无页面横向溢出，覆盖层/console error 0；两个 ID 复制入口可见 | 本机开发页；复制内容与完整 e2e 沿用上一行 |
+| 当前界面维护（工作区，基于 `4d7d414`） | 前端门禁 4/4：node 217/217、lint 0 error / 2 既有 warning、Turbopack/webpack 双构建；hygiene 4/4 | `/tmp/insightagent-layout-frontend.{log,md,json}`、`/tmp/insightagent-layout-hygiene.{log,md,json}` |
+| 当前界面浏览器专项（工作区） | Chromium/Firefox/WebKit 共 27/27：21 项布局/交互与 6 项 Trace 流程图；工作台 1440/390px，登录 1920/390px、深浅主题、中英文、注册切换；模型设置 Enter 提交与关闭后草稿复位 | `/tmp/insightagent-layout-e2e-matrix.log`；隔离 HTTP fixture，不计作真实模型或真实后端写入验收 |
 | 隔离验收工具 | RAG 静态 17/17、独立 PostgreSQL/Chroma 1/1，规划等待/取消/迟到结果/重跑 5/5，导出静态 1/1 与 drill 自测 | `/tmp/insightagent-oct09-{rag-static,rag-postgres,planning-postgres}.log`、`insightagent-finalcheck-*` |
 | 真实 GLM | 原四场景 3/4 完整通过，编辑表达式的独立分支恢复 1/1；原续算回退未实际调用计算工具 | [真实模型验收](acceptance.md#真实模型记录) |
 
@@ -35,6 +37,7 @@ tooling 首跑受沙箱 `/dev/fd` 限制，同命令提权复跑通过。后端�
 
 - 检索调用真实 Chroma，计算使用 AST 白名单，HTTP 工具按显式配置执行；remote 缺连接值明确失败。canonical mock、协议 fixture 和历史名称兼容属于必要演示/测试路径，不是实际工具假结果。
 - 普通 prompt 的测试故障标记已不影响生产 runner；登录中英文改为实际能力与估算费用，窄屏筛选、任务抽屉、发送按钮和长 ID 展示已修复。完整标识仍保留在 API/路由/导出和排障元数据中。
+- 当前界面维护调整桌面登录比例与 420px 表单上限、深色主题、弹窗宽度和内部滚动；模型连接优先展示，工具与诊断折叠，保存/验证保留在底部。知识库 Collection 移入可展开详情，完整值仍可复制；用量先显示概览，高级筛选/趋势/明细折叠；空 Trace 提供任务入口，任务中心收起高级筛选并限制长标题行数。后端接口与模型调用逻辑未改；本机 8000/3001 健康检查 HTTP 200，实际 Chrome 只读核对了模型设置与知识库弹窗，未保存配置或调用供应商。
 - 已检查跟踪文件，无真实 env、数据库、缓存、构建结果、日志或私钥产物；常见秘密特征扫描无命中，不等于完整 Git 历史或所有凭据类型已审计。`data/insightagent.plan.back.md` SHA256 保持 `5f6f79c4c7faf8a3becad7e6d7805fd86304425a2319b2702730fd4a54e4525d`。
 
 ### 镜像、CI 与外部验收

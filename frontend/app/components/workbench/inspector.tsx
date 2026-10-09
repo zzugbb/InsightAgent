@@ -318,85 +318,90 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         </span>
       </div>
 
-      <div className="trace-view-toolbar">
-        <Segmented
-          value={traceView}
-          onChange={(v) => setTraceView(v as "list" | "flow")}
-          options={[
-            { label: t.inspector.traceViewList, value: "list" },
-            { label: t.inspector.traceViewFlow, value: "flow" },
-          ]}
-        />
-      </div>
-      <div className="trace-filter-toolbar">
-        <Segmented
-          size="small"
-          data-testid="inspector-trace-semantic-filter"
-          value={traceSemanticFilter}
-          onChange={(v) => {
-            applyTraceSemanticFilter(
-              v as "all" | "planner" | "retrieval" | "calculator" | "failure",
-            );
-          }}
-          options={[
-            { label: t.inspector.traceSemanticFilterAll, value: "all" },
-            { label: t.inspector.traceSemanticFilterPlanner, value: "planner" },
-            { label: t.inspector.traceSemanticFilterRetrieval, value: "retrieval" },
-            { label: t.inspector.traceSemanticFilterCalculator, value: "calculator" },
-            { label: t.inspector.traceSemanticFilterFailure, value: "failure" },
-          ]}
-        />
-        <Segmented
-          size="small"
-          data-testid="inspector-trace-kind-filter"
-          value={traceKindFilter}
-          onChange={(v) =>
-            setTraceKindFilter(
-              v as "all" | "thought" | "action" | "observation" | "tool" | "rag" | "other",
-            )
-          }
-          options={[
-            { label: t.inspector.traceFilterAll, value: "all" },
-            { label: t.inspector.traceFilterThought, value: "thought" },
-            { label: t.inspector.traceFilterAction, value: "action" },
-            { label: t.inspector.traceFilterObservation, value: "observation" },
-            { label: t.inspector.traceFilterTool, value: "tool" },
-            { label: t.inspector.traceFilterRag, value: "rag" },
-            { label: t.inspector.traceFilterOther, value: "other" },
-          ]}
-        />
-        <Input
-          size="small"
-          allowClear
-          data-testid="inspector-trace-search"
-          value={traceSearchQuery}
-          onChange={(e) => setTraceSearchQuery(e.target.value)}
-          placeholder={t.inspector.traceSearchPlaceholder}
-        />
-        <Segmented
-          size="small"
-          value={traceDensity}
-          onChange={(v) => setTraceDensity(v as "comfortable" | "compact")}
-          options={[
-            { label: t.inspector.traceDensityComfortable, value: "comfortable" },
-            { label: t.inspector.traceDensityCompact, value: "compact" },
-          ]}
-        />
-      </div>
-      <div className="trace-kind-stats">
-        <span>{t.inspector.traceFlow.kindThought}: {traceKindStats.thought}</span>
-        <span>{t.inspector.traceFlow.kindAction}: {traceKindStats.action}</span>
-        <span>{t.inspector.traceFlow.kindObservation}: {traceKindStats.observation}</span>
-        <span>{t.inspector.traceFlow.kindTool}: {traceKindStats.tool}</span>
-        <span>{t.inspector.traceFlow.kindRag}: {traceKindStats.rag}</span>
-        <span>{t.inspector.traceFlow.kindOther}: {traceKindStats.other}</span>
-      </div>
-      <div className="trace-kind-stats">
-        <span>{t.inspector.traceSemanticFilterPlanner}: {traceSemanticStats.planner}</span>
-        <span>{t.inspector.traceSemanticFilterRetrieval}: {traceSemanticStats.retrieval}</span>
-        <span>{t.inspector.traceSemanticFilterCalculator}: {traceSemanticStats.calculator}</span>
-        <span>{t.inspector.traceSemanticFilterFailure}: {traceSemanticStats.failure}</span>
-      </div>
+      {sseTraceSteps.length > 0 ? (
+        <>
+          <div className="trace-view-toolbar">
+            <Segmented
+              value={traceView}
+              onChange={(v) => setTraceView(v as "list" | "flow")}
+              options={[
+                { label: t.inspector.traceViewList, value: "list" },
+                { label: t.inspector.traceViewFlow, value: "flow" },
+              ]}
+            />
+          </div>
+          <div className="trace-filter-toolbar">
+            <Segmented
+              size="small"
+              data-testid="inspector-trace-semantic-filter"
+              value={traceSemanticFilter}
+              onChange={(v) => {
+                applyTraceSemanticFilter(
+                  v as "all" | "planner" | "retrieval" | "calculator" | "failure",
+                );
+              }}
+              options={[
+                { label: t.inspector.traceSemanticFilterAll, value: "all" },
+                { label: t.inspector.traceSemanticFilterPlanner, value: "planner" },
+                { label: t.inspector.traceSemanticFilterRetrieval, value: "retrieval" },
+                { label: t.inspector.traceSemanticFilterCalculator, value: "calculator" },
+                { label: t.inspector.traceSemanticFilterFailure, value: "failure" },
+              ]}
+            />
+            <Segmented
+              size="small"
+              data-testid="inspector-trace-kind-filter"
+              value={traceKindFilter}
+              onChange={(v) =>
+                setTraceKindFilter(
+                  v as "all" | "thought" | "action" | "observation" | "tool" | "rag" | "other",
+                )
+              }
+              options={[
+                { label: t.inspector.traceFilterAll, value: "all" },
+                { label: t.inspector.traceFilterThought, value: "thought" },
+                { label: t.inspector.traceFilterAction, value: "action" },
+                { label: t.inspector.traceFilterObservation, value: "observation" },
+                { label: t.inspector.traceFilterTool, value: "tool" },
+                { label: t.inspector.traceFilterRag, value: "rag" },
+                { label: t.inspector.traceFilterOther, value: "other" },
+              ]}
+            />
+            <Input
+              size="small"
+              allowClear
+              data-testid="inspector-trace-search"
+              value={traceSearchQuery}
+              onChange={(e) => setTraceSearchQuery(e.target.value)}
+              placeholder={t.inspector.traceSearchPlaceholder}
+            />
+            <Segmented
+              size="small"
+              value={traceDensity}
+              onChange={(v) => setTraceDensity(v as "comfortable" | "compact")}
+              options={[
+                { label: t.inspector.traceDensityComfortable, value: "comfortable" },
+                { label: t.inspector.traceDensityCompact, value: "compact" },
+              ]}
+            />
+          </div>
+          <div className="trace-kind-stats">
+            <span>{t.inspector.traceFlow.kindThought}: {traceKindStats.thought}</span>
+            <span>{t.inspector.traceFlow.kindAction}: {traceKindStats.action}</span>
+            <span>{t.inspector.traceFlow.kindObservation}: {traceKindStats.observation}</span>
+            <span>{t.inspector.traceFlow.kindTool}: {traceKindStats.tool}</span>
+            <span>{t.inspector.traceFlow.kindRag}: {traceKindStats.rag}</span>
+            <span>{t.inspector.traceFlow.kindOther}: {traceKindStats.other}</span>
+          </div>
+          <div className="trace-kind-stats">
+            <span>{t.inspector.traceSemanticFilterPlanner}: {traceSemanticStats.planner}</span>
+            <span>{t.inspector.traceSemanticFilterRetrieval}: {traceSemanticStats.retrieval}</span>
+            <span>{t.inspector.traceSemanticFilterCalculator}: {traceSemanticStats.calculator}</span>
+            <span>{t.inspector.traceSemanticFilterFailure}: {traceSemanticStats.failure}</span>
+          </div>
+
+        </>
+      ) : null}
 
       {traceView === "list" && filteredTraceSteps.length > TRACE_PREVIEW ? (
         <div className="trace-density-row">
@@ -417,26 +422,29 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         </div>
       ) : null}
 
-      <div className="panel-actions">
-        <Space wrap>
-          <Button
-            type="default"
-            disabled={isStreaming || !hasTaskContext}
-            onClick={onReplayTrace}
-          >
-            {t.inspector.replayTrace}
-          </Button>
-          <Button
-            type="default"
-            disabled={isStreaming || !hasTaskContext}
-            onClick={onLoadDelta}
-          >
-            {t.inspector.loadDelta}
-          </Button>
-        </Space>
-      </div>
+      {hasTaskContext ? (
+        <div className="panel-actions">
+          <Space wrap>
+            <Button
+              type="default"
+              disabled={isStreaming || !hasTaskContext}
+              onClick={onReplayTrace}
+            >
+              {t.inspector.replayTrace}
+            </Button>
+            <Button
+              type="default"
+              disabled={isStreaming || !hasTaskContext}
+              onClick={onLoadDelta}
+            >
+              {t.inspector.loadDelta}
+            </Button>
+          </Space>
+        </div>
 
-      <p className="panel-note">{sseMessage}</p>
+      ) : null}
+
+      {sseMessage && (hasTaskContext || isStreaming) ? <p className="panel-note">{sseMessage}</p> : null}
 
       {traceView === "flow" && filteredTraceSteps.length > 0 ? (
         <TraceFlowView steps={filteredTraceSteps} colorMode={theme} />
@@ -479,7 +487,12 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       ) : filteredTraceSteps.length === 0 && sseTraceSteps.length > 0 ? (
         <div className="panel-empty">{t.inspector.traceNoMatch}</div>
       ) : (
-        <div className="panel-empty">{t.inspector.traceEmpty}</div>
+        <div className="panel-empty trace-empty-state" data-testid="inspector-trace-empty">
+          <p>{hasTaskContext ? t.inspector.traceTaskEmpty : t.inspector.traceEmpty}</p>
+          {!isStreaming ? (
+            <Button onClick={onOpenTaskCenter}>{t.inspector.openTaskCenter}</Button>
+          ) : null}
+        </div>
       )}
     </section>
   );

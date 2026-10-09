@@ -415,9 +415,10 @@ export function UsageDashboardModal({
       open={open}
       onCancel={onClose}
       footer={null}
-      width={860}
+      width={960}
+      centered
       destroyOnHidden
-      className="usage-dashboard-ant-modal"
+      className="usage-dashboard-ant-modal workbench-dialog"
     >
       <Typography.Paragraph className="usage-dashboard-lead" type="secondary">
         {t.sidebar.usage.lead}
@@ -515,32 +516,36 @@ export function UsageDashboardModal({
           ]}
         />
       </div>
-      <div
-        className="usage-governance-filter-row"
-        data-testid="usage-governance-filter-row"
-      >
-        <span className="usage-governance-filter-label">
-          {t.sidebar.usage.governanceFilterTitle}
-        </span>
-        <Select
-          size="small"
-          data-testid="usage-governance-profile-filter"
-          value={toolRegistryProfileFilter}
-          onChange={(value) => setToolRegistryProfileFilter(value)}
-          options={profileFilterOptions}
-          popupMatchSelectWidth={false}
-          style={{ minWidth: 180 }}
-        />
-        <Select
-          size="small"
-          data-testid="usage-governance-source-filter"
-          value={toolRegistryProviderSourceFilter}
-          onChange={(value) => setToolRegistryProviderSourceFilter(value)}
-          options={providerSourceFilterOptions}
-          popupMatchSelectWidth={false}
-          style={{ minWidth: 180 }}
-        />
-      </div>
+      <details className="workbench-disclosure" data-testid="usage-advanced-section">
+        <summary>{t.sidebar.usage.governanceFilterTitle}</summary>
+        <div
+          className="usage-governance-filter-row"
+          data-testid="usage-governance-filter-row"
+        >
+          <span className="usage-governance-filter-label">
+            {t.sidebar.usage.governanceFilterTitle}
+          </span>
+          <Select
+            size="small"
+            data-testid="usage-governance-profile-filter"
+            value={toolRegistryProfileFilter}
+            onChange={(value) => setToolRegistryProfileFilter(value)}
+            options={profileFilterOptions}
+            popupMatchSelectWidth={false}
+            style={{ minWidth: 180 }}
+          />
+          <Select
+            size="small"
+            data-testid="usage-governance-source-filter"
+            value={toolRegistryProviderSourceFilter}
+            onChange={(value) => setToolRegistryProviderSourceFilter(value)}
+            options={providerSourceFilterOptions}
+            popupMatchSelectWidth={false}
+            style={{ minWidth: 180 }}
+          />
+        </div>
+
+      </details>
 
       {usageQuery.isLoading ? (
         <p className="usage-dashboard-note">{t.sidebar.usage.loading}</p>
@@ -580,6 +585,8 @@ export function UsageDashboardModal({
         </div>
       ) : null}
 
+      <p className="usage-dashboard-note">{t.sidebar.usage.costEstimateHint}</p>
+
       {summary ? (
         <p className="usage-dashboard-coverage">
           {t.sidebar.usage.coverage(summary.tasks_with_usage, summary.tasks_total)}
@@ -618,123 +625,131 @@ export function UsageDashboardModal({
         </>
       ) : null}
 
-      <div className="usage-trend-block">
-        <div className="usage-trend-head">
-          <p className="usage-trend-title">{t.sidebar.usage.trendTitle}</p>
-          <Segmented<UsageMetric>
+      <details className="workbench-disclosure" data-testid="usage-trends-section">
+        <summary>{t.sidebar.usage.trendTitle}</summary>
+        <div className="usage-trend-block">
+          <div className="usage-trend-head">
+            <p className="usage-trend-title">{t.sidebar.usage.trendTitle}</p>
+            <Segmented<UsageMetric>
+              size="small"
+              value={metric}
+              onChange={(value) => setMetric(value)}
+              options={[
+                { label: t.sidebar.usage.metricTokens, value: "tokens" },
+                { label: t.sidebar.usage.metricCost, value: "cost" },
+              ]}
+            />
+          </div>
+          <div className="usage-trend-list">
+            {trendRows.length === 0 ? (
+              <p className="usage-dashboard-note">{t.sidebar.usage.trendEmpty}</p>
+            ) : (
+              trendRows.map((row) => {
+                const value = metric === "tokens" ? row.total_tokens : row.cost_estimate;
+                const widthPct = trendMax > 0 ? Math.max((value / trendMax) * 100, 2) : 0;
+                return (
+                  <div key={row.day} className="usage-trend-row">
+                    <span className="usage-trend-day">{formatDateDay(row.day, localeTag)}</span>
+                    <div className="usage-trend-bar-wrap" aria-hidden>
+                      <div
+                        className="usage-trend-bar"
+                        style={{ width: `${widthPct}%` }}
+                      />
+                    </div>
+                    <span className="usage-trend-value">
+                      {metric === "tokens"
+                        ? tokenFmt.format(Math.max(0, Math.trunc(value)))
+                        : formatCost(value)}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+        <div className="usage-source-trend-block" data-testid="usage-source-trend-block">
+          <p className="usage-trend-title">{t.sidebar.usage.sourceTrendTitle}</p>
+          {sourceTrendRows.length === 0 ? (
+            <p className="usage-dashboard-note">{t.sidebar.usage.trendEmpty}</p>
+          ) : (
+            <div className="usage-source-trend-list" data-testid="usage-source-trend-list">
+              {sourceTrendRows.map((row) => (
+                <div
+                  key={`source-${row.day}`}
+                  className="usage-source-trend-row"
+                  data-testid="usage-source-trend-row"
+                >
+                  <span className="usage-trend-day">{formatDateDay(row.day, localeTag)}</span>
+                  <div className="usage-source-trend-tags">
+                    <Tag>
+                      {t.sidebar.usage.sourceProvider}:{" "}
+                      {tokenFmt.format(Math.max(0, Math.trunc(row.source_tasks_provider)))}
+                    </Tag>
+                    <Tag>
+                      {t.sidebar.usage.sourceEstimated}:{" "}
+                      {tokenFmt.format(Math.max(0, Math.trunc(row.source_tasks_estimated)))}
+                    </Tag>
+                    <Tag>
+                      {t.sidebar.usage.sourceMixed}:{" "}
+                      {tokenFmt.format(Math.max(0, Math.trunc(row.source_tasks_mixed)))}
+                    </Tag>
+                    <Tag>
+                      {t.sidebar.usage.sourceLegacy}:{" "}
+                      {tokenFmt.format(Math.max(0, Math.trunc(row.source_tasks_legacy)))}
+                    </Tag>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+      </details>
+
+      <details className="workbench-disclosure" data-testid="usage-details-section">
+        <summary>{t.sidebar.usage.detailsSection}</summary>
+        <div className="usage-bottom-head">
+          <p className="usage-trend-title">
+            {view === "sessions" ? t.sidebar.usage.sessionsTitle : t.sidebar.usage.tasksTitle}
+          </p>
+          <Segmented<UsageView>
             size="small"
-            value={metric}
-            onChange={(value) => setMetric(value)}
+            value={view}
+            onChange={(value) => setView(value)}
             options={[
-              { label: t.sidebar.usage.metricTokens, value: "tokens" },
-              { label: t.sidebar.usage.metricCost, value: "cost" },
+              { label: t.sidebar.usage.sessionsTitle, value: "sessions" },
+              { label: t.sidebar.usage.tasksTitle, value: "tasks" },
             ]}
           />
         </div>
-        <div className="usage-trend-list">
-          {trendRows.length === 0 ? (
-            <p className="usage-dashboard-note">{t.sidebar.usage.trendEmpty}</p>
+
+        <div className="usage-dashboard-table-wrap" data-testid="usage-dashboard-table-wrap">
+          {view === "sessions" ? (
+            <Table<UsageDashboardSessionRow>
+              size="small"
+              rowKey={(row) => row.session_id}
+              columns={sessionColumns}
+              dataSource={usageQuery.data?.by_session ?? []}
+              loading={usageQuery.isLoading}
+              pagination={false}
+              locale={{ emptyText: t.sidebar.usage.tableNoData }}
+              scroll={{ x: 760 }}
+            />
           ) : (
-            trendRows.map((row) => {
-              const value = metric === "tokens" ? row.total_tokens : row.cost_estimate;
-              const widthPct = trendMax > 0 ? Math.max((value / trendMax) * 100, 2) : 0;
-              return (
-                <div key={row.day} className="usage-trend-row">
-                  <span className="usage-trend-day">{formatDateDay(row.day, localeTag)}</span>
-                  <div className="usage-trend-bar-wrap" aria-hidden>
-                    <div
-                      className="usage-trend-bar"
-                      style={{ width: `${widthPct}%` }}
-                    />
-                  </div>
-                  <span className="usage-trend-value">
-                    {metric === "tokens"
-                      ? tokenFmt.format(Math.max(0, Math.trunc(value)))
-                      : formatCost(value)}
-                  </span>
-                </div>
-              );
-            })
+            <Table<UsageDashboardTaskRow>
+              size="small"
+              rowKey={(row) => row.task_id}
+              columns={taskColumns}
+              dataSource={usageQuery.data?.top_tasks ?? []}
+              loading={usageQuery.isLoading}
+              pagination={false}
+              locale={{ emptyText: t.sidebar.usage.tableNoData }}
+              scroll={{ x: 760 }}
+            />
           )}
         </div>
-      </div>
-      <div className="usage-source-trend-block" data-testid="usage-source-trend-block">
-        <p className="usage-trend-title">{t.sidebar.usage.sourceTrendTitle}</p>
-        {sourceTrendRows.length === 0 ? (
-          <p className="usage-dashboard-note">{t.sidebar.usage.trendEmpty}</p>
-        ) : (
-          <div className="usage-source-trend-list" data-testid="usage-source-trend-list">
-            {sourceTrendRows.map((row) => (
-              <div
-                key={`source-${row.day}`}
-                className="usage-source-trend-row"
-                data-testid="usage-source-trend-row"
-              >
-                <span className="usage-trend-day">{formatDateDay(row.day, localeTag)}</span>
-                <div className="usage-source-trend-tags">
-                  <Tag>
-                    {t.sidebar.usage.sourceProvider}:{" "}
-                    {tokenFmt.format(Math.max(0, Math.trunc(row.source_tasks_provider)))}
-                  </Tag>
-                  <Tag>
-                    {t.sidebar.usage.sourceEstimated}:{" "}
-                    {tokenFmt.format(Math.max(0, Math.trunc(row.source_tasks_estimated)))}
-                  </Tag>
-                  <Tag>
-                    {t.sidebar.usage.sourceMixed}:{" "}
-                    {tokenFmt.format(Math.max(0, Math.trunc(row.source_tasks_mixed)))}
-                  </Tag>
-                  <Tag>
-                    {t.sidebar.usage.sourceLegacy}:{" "}
-                    {tokenFmt.format(Math.max(0, Math.trunc(row.source_tasks_legacy)))}
-                  </Tag>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
-      <div className="usage-bottom-head">
-        <p className="usage-trend-title">
-          {view === "sessions" ? t.sidebar.usage.sessionsTitle : t.sidebar.usage.tasksTitle}
-        </p>
-        <Segmented<UsageView>
-          size="small"
-          value={view}
-          onChange={(value) => setView(value)}
-          options={[
-            { label: t.sidebar.usage.sessionsTitle, value: "sessions" },
-            { label: t.sidebar.usage.tasksTitle, value: "tasks" },
-          ]}
-        />
-      </div>
-
-      <div className="usage-dashboard-table-wrap" data-testid="usage-dashboard-table-wrap">
-        {view === "sessions" ? (
-          <Table<UsageDashboardSessionRow>
-            size="small"
-            rowKey={(row) => row.session_id}
-            columns={sessionColumns}
-            dataSource={usageQuery.data?.by_session ?? []}
-            loading={usageQuery.isLoading}
-            pagination={false}
-            locale={{ emptyText: t.sidebar.usage.tableNoData }}
-            scroll={{ x: 760 }}
-          />
-        ) : (
-          <Table<UsageDashboardTaskRow>
-            size="small"
-            rowKey={(row) => row.task_id}
-            columns={taskColumns}
-            dataSource={usageQuery.data?.top_tasks ?? []}
-            loading={usageQuery.isLoading}
-            pagination={false}
-            locale={{ emptyText: t.sidebar.usage.tableNoData }}
-            scroll={{ x: 760 }}
-          />
-        )}
-      </div>
+      </details>
 
       {!activeSessionId && scope === "session" ? (
         <p className="usage-dashboard-note">{t.sidebar.usage.scopeSessionFallback}</p>

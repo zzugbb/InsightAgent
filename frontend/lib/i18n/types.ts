@@ -108,6 +108,7 @@ export type Messages = {
     moreActions: string;
   };
   taskCenter: {
+    advancedFilters: string;
     title: string;
     lead: string;
     scopeLabel: string;
@@ -230,6 +231,8 @@ export type Messages = {
     expandSidebarAria: string;
     loadMoreSessions: string;
     usage: {
+      detailsSection: string;
+      costEstimateHint: string;
       title: string;
       lead: string;
       scopeGlobal: string;
@@ -454,6 +457,7 @@ export type Messages = {
     replayTrace: string;
     loadDelta: string;
     stepEmpty: string;
+    traceTaskEmpty: string;
     traceEmpty: string;
     traceNoMatch: string;
     traceVisibleCount: (shown: number, total: number) => string;
@@ -843,6 +847,8 @@ export type Messages = {
     exportMarkdownDone: string;
   };
   settings: {
+    toolsSection: string;
+    diagnosticsSection: string;
     title: string;
     lead: string;
     close: string;

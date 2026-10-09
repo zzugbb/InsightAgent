@@ -123,6 +123,7 @@ export const en: Messages = {
     moreActions: "More",
   },
   taskCenter: {
+    advancedFilters: "Advanced filters",
     title: "Task Center",
     lead:
       "Filter, search, and locate task runs quickly, then jump into task detail for deep replay.",
@@ -300,6 +301,8 @@ export const en: Messages = {
     expandSidebarAria: "Expand sidebar",
     loadMoreSessions: "Load more",
     usage: {
+      detailsSection: "Usage details and rankings",
+      costEstimateHint: "Costs use configured rates and are estimates, not provider bills. Token sources are labeled separately.",
       title: "Usage dashboard",
       lead:
         "Aggregate token and cost usage for this account in a recent window, with global/current-session scope and session/task rankings.",
@@ -315,9 +318,9 @@ export const en: Messages = {
       summaryTasksTotal: "Tasks total",
       summaryTasksWithUsage: "Tasks with usage",
       summaryTotalTokens: "Total tokens",
-      summaryTotalCost: "Total cost",
+      summaryTotalCost: "Estimated total cost",
       summaryAvgTokens: "Avg tokens / task",
-      summaryAvgCost: "Avg cost / task",
+      summaryAvgCost: "Estimated cost / task",
       coverage: (withUsage: number, total: number) =>
         `Coverage ${withUsage} / ${total}`,
       sourceTitle: "Source breakdown",
@@ -552,6 +555,7 @@ export const en: Messages = {
     replayTrace: "Replay trace",
     loadDelta: "Load delta",
     stepEmpty: "No text for this step.",
+    traceTaskEmpty: "No steps for this task yet. Replay saved records or browse another task.",
     traceEmpty:
       "After you send a message, steps appear here; or pick a historical task under Context to replay.",
     traceNoMatch: "No trace steps match the current filters.",
@@ -975,6 +979,8 @@ export const en: Messages = {
     exportMarkdownDone: "Task Markdown exported.",
   },
   settings: {
+    toolsSection: "Tool configuration (advanced)",
+    diagnosticsSection: "Saved configuration and runtime diagnostics",
     title: "Runtime settings",
     lead: "Configure provider, model, and mode; changes apply to the whole workbench after save.",
     close: "Dismiss",

@@ -11,6 +11,8 @@ import { apiDeleteJson, apiJson, apiPostJson } from "../../../lib/api-client";
 import { toUserFacingError } from "../../../lib/errors";
 import { useMessages } from "../../../lib/preferences-context";
 
+import { IdentifierText } from "./identifier-text";
+
 import type {
   RagKnowledgeBaseDocumentMutateResponse,
   RagKnowledgeBaseListResponse,
@@ -188,6 +190,10 @@ export function KnowledgeBaseGovernanceModal({
         className="kb-version-details"
         data-testid="kb-version-detail-panel"
       >
+        <div className="kb-collection-detail">
+          <span>{t.sidebar.knowledgeBase.tableCollection}</span>
+          <IdentifierText value={row.collection} />
+        </div>
         <div className="kb-version-details-header">
           <strong>{t.sidebar.knowledgeBase.versionDetailsTitle}</strong>
           <span>
@@ -303,14 +309,14 @@ export function KnowledgeBaseGovernanceModal({
     {
       title: t.sidebar.knowledgeBase.tableKbId,
       dataIndex: "knowledge_base_id",
-      width: 220,
+      width: 300,
       render: (value: string) => {
         const accessHint = resolveAccessHint(value);
         const AccessIcon =
           accessHint?.kind === "shared_readonly" ? LockKeyhole : UsersRound;
         return (
           <div className="kb-id-stack">
-            <code className="kb-id-cell">{value}</code>
+            <Typography.Text className="kb-id-cell" ellipsis={{ tooltip: value }} copyable={{ text: value }}>{value}</Typography.Text>
             {accessHint ? (
               <span
                 className={`kb-access-hint kb-access-hint--${accessHint.kind}`}
@@ -324,15 +330,6 @@ export function KnowledgeBaseGovernanceModal({
           </div>
         );
       },
-    },
-    {
-      title: t.sidebar.knowledgeBase.tableCollection,
-      dataIndex: "collection",
-      render: (value: string) => (
-        <span className="kb-collection-cell" title={value}>
-          {value}
-        </span>
-      ),
     },
     {
       title: t.sidebar.knowledgeBase.tableDocuments,
@@ -369,7 +366,7 @@ export function KnowledgeBaseGovernanceModal({
     {
       title: t.sidebar.knowledgeBase.tableActions,
       className: "kb-actions-col",
-      width: 170,
+      width: 220,
       render: (_, row) => {
         const accessHint = resolveAccessHint(row.knowledge_base_id);
         const clearBusy =
@@ -452,9 +449,10 @@ export function KnowledgeBaseGovernanceModal({
       open={open}
       onCancel={onClose}
       footer={null}
-      width={720}
+      width={1080}
+      centered
       destroyOnHidden
-      className="knowledge-base-governance-ant-modal"
+      className="knowledge-base-governance-ant-modal workbench-dialog"
     >
       <Typography.Paragraph className="kb-governance-lead" type="secondary">
         {t.sidebar.knowledgeBase.lead}
@@ -554,14 +552,13 @@ export function KnowledgeBaseGovernanceModal({
             loading={listQuery.isLoading}
             expandable={{
               expandedRowRender: renderVersionDetails,
-              rowExpandable: (row) =>
-                resolveKnowledgeBaseVersionRows(row.document_versions).length > 0,
+              rowExpandable: () => true,
               expandedRowKeys,
               onExpandedRowsChange: (keys) => setManualExpandedRowKeys([...keys]),
             }}
             pagination={false}
             locale={{ emptyText: t.sidebar.knowledgeBase.noKnowledgeBases }}
-            scroll={{ x: 560 }}
+            scroll={{ x: 700 }}
           />
         </div>
       ) : null}

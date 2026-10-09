@@ -92,6 +92,8 @@ npm --prefix frontend run dev
 
 打开 [工作台](http://127.0.0.1:3001/)，注册并登录；首个注册账号具有管理员角色。默认 mock 模式可验证离线演示路径。使用真实模型时，在“模型设置”中填写 remote、模型、兼容 API 地址和 Key，校验后保存。Key 仅发送给后端，不进入前端构建；连接校验不等于真实任务验收。
 
+工作台支持桌面分栏与手机抽屉。模型设置优先展示连接信息，工具配置和运行诊断按需展开；知识库主表展示关键字段，Collection 完整标识在行详情中查看、复制。用量概览、趋势与排行分层展示，费用为估算值。
+
 [健康检查](http://127.0.0.1:8000/health) · [API 文档](http://127.0.0.1:8000/docs) · [OpenAPI](http://127.0.0.1:8000/openapi.json)
 
 开发 Compose 使用开发凭据、浮动基础镜像和本地端口；单机试点使用独立的 [生产配方与预检](docs/pilot-deployment-preflight.md)。`start_insightagent.command` 是本机便利脚本，会释放应用端口并执行依赖 `up`；已有服务或旧 Chroma 数据时优先使用手动命令，先读[运行手册](docs/development-runbook.md)和[备份说明](docs/pilot-deployment-preflight.md#开发栈备份恢复)。

@@ -286,10 +286,35 @@ export function ModelSettingsModal({
       title={<span id="model-settings-title">{t.settings.title}</span>}
       open={open}
       onCancel={onClose}
-      footer={null}
-      width={640}
+      footer={
+        <Space>
+          <Button
+            type="primary"
+            htmlType="submit"
+            form="model-settings-form"
+            loading={saveMutation.isPending}
+            disabled={isLoading || validateMutation.isPending}
+            data-testid="model-settings-save"
+          >
+            {saveMutation.isPending ? t.settings.saving : t.settings.save}
+          </Button>
+          <Button
+            onClick={validateForm}
+            loading={validateMutation.isPending}
+            disabled={isLoading || saveMutation.isPending}
+            data-testid="model-settings-validate"
+          >
+            {validateMutation.isPending
+              ? t.settings.validating
+              : t.settings.validate}
+          </Button>
+        </Space>
+      }
+      width={840}
+      centered
+      mask={{ closable: false }}
       destroyOnHidden
-      className="model-settings-ant-modal"
+      className="model-settings-ant-modal workbench-dialog"
       styles={{ body: { paddingTop: 8 } }}
     >
       <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
@@ -308,220 +333,210 @@ export function ModelSettingsModal({
         <Typography.Paragraph type="secondary">{t.settings.loading}</Typography.Paragraph>
       ) : (
         <Form
+          id="model-settings-form"
           autoComplete="off"
           layout="vertical"
           className="model-settings-ant-form"
           onFinish={submitForm}
         >
-          <Form.Item label={t.settings.fieldMode}>
-            <Select
-              data-testid="model-settings-mode"
-              value={form.mode}
-              onChange={handleModeChange}
-              options={[
-                { value: "mock", label: "mock" },
-                { value: "remote", label: "remote" },
-              ]}
-            />
-          </Form.Item>
-          <Form.Item label={t.settings.fieldProvider}>
-            {isRemoteMode ? (
-              <Input
-                autoComplete="off"
-                name="model-provider"
-                data-1p-ignore="true"
-                data-lpignore="true"
-                data-testid="model-settings-provider"
-                value={form.provider}
-                onChange={(e) => setRemoteField("provider", e.target.value)}
+          <div className="model-settings-basic-grid">
+            <Form.Item label={t.settings.fieldMode}>
+              <Select
+                data-testid="model-settings-mode"
+                value={form.mode}
+                onChange={handleModeChange}
+                options={[
+                  { value: "mock", label: "mock" },
+                  { value: "remote", label: "remote" },
+                ]}
               />
-            ) : (
-              <Input value="mock" disabled data-testid="model-settings-provider" />
-            )}
-          </Form.Item>
-          <Form.Item label={t.settings.fieldModel}>
-            {isRemoteMode ? (
-              <Input
-                autoComplete="off"
-                name="model-name"
-                data-1p-ignore="true"
-                data-lpignore="true"
-                data-testid="model-settings-model"
-                value={form.model}
-                onChange={(e) => setRemoteField("model", e.target.value)}
-              />
-            ) : (
-              <Input value="mock-gpt" disabled data-testid="model-settings-model" />
-            )}
-          </Form.Item>
-          <Form.Item label={t.settings.fieldToolRegistryProfile}>
-            <Select
-              data-testid="model-settings-tool-registry-profile"
-              value={form.tool_registry_profile}
-              onChange={(value) => setRemoteField("tool_registry_profile", value)}
-              options={(data?.available_tool_registry_profiles ?? [form.tool_registry_profile]).map(
-                (value) => ({
-                  value,
-                  label: value,
-                }),
-              )}
-            />
-            <Typography.Paragraph
-              type="secondary"
-              data-testid="model-settings-selected-profile-summary"
-              style={{ marginTop: 8, marginBottom: 0 }}
-            >
-              {t.settings.profileSummaryLabel}: {selectedProfileTools}
-            </Typography.Paragraph>
-            <Typography.Paragraph
-              type="secondary"
-              data-testid="model-settings-selected-profile-tool-details"
-              style={{ marginTop: 8, marginBottom: 0 }}
-            >
-              {selectedProfileToolDetailsSummary}
-            </Typography.Paragraph>
-          </Form.Item>
-          <Form.Item label={t.settings.fieldToolRegistrySource}>
-            <Select
-              data-testid="model-settings-tool-registry-source"
-              value={form.tool_registry_provider_source}
-              onChange={(value) => setRemoteField("tool_registry_provider_source", value)}
-              options={(data?.available_tool_registry_provider_sources ?? [
-                form.tool_registry_provider_source,
-              ]).map((value) => ({
-                value,
-                label: value,
-              }))}
-            />
-            <Typography.Paragraph
-              type="secondary"
-              data-testid="model-settings-selected-source-summary"
-              style={{ marginTop: 8, marginBottom: 0 }}
-            >
-              {t.settings.sourceSummaryLabel}: {t.settings.sourceSummaryProfileLabel}{" "}
-              {selectedSourceBaseProfile};{" "}
-              {t.settings.sourceSummaryAllowedToolsLabel} {selectedSourceTools}
-            </Typography.Paragraph>
-            <Typography.Paragraph
-              type="secondary"
-              data-testid="model-settings-selected-source-tool-details"
-              style={{ marginTop: 8, marginBottom: 0 }}
-            >
-              {selectedSourceToolDetailsSummary}
-            </Typography.Paragraph>
-            <Typography.Paragraph
-              type="secondary"
-              data-testid="model-settings-selected-source-diagnostics"
-              style={{ marginTop: 8, marginBottom: 0 }}
-            >
-              {t.settings.sourceDiagnosticsLabel}: {selectedSourceDiagnosticsSummary}
-            </Typography.Paragraph>
-          </Form.Item>
-          {isRemoteMode ? (
-            <>
-              <Form.Item label={t.settings.fieldBaseUrl}>
+            </Form.Item>
+            <Form.Item label={t.settings.fieldProvider}>
+              {isRemoteMode ? (
                 <Input
                   autoComplete="off"
-                  name="model-base-url"
+                  name="model-provider"
                   data-1p-ignore="true"
                   data-lpignore="true"
-                  data-testid="model-settings-base-url"
-                  value={form.base_url}
-                  onChange={(e) => setRemoteField("base_url", e.target.value)}
+                  data-testid="model-settings-provider"
+                  value={form.provider}
+                  onChange={(e) => setRemoteField("provider", e.target.value)}
                 />
-              </Form.Item>
-              <Form.Item label={t.settings.fieldApiKey}>
-                <Input.Password
-                  autoComplete="new-password"
-                  name="model-api-key"
+              ) : (
+                <Input value="mock" disabled data-testid="model-settings-provider" />
+              )}
+            </Form.Item>
+            <Form.Item label={t.settings.fieldModel}>
+              {isRemoteMode ? (
+                <Input
+                  autoComplete="off"
+                  name="model-name"
                   data-1p-ignore="true"
                   data-lpignore="true"
-                  data-testid="model-settings-api-key"
-                  value={form.api_key}
-                  onChange={(e) => setRemoteField("api_key", e.target.value)}
-                  placeholder={
-                    data?.api_key_configured
-                      ? t.settings.apiKeyConfiguredClear
-                      : t.settings.apiKeyRemoteRequired
-                  }
+                  data-testid="model-settings-model"
+                  value={form.model}
+                  onChange={(e) => setRemoteField("model", e.target.value)}
                 />
+              ) : (
+                <Input value="mock-gpt" disabled data-testid="model-settings-model" />
+              )}
+            </Form.Item>
+            {isRemoteMode ? (
+              <>
+                <Form.Item label={t.settings.fieldBaseUrl}>
+                  <Input
+                    autoComplete="off"
+                    name="model-base-url"
+                    data-1p-ignore="true"
+                    data-lpignore="true"
+                    data-testid="model-settings-base-url"
+                    value={form.base_url}
+                    onChange={(e) => setRemoteField("base_url", e.target.value)}
+                  />
+                </Form.Item>
+                <Form.Item label={t.settings.fieldApiKey}>
+                  <Input.Password
+                    autoComplete="new-password"
+                    name="model-api-key"
+                    data-1p-ignore="true"
+                    data-lpignore="true"
+                    data-testid="model-settings-api-key"
+                    value={form.api_key}
+                    onChange={(e) => setRemoteField("api_key", e.target.value)}
+                    placeholder={
+                      data?.api_key_configured
+                        ? t.settings.apiKeyConfiguredClear
+                        : t.settings.apiKeyRemoteRequired
+                    }
+                  />
+                </Form.Item>
+              </>
+            ) : null}
+          </div>
+          <details className="workbench-disclosure" data-testid="model-settings-tools-section">
+            <summary>{t.settings.toolsSection}</summary>
+            <div className="workbench-disclosure-content">
+              <Form.Item label={t.settings.fieldToolRegistryProfile}>
+                <Select
+                  data-testid="model-settings-tool-registry-profile"
+                  value={form.tool_registry_profile}
+                  onChange={(value) => setRemoteField("tool_registry_profile", value)}
+                  options={(data?.available_tool_registry_profiles ?? [form.tool_registry_profile]).map(
+                    (value) => ({
+                      value,
+                      label: value,
+                    }),
+                  )}
+                />
+                <Typography.Paragraph
+                  type="secondary"
+                  data-testid="model-settings-selected-profile-summary"
+                  style={{ marginTop: 8, marginBottom: 0 }}
+                >
+                  {t.settings.profileSummaryLabel}: {selectedProfileTools}
+                </Typography.Paragraph>
+                <Typography.Paragraph
+                  type="secondary"
+                  data-testid="model-settings-selected-profile-tool-details"
+                  style={{ marginTop: 8, marginBottom: 0 }}
+                >
+                  {selectedProfileToolDetailsSummary}
+                </Typography.Paragraph>
               </Form.Item>
-            </>
-          ) : null}
-          <Form.Item>
-            <Space>
-              <Button
-                type="primary"
-                htmlType="submit"
-                loading={saveMutation.isPending}
-                data-testid="model-settings-save"
-              >
-                {saveMutation.isPending ? t.settings.saving : t.settings.save}
-              </Button>
-              <Button
-                onClick={validateForm}
-                loading={validateMutation.isPending}
-                data-testid="model-settings-validate"
-              >
-                {validateMutation.isPending
-                  ? t.settings.validating
-                  : t.settings.validate}
-              </Button>
-            </Space>
-          </Form.Item>
+              <Form.Item label={t.settings.fieldToolRegistrySource}>
+                <Select
+                  data-testid="model-settings-tool-registry-source"
+                  value={form.tool_registry_provider_source}
+                  onChange={(value) => setRemoteField("tool_registry_provider_source", value)}
+                  options={(data?.available_tool_registry_provider_sources ?? [
+                    form.tool_registry_provider_source,
+                  ]).map((value) => ({
+                    value,
+                    label: value,
+                  }))}
+                />
+                <Typography.Paragraph
+                  type="secondary"
+                  data-testid="model-settings-selected-source-summary"
+                  style={{ marginTop: 8, marginBottom: 0 }}
+                >
+                  {t.settings.sourceSummaryLabel}: {t.settings.sourceSummaryProfileLabel}{" "}
+                  {selectedSourceBaseProfile};{" "}
+                  {t.settings.sourceSummaryAllowedToolsLabel} {selectedSourceTools}
+                </Typography.Paragraph>
+                <Typography.Paragraph
+                  type="secondary"
+                  data-testid="model-settings-selected-source-tool-details"
+                  style={{ marginTop: 8, marginBottom: 0 }}
+                >
+                  {selectedSourceToolDetailsSummary}
+                </Typography.Paragraph>
+                <Typography.Paragraph
+                  type="secondary"
+                  data-testid="model-settings-selected-source-diagnostics"
+                  style={{ marginTop: 8, marginBottom: 0 }}
+                >
+                  {t.settings.sourceDiagnosticsLabel}: {selectedSourceDiagnosticsSummary}
+                </Typography.Paragraph>
+              </Form.Item>
+            </div>
+          </details>
         </Form>
       )}
 
       {data ? (
-        <Descriptions
-          bordered
-          size="small"
-          column={1}
-          className="model-settings-meta-descriptions"
-          style={{ marginTop: 8 }}
-        >
-          <Descriptions.Item label={t.settings.metaProvider}>
-            {summaryProvider}
-          </Descriptions.Item>
-          <Descriptions.Item label={t.settings.metaModel}>
-            {summaryModel}
-          </Descriptions.Item>
-          <Descriptions.Item label={t.settings.metaToolRegistryProfile}>
-            {previewSource?.tool_registry_profile ?? "—"}
-          </Descriptions.Item>
-          <Descriptions.Item label={t.settings.metaToolRegistrySource}>
-            {previewSource?.tool_registry_provider_source ?? "—"}
-          </Descriptions.Item>
-          <Descriptions.Item label={t.settings.metaToolRegistrySourceDiagnostics}>
-            {selectedSourceDiagnosticsSummary}
-          </Descriptions.Item>
-          <Descriptions.Item label={t.settings.metaEnabledTools}>
-            {summaryEnabledTools}
-          </Descriptions.Item>
-          <Descriptions.Item label={t.settings.metaTaskQueue}>
-            <span data-testid="model-settings-task-queue-diagnostics">
-              {taskQueueDiagnosticsSummary}
-            </span>
-          </Descriptions.Item>
-          {isRemoteMode ? (
-            <>
-              <Descriptions.Item label={t.settings.metaBaseUrl}>
-                {summaryBaseUrl}
-              </Descriptions.Item>
-              <Descriptions.Item label={t.settings.metaApiKey}>
-                {summaryApiConfigured
-                  ? t.settings.metaConfigured
-                  : t.settings.metaNotConfigured}
-              </Descriptions.Item>
-            </>
-          ) : null}
-          <Descriptions.Item label={t.settings.metaApiBase}>
-            <code>{API_BASE_URL}</code>
-          </Descriptions.Item>
-          <Descriptions.Item label={t.settings.metaDatabase}>
-            {data.database_locator}
-          </Descriptions.Item>
-        </Descriptions>
+        <details className="workbench-disclosure" data-testid="model-settings-diagnostics-section">
+          <summary>{t.settings.diagnosticsSection}</summary>
+          <Descriptions
+            bordered
+            size="small"
+            column={1}
+            className="model-settings-meta-descriptions"
+            style={{ marginTop: 8 }}
+          >
+            <Descriptions.Item label={t.settings.metaProvider}>
+              {summaryProvider}
+            </Descriptions.Item>
+            <Descriptions.Item label={t.settings.metaModel}>
+              {summaryModel}
+            </Descriptions.Item>
+            <Descriptions.Item label={t.settings.metaToolRegistryProfile}>
+              {previewSource?.tool_registry_profile ?? "—"}
+            </Descriptions.Item>
+            <Descriptions.Item label={t.settings.metaToolRegistrySource}>
+              {previewSource?.tool_registry_provider_source ?? "—"}
+            </Descriptions.Item>
+            <Descriptions.Item label={t.settings.metaToolRegistrySourceDiagnostics}>
+              {selectedSourceDiagnosticsSummary}
+            </Descriptions.Item>
+            <Descriptions.Item label={t.settings.metaEnabledTools}>
+              {summaryEnabledTools}
+            </Descriptions.Item>
+            <Descriptions.Item label={t.settings.metaTaskQueue}>
+              <span data-testid="model-settings-task-queue-diagnostics">
+                {taskQueueDiagnosticsSummary}
+              </span>
+            </Descriptions.Item>
+            {isRemoteMode ? (
+              <>
+                <Descriptions.Item label={t.settings.metaBaseUrl}>
+                  {summaryBaseUrl}
+                </Descriptions.Item>
+                <Descriptions.Item label={t.settings.metaApiKey}>
+                  {summaryApiConfigured
+                    ? t.settings.metaConfigured
+                    : t.settings.metaNotConfigured}
+                </Descriptions.Item>
+              </>
+            ) : null}
+            <Descriptions.Item label={t.settings.metaApiBase}>
+              <code>{API_BASE_URL}</code>
+            </Descriptions.Item>
+            <Descriptions.Item label={t.settings.metaDatabase}>
+              {data.database_locator}
+            </Descriptions.Item>
+          </Descriptions>
+        </details>
       ) : null}
     </Modal>
   );

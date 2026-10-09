@@ -141,4 +141,6 @@ bash scripts/ci_run_release_gate.sh --phase backend
 
 后端源码基线、静态/集成检查、真实模型结果和镜像范围统一见[验证基线](../docs/acceptance.md#验证基线)。
 
+工作台的弹窗分层、响应式布局和标识展示由前端维护。知识库 Collection 在页面详情中查看或复制，API、路由及导出仍使用完整标识；页面费用标签明确为估算，不改变后端用量来源与计算口径。
+
 开发遵循[维护规则](../AGENTS.md)与[贡献指南](../CONTRIBUTING.md)，沿用主题模块和兼容 facade。

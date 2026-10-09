@@ -55,6 +55,8 @@ Workbench 拉取 `trace/delta`，失败退避并在流结束后补拉，同步�
 
 输入法组合中的 Enter 保留给输入法，普通 Enter 发送、Shift+Enter 换行。窄屏筛选换行、宽表格在容器内滚动；必要 ID 缩略显示，可查看/复制完整值，路由、配置与导出保留完整标识。详见[运行时契约](../docs/runtime-contracts.md)，页面复核范围见[验证基线](../docs/acceptance.md#验证基线)。
 
+登录表单最大宽度 420px，桌面和手机分别调整比例、间距，并支持深浅主题。模型设置、知识库治理和用量弹窗限制在视口内，标题与模型保存操作保持可见，长内容在弹窗内部滚动。高级工具配置、诊断、治理筛选、趋势和排行可展开；Trace 空状态提供任务中心入口，有记录后显示筛选与计数。公共布局样式位于 `app/styles/workbench-dialogs.css`，隔离布局回归位于 `e2e/workbench-presentation.spec.ts`。
+
 ## Memory / RAG
 
 - Memory 的 status/add/query 为会话级手工调试入口；数据存储和知识库隔离见[架构说明](../docs/architecture.md)。

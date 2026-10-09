@@ -322,6 +322,7 @@ export function TaskCenter({
             <div className="task-center-cell-main">
               <a
                 className="task-center-title-link"
+                title={getTaskLabel(task, t.workbench)}
                 href={buildTaskDetailHref(task.id, {
                   traceSemanticFilter: resolveTaskDetailHrefTraceSemanticFilter(
                     snapshot, taskObservabilityFilter,
@@ -526,40 +527,6 @@ export function TaskCenter({
               ]}
               placeholder={t.inspector.taskViewLabel}
             />
-            <Select
-              data-testid="task-center-observability-filter"
-              showSearch
-              optionFilterProp="label"
-              value={taskObservabilityFilter}
-              onChange={(v) => {
-                const nextFilters = resolveTaskObservabilityFilterChange({
-                  observabilityFilter: v as TaskObservabilityFilter,
-                  currentFailureSourceFilter: taskFailureSourceFilter,
-                });
-                setTaskObservabilityFilter(nextFilters.observabilityFilter);
-                setTaskFailureSourceFilter(nextFilters.failureSourceFilter);
-              }}
-              options={[
-                { label: t.taskCenter.observabilityFilterAll, value: "all" },
-                {
-                  label: t.taskCenter.observabilityFilterAttention,
-                  value: "attention",
-                },
-                {
-                  label: t.taskCenter.observabilityFilterFailedStatus,
-                  value: "failed_status",
-                },
-                {
-                  label: t.taskCenter.observabilityFilterFailureHint,
-                  value: "failure_hint",
-                },
-                {
-                  label: t.taskCenter.observabilityFilterFailureTrace,
-                  value: "failure_trace",
-                },
-              ]}
-              placeholder={t.taskCenter.observabilityFilterAll}
-            />
             <Input
               data-testid="task-center-keyword-filter"
               allowClear
@@ -567,43 +534,91 @@ export function TaskCenter({
               onChange={(e) => onTaskSearchQueryChange(e.target.value)}
               placeholder={t.inspector.taskSearchPlaceholder}
             />
-            <Select
-              data-testid="task-center-governance-profile-filter"
-              showSearch
-              optionFilterProp="label"
-              value={taskGovernanceProfileFilter}
-              onChange={onTaskGovernanceProfileFilterChange}
-              options={[
-                {
-                  label: t.taskCenter.governanceProfileFilterAll,
-                  value: allGovernanceFilterValue,
-                },
-                ...availableToolRegistryProfiles.map((value) => ({
-                  label: value,
-                  value,
-                })),
-              ]}
-              placeholder={t.taskCenter.governanceProfileFilterAll}
-            />
-            <Select
-              data-testid="task-center-governance-source-filter"
-              showSearch
-              optionFilterProp="label"
-              value={taskGovernanceProviderSourceFilter}
-              onChange={onTaskGovernanceProviderSourceFilterChange}
-              options={[
-                {
-                  label: t.taskCenter.governanceSourceFilterAll,
-                  value: allGovernanceFilterValue,
-                },
-                ...availableToolRegistryProviderSources.map((value) => ({
-                  label: value,
-                  value,
-                })),
-              ]}
-              placeholder={t.taskCenter.governanceSourceFilterAll}
-            />
           </div>
+          <details
+            className="workbench-disclosure"
+            data-testid="task-center-advanced-section"
+            open={
+              taskGovernanceProfileFilter !== allGovernanceFilterValue
+              || taskGovernanceProviderSourceFilter !== allGovernanceFilterValue
+              || taskObservabilityFilter !== "all"
+              || undefined
+            }
+          >
+            <summary>{t.taskCenter.advancedFilters}</summary>
+            <div className="task-center-filter-row task-center-filter-row--advanced">
+              <Select
+                data-testid="task-center-observability-filter"
+                showSearch
+                optionFilterProp="label"
+                value={taskObservabilityFilter}
+                onChange={(v) => {
+                  const nextFilters = resolveTaskObservabilityFilterChange({
+                    observabilityFilter: v as TaskObservabilityFilter,
+                    currentFailureSourceFilter: taskFailureSourceFilter,
+                  });
+                  setTaskObservabilityFilter(nextFilters.observabilityFilter);
+                  setTaskFailureSourceFilter(nextFilters.failureSourceFilter);
+                }}
+                options={[
+                  { label: t.taskCenter.observabilityFilterAll, value: "all" },
+                  {
+                    label: t.taskCenter.observabilityFilterAttention,
+                    value: "attention",
+                  },
+                  {
+                    label: t.taskCenter.observabilityFilterFailedStatus,
+                    value: "failed_status",
+                  },
+                  {
+                    label: t.taskCenter.observabilityFilterFailureHint,
+                    value: "failure_hint",
+                  },
+                  {
+                    label: t.taskCenter.observabilityFilterFailureTrace,
+                    value: "failure_trace",
+                  },
+                ]}
+                placeholder={t.taskCenter.observabilityFilterAll}
+              />
+              <Select
+                data-testid="task-center-governance-profile-filter"
+                showSearch
+                optionFilterProp="label"
+                value={taskGovernanceProfileFilter}
+                onChange={onTaskGovernanceProfileFilterChange}
+                options={[
+                  {
+                    label: t.taskCenter.governanceProfileFilterAll,
+                    value: allGovernanceFilterValue,
+                  },
+                  ...availableToolRegistryProfiles.map((value) => ({
+                    label: value,
+                    value,
+                  })),
+                ]}
+                placeholder={t.taskCenter.governanceProfileFilterAll}
+              />
+              <Select
+                data-testid="task-center-governance-source-filter"
+                showSearch
+                optionFilterProp="label"
+                value={taskGovernanceProviderSourceFilter}
+                onChange={onTaskGovernanceProviderSourceFilterChange}
+                options={[
+                  {
+                    label: t.taskCenter.governanceSourceFilterAll,
+                    value: allGovernanceFilterValue,
+                  },
+                  ...availableToolRegistryProviderSources.map((value) => ({
+                    label: value,
+                    value,
+                  })),
+                ]}
+                placeholder={t.taskCenter.governanceSourceFilterAll}
+              />
+            </div>
+          </details>
           <div className="task-center-filter-row task-center-filter-row--secondary">
             <Select
               data-testid="task-center-sort-filter"

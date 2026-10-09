@@ -368,6 +368,7 @@ export function AuthGate() {
       </section>
 
       <section className={styles.formArea}>
+        <div className={styles.formCard}>
         <div className={styles.formHeader}>
           <ShieldCheck size={18} />
           <span>{mode === "login" ? authMessages.formTitle : authMessages.tabRegister}</span>
@@ -459,6 +460,7 @@ export function AuthGate() {
           </Button>
         </div>
 
+        </div>
       </section>
     </main>
   );

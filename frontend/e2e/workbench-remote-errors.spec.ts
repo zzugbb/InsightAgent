@@ -1,3 +1,4 @@
+import { revealControl } from "./helpers/disclosure";
 import { createServer, type Server } from "node:http";
 
 import {
@@ -91,6 +92,7 @@ async function selectVisibleOption(
   testId: string,
   label: RegExp,
 ): Promise<void> {
+  await revealControl(page.getByTestId(testId));
   await page.getByTestId(testId).click();
   await page
     .locator(".ant-select-dropdown:not(.ant-select-dropdown-hidden)")

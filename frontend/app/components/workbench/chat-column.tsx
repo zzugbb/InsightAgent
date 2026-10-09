@@ -360,7 +360,7 @@ export function ChatColumn({
         <div className="chat-header-lead">
           <h2 id="chat-main-title" className="chat-main-heading">
             <span className="chat-title-row">
-              <span className="chat-title-text">
+              <span className="chat-title-text" title={sessionLabel}>
                 {sessionLabel}
               </span>
               {activeSession ? (

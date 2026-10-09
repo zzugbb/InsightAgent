@@ -36,7 +36,7 @@
 
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(340px, 0.8fr);
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 0.9fr);
   min-height: 100dvh;
   overflow: hidden;
   background: var(--auth-hero-bg);
@@ -81,6 +81,22 @@
 }
 
 :global([data-theme="dark"]) .authShell {
+  --auth-form-bg: linear-gradient(180deg, #14212d, #101a24);
+  --auth-form-text: #e7f2f7;
+  --auth-form-line: rgba(238, 245, 247, 0.12);
+  --auth-tab-text: #b8cbd6;
+  --auth-input-bg: #1a2a38;
+  --auth-input-text: #e7f2f7;
+  --auth-input-border: #3a5163;
+  --auth-input-hover: #648195;
+  --auth-input-filled-bg: #1c3040;
+  --auth-input-filled-text: #e7f2f7;
+  --auth-placeholder: #8aa3b5;
+  --auth-label: #b8cbd6;
+  --auth-header: #d7e8f1;
+  --auth-suffix: #b8cbd6;
+  --auth-btn-disabled-bg: #293d4d;
+  --auth-btn-disabled-fg: #91a9b9;
   --auth-settings-bg: rgba(7, 17, 24, 0.62);
   --auth-settings-border: rgba(238, 245, 247, 0.18);
   --auth-settings-fg: #e7f2f7;
@@ -91,7 +107,10 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 72px clamp(28px, 6vw, 92px);
+  padding: 80px clamp(32px, 5vw, 80px);
+  align-items: flex-start;
+  width: min(100%, 680px);
+  justify-self: end;
   gap: 22px;
   isolation: isolate;
 }
@@ -120,8 +139,8 @@
 
 .heroTitle {
   margin: 0;
-  font-size: clamp(2.15rem, 5vw, 4rem);
-  line-height: 1.05;
+  font-size: clamp(2rem, 3vw, 3rem);
+  line-height: 1.2;
   max-width: 100%;
   word-break: keep-all;
   text-wrap: balance;
@@ -148,11 +167,18 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: clamp(24px, 5vw, 56px);
+  align-items: center;
+  min-width: 0;
+  padding: 80px clamp(28px, 4vw, 64px);
   background: var(--auth-form-bg);
   color: var(--auth-form-text);
   border-left: 1px solid var(--auth-form-line);
   box-shadow: var(--auth-form-shadow);
+}
+
+.formCard {
+  width: min(100%, 420px);
+  min-width: 0;
 }
 
 .formArea :global(.ant-tabs-tab-btn) {
@@ -381,7 +407,9 @@
 
   .heroArea {
     min-height: auto;
-    padding-bottom: 36px;
+    padding: 76px 32px 28px;
+    width: min(100%, 680px);
+    justify-self: center;
   }
 
   .heroTitle {
@@ -390,7 +418,8 @@
 
   .formArea {
     border-left: 0;
-    border-top: 1px solid rgba(16, 32, 45, 0.12);
+    border-top: 1px solid var(--auth-form-line);
+    padding: 32px;
     box-shadow: none;
   }
 }
@@ -398,6 +427,7 @@
 @media (max-width: 600px) {
   .heroArea {
     padding: 76px 24px 24px;
+    width: 100%;
     gap: 14px;
   }
 

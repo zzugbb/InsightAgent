@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { openDisclosure, revealControl } from "./helpers/disclosure";
 
 import {
   API_BASE_URL,
@@ -37,6 +38,7 @@ async function selectVisibleAntdOption(
     value: string;
   },
 ): Promise<void> {
+  await revealControl(page.getByTestId(args.triggerTestId));
   await page.getByTestId(args.triggerTestId).click();
   const dropdown = page
     .locator(".ant-select-dropdown:not(.ant-select-dropdown-hidden)")
@@ -139,6 +141,7 @@ async function saveToolRegistryProfile(
     enabled_tool_labels?: string[];
   };
 
+  await openDisclosure(page, "model-settings-diagnostics-section");
   const metaDescriptions = page.locator(".model-settings-meta-descriptions");
   await expect(metaDescriptions).toContainText(profile);
   for (const label of payload.enabled_tool_labels ?? []) {
@@ -266,6 +269,8 @@ test("usage dashboard source trend is visible @smoke", async ({ page, request })
   await usageEntry.click();
 
   await expect(page.locator(".usage-dashboard-ant-modal")).toBeVisible();
+  await openDisclosure(page, "usage-trends-section");
+  await openDisclosure(page, "usage-details-section");
   await expect(page.locator(".usage-source-trend-block")).toBeVisible();
   await expect(page.locator(".usage-source-trend-row").first()).toBeVisible();
 });
@@ -286,6 +291,8 @@ test("usage dashboard source filter request and table alignments are stable", as
 
   const usageModal = page.locator(".usage-dashboard-ant-modal");
   await expect(usageModal).toBeVisible();
+  await openDisclosure(page, "usage-trends-section");
+  await openDisclosure(page, "usage-details-section");
   await assertHeadersLeftAligned(
     page.locator('[data-testid="usage-dashboard-table-wrap"] .ant-table-thead > tr > th'),
   );
@@ -338,6 +345,8 @@ test("usage dashboard governance filters drive backend request params", async ({
   await openSettingsMenu(page);
   await page.getByTestId("settings-menu-usage").click();
   await expect(page.locator(".usage-dashboard-ant-modal")).toBeVisible();
+  await openDisclosure(page, "usage-trends-section");
+  await openDisclosure(page, "usage-details-section");
 
   const profileResponse = page.waitForResponse((response) => {
     if (!response.url().includes("/api/tasks/usage/dashboard")) {
@@ -628,6 +637,7 @@ test("model settings validate previews planning-only enabled tools", async ({
   expect(payload.tool_registry_profile).toBe("planning_only");
   expect(payload.enabled_tool_labels).toEqual(["Task Planner"]);
 
+  await openDisclosure(page, "model-settings-diagnostics-section");
   const metaDescriptions = page.locator(".model-settings-meta-descriptions");
   await expect(metaDescriptions).toContainText("planning_only");
   await expect(metaDescriptions).toContainText("Task Planner");
@@ -673,6 +683,7 @@ test("model settings validate previews retrieval suite enabled tools", async ({
   expect(payload.tool_registry_provider_source).toBe("retrieval_suite");
   expect(payload.enabled_tool_labels).toEqual(["Knowledge Retrieval Suite"]);
 
+  await openDisclosure(page, "model-settings-diagnostics-section");
   const metaDescriptions = page.locator(".model-settings-meta-descriptions");
   await expect(metaDescriptions).toContainText("retrieval_only");
   await expect(metaDescriptions).toContainText("retrieval_suite");
@@ -728,6 +739,7 @@ test("model settings validate previews calculator suite enabled tools", async ({
   expect(payload.tool_registry_provider_source).toBe("calculator_suite");
   expect(payload.enabled_tool_labels).toEqual(["Calculator Suite"]);
 
+  await openDisclosure(page, "model-settings-diagnostics-section");
   const metaDescriptions = page.locator(".model-settings-meta-descriptions");
   await expect(metaDescriptions).toContainText("calculator_only");
   await expect(metaDescriptions).toContainText("calculator_suite");
@@ -1076,6 +1088,8 @@ test("saved planning suite source propagates through runtime and export governan
   await page.getByTestId("sidebar-settings-trigger").click();
   await page.getByTestId("settings-menu-usage").click();
   await expect(page.locator(".usage-dashboard-ant-modal")).toBeVisible();
+  await openDisclosure(page, "usage-trends-section");
+  await openDisclosure(page, "usage-details-section");
   const usageSessionGovernance = page.getByTestId("usage-session-governance-summary");
   await expect(usageSessionGovernance.first()).toContainText("planning_only");
   await expect(usageSessionGovernance.first()).toContainText("planning_suite");
@@ -1961,6 +1975,8 @@ test("settings popover and modal state reset on reopen", async ({
   const usageEntry = page.getByTestId("settings-menu-usage");
   await usageEntry.click();
   await expect(page.locator(".usage-dashboard-ant-modal")).toBeVisible();
+  await openDisclosure(page, "usage-trends-section");
+  await openDisclosure(page, "usage-details-section");
 
   const providerResponse = page.waitForResponse((response) => {
     if (!response.url().includes("/api/tasks/usage/dashboard")) {
