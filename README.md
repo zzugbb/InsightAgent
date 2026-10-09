@@ -16,6 +16,7 @@
 
 ## 当前验证基线
 
+- 本轮收尾（本机）：修复本机验收两处 Mac 问题。`test_pilot_drill_scripts.sh` 改为先捕获演练 dry-run 输出再匹配（原 `| grep -q` 在 `pipefail` 下 grep 提前退出，上游 SIGPIPE 退出 141，旧写法 Mac 5/5 复现），并把 dry-run 打印的恢复项目名校正为与实际执行一致的 `<project>-restored`；`smoke_pilot_images.py` 清理改为 `docker rm -f -v`，并逐个核对本轮容器挂载的卷（postgres 镜像声明 VOLUME，此前残留匿名卷），不 prune、不碰命名卷与 5432/8001 数据。冒烟无服务单测 **9/9**、tooling 门禁 PASS、`local_acceptance.sh --skip-gate` 无失败阶段；`pilot-42ccf1f` + `pilot-218f94d` `--with-agent-fixture` 冒烟 PASS，前后卷/网络零差异，来源 `/tmp/insightagent-pilot-42ccf1f-cleanup-smoke.log`、`/tmp/insightagent-sigpipe-tooling.log`、`/tmp/insightagent-sigpipe-local-acceptance.md`。
 - 本轮收尾：清理实时计划 frontmatter 合并残留的冲突标记；hygiene 增加行首冲突标记扫描。本地 hygiene **4/4 PASS**，来源 `/tmp/insightagent-conflict-hygiene.md` / `.json`。
 - 本轮收尾（项 E）：统一本机验收 `scripts/local_acceptance.sh` 与 [local-acceptance-checklist.md](docs/local-acceptance-checklist.md)；干跑自测通过。
 - 上轮收尾（项 D）：[目标环境部署与恢复演练工具包](docs/pilot-environment-drill.md)（`pilot_https_probe.sh`、`pilot_backup_restore_drill.sh`）；`test_pilot_drill_scripts.sh` 通过。**待外部验收（缺目标环境）**。

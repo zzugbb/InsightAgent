@@ -17,6 +17,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 当前验证基线
 
+- 本轮收尾（本机）：`scripts/smoke_pilot_images.py` 清理改为 `docker rm -f -v` 并核对本轮容器挂载的匿名卷，无服务单测 **9/9**，候选冒烟 PASS 且无残留卷；`test_pilot_drill_scripts.sh` 修复 Mac 上 `| grep -q` 的 SIGPIPE 误报。后端应用实现未变，详见根目录 `README.md`。
 - 本轮收尾：清理实时计划 frontmatter 合并残留的冲突标记；hygiene 增加行首冲突标记扫描。本地 hygiene **4/4 PASS**，来源 `/tmp/insightagent-conflict-hygiene.md` / `.json`。后端应用实现未变。
 - 本轮收尾：规划等待 heartbeat/取消探测；取消后放弃规划结果、迟到线程不写 DB/Trace/用量（替身 **5/5**，[说明](../docs/real-model-acceptance.md)）。full slice **2220/2220**。候选镜像与真实 glm 长等待待本机。
 - 本轮收尾：前端 e2e 修复 `composer-keyboard.spec.ts` 生产构建覆盖层断言（GitHub `frontend-e2e` #194/#195）；前端 node 门禁 **217/217** 与 release gate 列表一致，runbook 已补齐漏列的 `next-major-readiness` 测试文件。后端与镜像范围不变，候选镜像未重建。详见根目录 `README.md` 与 [收尾审计](../docs/project-completion-audit.md)。
