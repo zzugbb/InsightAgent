@@ -18,7 +18,7 @@ backend/.venv/bin/python -m uvicorn app.main:app --app-dir backend --host 127.0.
 
 ## 执行与稳定契约
 
-公开项目展示的[固定范围](../docs/showcase.md)允许准备案例时使用已保存的真实模型配置；公开站只回放复核后的合成案例，不访问本后端、不公开 Key 或完整应用 API。当前仅整理范围，尚未采集新案例或发布。
+独立[公开展示](../showcase/README.md)已准备专用合成案例：真实 glm-5.3 检索/计算，受控 fixture 失败及真实模型独立恢复分支。公开站只回放经过字段白名单与来源核对的记录，不访问本后端、不公开 Key 或完整应用 API；后端源码与运行契约不变。来源见[素材说明](../showcase/data/README.md)，结果见[验收基线](../docs/acceptance.md#公开项目展示)，当前尚未公开发布。
 
 模型规划 → 工具执行 → 安全 Observation → 有界反馈 → 最终流式回答。检索、计算与配置的 HTTP 请求执行真实逻辑；任务状态、回答、Trace 与用量由后端统一保存。
 

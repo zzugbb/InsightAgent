@@ -1,0 +1,455 @@
+[
+  {
+    "id": "rag",
+    "title": "知识检索与计算",
+    "prompt": "[kb:showcase-budget] 请检索星帆实验的基础预算，并调用计算工具计算 7*2。方案 B 是基础预算的两倍。请引用 budget.md，简洁说明方案 B 预算。",
+    "source": "real_model",
+    "model": "glm-5.3",
+    "status": "completed",
+    "answer": "**方案 B 预算：14 万元**\n\n依据与执行情况：\n\n1. **基础预算（检索结果）**：据知识库 showcase-budget 检索到的 budget.md（版本 `sha256:27e129e2a54e7ffe`），星帆实验本期基础预算为 **7 万元**。\n2. **计算（工具执行）**：计算工具已成功执行 `7 * 2`，结果为 **14.0**。\n3. **结论**：方案 B 将基础预算扩大为原来的两倍，即 7 万元 × 2 = **14 万元**（数值来自计算工具，单位\"万元\"来自 budget.md）。\n\n执行核对：task_plan、task_retrieve、calc_eval 均已成功执行，无截断，无未完成的请求操作。资料本身也注明应将事实（7 万元，出自文档）与计算结果（乘以 2，经工具验证）分开核对，本回答已按此区分呈现。",
+    "steps": [
+      {
+        "id": "rag-1",
+        "seq": 1,
+        "type": "thought",
+        "content": "Planned tools: Knowledge Retrieval, Calculator",
+        "meta": {
+          "model": "glm-5.3",
+          "step_type": "planning",
+          "tokens": 2986,
+          "label": "tool_plan",
+          "planning_provider_attempted": true,
+          "planning_provider_used": true,
+          "prompt_tokens": 313,
+          "completion_tokens": 2986
+        }
+      },
+      {
+        "id": "rag-2",
+        "seq": 2,
+        "type": "action",
+        "content": "Tool done: Task Planner",
+        "meta": {
+          "model": "glm-5.3",
+          "step_type": "tool_call",
+          "tokens": 77,
+          "label": "tool_1",
+          "tool": {
+            "name": "task_plan",
+            "label": "Task Planner",
+            "input": {
+              "prompt_preview": "[kb:showcase-budget] 请检索星帆实验的基础预算，并调用计算工具计算 7*2。方案 B 是基础预算的两倍。请引用 budget.md，简洁说明方案 B 预算。",
+              "planned_tool_names": [
+                "task_retrieve",
+                "calc_eval"
+              ],
+              "planned_tool_labels": [
+                "Knowledge Retrieval",
+                "Calculator"
+              ],
+              "planned_tool_kinds": [
+                "knowledge_retrieval",
+                "local_calculator"
+              ],
+              "planned_tool_execution_kinds": [
+                "",
+                ""
+              ]
+            },
+            "output_preview": {
+              "plan": "Analyze request -> Retrieve supporting context -> Evaluate calculation -> Synthesize final answer",
+              "steps": [
+                "Analyze request",
+                "Retrieve supporting context",
+                "Evaluate calculation",
+                "Synthesize final answer"
+              ]
+            },
+            "status": "done",
+            "error": null,
+            "result_summary": "Planned steps - Analyze request -> Retrieve supporting context -> Evaluate calculation -> Synthesize final answer."
+          },
+          "agent_round": 1
+        }
+      },
+      {
+        "id": "rag-3",
+        "seq": 3,
+        "type": "action",
+        "content": "Tool done: Knowledge Retrieval",
+        "meta": {
+          "model": "glm-5.3",
+          "step_type": "tool_call",
+          "tokens": 256,
+          "label": "tool_2",
+          "tool": {
+            "name": "task_retrieve",
+            "label": "Knowledge Retrieval",
+            "input": {
+              "query": "星帆实验 基础预算 budget.md",
+              "top_k": 4,
+              "knowledge_base_id": "showcase-budget"
+            },
+            "output_preview": {
+              "hit_count": 1,
+              "knowledge_base_id": "showcase-budget"
+            },
+            "status": "done",
+            "error": null,
+            "result_summary": "Retrieved 1 hit from knowledge base showcase-budget."
+          },
+          "agent_round": 1,
+          "plan_node_id": "retrieve_xingfan_basic_budget",
+          "depends_on": []
+        }
+      },
+      {
+        "id": "rag-4",
+        "seq": 4,
+        "type": "thought",
+        "content": "Knowledge Retrieval returned snippets from the selected knowledge base.",
+        "meta": {
+          "model": "glm-5.3",
+          "step_type": "rag_retrieval",
+          "tokens": 103,
+          "rag": {
+            "chunks": [
+              "# 星帆实验预算说明\n\n本文件为公开演示专用合成资料，不对应真实企业或业务。\n\n星帆实验本期基础预算为 7 万元。方案 B 将基础预算扩大为原来的两倍。\n请将资料中的事实与计算结果分开复核：7 万元来自本说明，乘以 2 的结果需要通过计算工具验证。"
+            ],
+            "knowledge_base_id": "showcase-budget",
+            "chunk_metadata": [
+              {
+                "source": "budget.md",
+                "document_id": "budget.md",
+                "document_version": "sha256:27e129e2a54e7ffe",
+                "content_hash": "3c65866f3c86fa5a54507537cf50a74f3dedb00337f2257a71625e56b2e66d23"
+              }
+            ],
+            "document_versions": [
+              {
+                "document_version": "sha256:27e129e2a54e7ffe",
+                "content_hash": "3c65866f3c86fa5a54507537cf50a74f3dedb00337f2257a71625e56b2e66d23",
+                "chunk_count": 1,
+                "source": "budget.md",
+                "document_id": "budget.md"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "rag-5",
+        "seq": 5,
+        "type": "action",
+        "content": "Tool done: Calculator",
+        "meta": {
+          "model": "glm-5.3",
+          "step_type": "tool_call",
+          "tokens": 9,
+          "label": "tool_3",
+          "tool": {
+            "name": "calc_eval",
+            "label": "Calculator",
+            "input": {
+              "expression": "7 * 2"
+            },
+            "output_preview": {
+              "expression": "7 * 2",
+              "result": 14.0
+            },
+            "status": "done",
+            "error": null,
+            "result_summary": "Calculated 7 * 2 = 14.0."
+          },
+          "agent_round": 1,
+          "plan_node_id": "calc_7_times_2",
+          "depends_on": []
+        }
+      },
+      {
+        "id": "rag-6",
+        "seq": 6,
+        "type": "thought",
+        "content": "Agent tools stopped: no_tools. Generate answer from available observations.",
+        "meta": {
+          "model": "glm-5.3",
+          "step_type": "planning",
+          "tokens": 1333,
+          "label": "agent_decision",
+          "agent_round": 1,
+          "agent_decision": "no_tools",
+          "agent_from_step_ids": [
+            "rag-2",
+            "rag-3",
+            "rag-5"
+          ],
+          "prompt_tokens": 708,
+          "completion_tokens": 1333
+        }
+      },
+      {
+        "id": "rag-7",
+        "seq": 223,
+        "type": "observation",
+        "content": "**方案 B 预算：14 万元**\n\n依据与执行情况：\n\n1. **基础预算（检索结果）**：据知识库 showcase-budget 检索到的 budget.md（版本 `sha256:27e129e2a54e7ffe`），星帆实验本期基础预算为 **7 万元**。\n2. **计算（工具执行）**：计算工具已成功执行 `7 * 2`，结果为 **14.0**。\n3. **结论**：方案 B 将基础预算扩大为原来的两倍，即 7 万元 × 2 = **14 万元**（数值来自计算工具，单位\"万元\"来自 budget.md）。\n\n执行核对：task_plan、task_retrieve、calc_eval 均已成功执行，无截断，无未完成的请求操作。资料本身也注明应将事实（7 万元，出自文档）与计算结果（乘以 2，经工具验证）分开核对，本回答已按此区分呈现。",
+        "meta": {
+          "model": "glm-5.3",
+          "step_type": "final_answer",
+          "tokens": 1173,
+          "agent_stop_reason": "no_tools",
+          "provider_finish_reason": "stop"
+        }
+      }
+    ],
+    "elapsedSeconds": 95.246,
+    "usage": {
+      "planning_total_tokens": 5340,
+      "total_tokens": 1739,
+      "overall_total_tokens": 7079.0
+    },
+    "preparedAt": "2026-10-09T09:51:47.739721+00:00",
+    "sourceCommit": "58fabc378b8311a1a3bf399be7ab275c9526ea1c",
+    "parentId": null
+  },
+  {
+    "id": "failure",
+    "title": "原任务 · 受控失败",
+    "prompt": "先调用计算工具计算 2+3，再根据结果继续计算两倍。",
+    "source": "controlled_fixture",
+    "model": "offline-feedback-fixture",
+    "status": "failed",
+    "answer": "",
+    "steps": [
+      {
+        "id": "failure-1",
+        "seq": 1,
+        "type": "thought",
+        "content": "Planned tools: Calculator",
+        "meta": {
+          "model": "mock-gpt",
+          "step_type": "planning",
+          "tokens": 2,
+          "label": "tool_plan",
+          "planning_provider_attempted": true,
+          "planning_provider_used": true,
+          "prompt_tokens": 10,
+          "completion_tokens": 2
+        }
+      },
+      {
+        "id": "failure-2",
+        "seq": 2,
+        "type": "action",
+        "content": "Tool done: Task Planner",
+        "meta": {
+          "model": "mock-gpt",
+          "step_type": "tool_call",
+          "tokens": 42,
+          "label": "tool_1",
+          "tool": {
+            "name": "task_plan",
+            "label": "Task Planner",
+            "input": {
+              "prompt_preview": "先调用计算工具计算 2+3，再根据结果继续计算两倍。",
+              "planned_tool_names": [
+                "calc_eval"
+              ],
+              "planned_tool_labels": [
+                "Calculator"
+              ],
+              "planned_tool_kinds": [
+                "local_calculator"
+              ],
+              "planned_tool_execution_kinds": [
+                ""
+              ]
+            },
+            "output_preview": {
+              "plan": "Analyze request -> Evaluate calculation -> Synthesize final answer",
+              "steps": [
+                "Analyze request",
+                "Evaluate calculation",
+                "Synthesize final answer"
+              ]
+            },
+            "status": "done",
+            "error": null,
+            "result_summary": "Planned steps - Analyze request -> Evaluate calculation -> Synthesize final answer."
+          },
+          "agent_round": 1
+        }
+      },
+      {
+        "id": "failure-3",
+        "seq": 3,
+        "type": "action",
+        "content": "Tool done: Calculator",
+        "meta": {
+          "model": "mock-gpt",
+          "step_type": "tool_call",
+          "tokens": 9,
+          "label": "tool_2",
+          "tool": {
+            "name": "calc_eval",
+            "label": "Calculator",
+            "input": {
+              "expression": "2+3"
+            },
+            "output_preview": {
+              "expression": "2+3",
+              "result": 5.0
+            },
+            "status": "done",
+            "error": null,
+            "result_summary": "Calculated 2+3 = 5.0."
+          },
+          "agent_round": 1
+        }
+      }
+    ],
+    "elapsedSeconds": 0.131,
+    "usage": null,
+    "preparedAt": "2026-10-09T09:51:47.739721+00:00",
+    "sourceCommit": "58fabc378b8311a1a3bf399be7ab275c9526ea1c",
+    "parentId": null
+  },
+  {
+    "id": "recovery",
+    "title": "独立分支 · 明确输入",
+    "prompt": "请实际调用计算工具计算 (2+3)*2，并只用简短文字说明计算结果。",
+    "source": "real_model",
+    "model": "glm-5.3",
+    "status": "completed",
+    "answer": "计算工具（calc_eval）已成功执行，计算 (2+3)*2 的结果为 **10**。\n\n（依据：运行时证据显示 calculator 工具在 executed_tools 中成功执行，返回结果 10.0。）",
+    "steps": [
+      {
+        "id": "recovery-1",
+        "seq": 1,
+        "type": "thought",
+        "content": "Planned tools: Calculator",
+        "meta": {
+          "model": "glm-5.3",
+          "step_type": "planning",
+          "tokens": 408,
+          "label": "tool_plan",
+          "planning_provider_attempted": true,
+          "planning_provider_used": true,
+          "prompt_tokens": 281,
+          "completion_tokens": 408
+        }
+      },
+      {
+        "id": "recovery-2",
+        "seq": 2,
+        "type": "action",
+        "content": "Tool done: Task Planner",
+        "meta": {
+          "model": "glm-5.3",
+          "step_type": "tool_call",
+          "tokens": 47,
+          "label": "tool_1",
+          "tool": {
+            "name": "task_plan",
+            "label": "Task Planner",
+            "input": {
+              "prompt_preview": "请实际调用计算工具计算 (2+3)*2，并只用简短文字说明计算结果。",
+              "planned_tool_names": [
+                "calc_eval"
+              ],
+              "planned_tool_labels": [
+                "Calculator"
+              ],
+              "planned_tool_kinds": [
+                "local_calculator"
+              ],
+              "planned_tool_execution_kinds": [
+                ""
+              ]
+            },
+            "output_preview": {
+              "plan": "Analyze request -> Evaluate calculation -> Synthesize final answer",
+              "steps": [
+                "Analyze request",
+                "Evaluate calculation",
+                "Synthesize final answer"
+              ]
+            },
+            "status": "done",
+            "error": null,
+            "result_summary": "Planned steps - Analyze request -> Evaluate calculation -> Synthesize final answer."
+          },
+          "agent_round": 1
+        }
+      },
+      {
+        "id": "recovery-3",
+        "seq": 3,
+        "type": "action",
+        "content": "Tool done: Calculator",
+        "meta": {
+          "model": "glm-5.3",
+          "step_type": "tool_call",
+          "tokens": 10,
+          "label": "tool_2",
+          "tool": {
+            "name": "calc_eval",
+            "label": "Calculator",
+            "input": {
+              "expression": "(2+3)*2"
+            },
+            "output_preview": {
+              "expression": "(2+3)*2",
+              "result": 10.0
+            },
+            "status": "done",
+            "error": null,
+            "result_summary": "Calculated (2+3)*2 = 10.0."
+          },
+          "agent_round": 1
+        }
+      },
+      {
+        "id": "recovery-4",
+        "seq": 4,
+        "type": "thought",
+        "content": "Agent tools stopped: no_tools. Generate answer from available observations.",
+        "meta": {
+          "model": "glm-5.3",
+          "step_type": "planning",
+          "tokens": 170,
+          "label": "agent_decision",
+          "agent_round": 1,
+          "agent_decision": "no_tools",
+          "agent_from_step_ids": [
+            "recovery-2",
+            "recovery-3"
+          ],
+          "prompt_tokens": 423,
+          "completion_tokens": 170
+        }
+      },
+      {
+        "id": "recovery-5",
+        "seq": 56,
+        "type": "observation",
+        "content": "计算工具（calc_eval）已成功执行，计算 (2+3)*2 的结果为 **10**。\n\n（依据：运行时证据显示 calculator 工具在 executed_tools 中成功执行，返回结果 10.0。）",
+        "meta": {
+          "model": "glm-5.3",
+          "step_type": "final_answer",
+          "tokens": 271,
+          "agent_stop_reason": "no_tools",
+          "provider_finish_reason": "stop"
+        }
+      }
+    ],
+    "elapsedSeconds": 31.695,
+    "usage": {
+      "planning_total_tokens": 1282,
+      "total_tokens": 556,
+      "overall_total_tokens": 1838.0
+    },
+    "preparedAt": "2026-10-09T09:51:47.739721+00:00",
+    "sourceCommit": "58fabc378b8311a1a3bf399be7ab275c9526ea1c",
+    "parentId": "failure"
+  }
+]
