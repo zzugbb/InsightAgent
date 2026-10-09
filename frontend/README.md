@@ -6,21 +6,21 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 - **`project-completion-audit` 本地开发与工程收尾已封板（2026-10-09）**。用户明确将部署、目标用户签收与真实业务验收移出本次范围；这三项保留为条件具备后的独立验收，不阻塞当前封板。裁决见[收尾审计](../docs/project-completion-audit.md)。
 - 核心能力已完成本地实现与契约验证：Execution Trace、流式输出、有界历史/Memory/RAG、Observation 反馈、工具执行、鉴权、持久化与导出；现有 DAG/只读并发、后台导入及限定步骤恢复范围保持不变。
-- 应用与验收工具基线 `1b850bc` 已推送至 main，封板核对时本机与远程引用一致；用户确认该主线 CI 为绿，未独立读取 CI run/artifact。本次仅同步封板文档，不修改运行时，沿用下节验证基线。
+- 应用与验收工具基线 `1b850bc` 已推送至 main，封板核对时本机与远程引用一致；用户确认该主线 CI 为绿，未独立读取 CI run/artifact。最终复核通过下节本地门禁；未修改应用运行时。
 - 已知边界保留：真实 GLM 原四场景 3/4 完整通过、编辑分支恢复 1/1；上下文续算规划回退未执行要求的工具；内置浏览器曾连接失败，原因未确诊。提示约束、合成样本与提供方用量不能证明所有回答正确、真实业务质量或账单成本。详情见[真实模型验收](../docs/real-model-acceptance.md)。
 - 当前候选后端 `pilot-42ccf1f` + 前端 `pilot-9e78810` 的本地替身联调证据保留；生产部署、HTTPS/访问边界、升级回滚和双存储恢复仍未在目标环境验收，不能据本地封板认定外部试点就绪。
 - 后续进入按实际问题维护；没有确认必须新增的主线。写入工具并行与 HTTP/DAG checkpoint 继续延期，ESLint 10 仍为非阻塞维护候选。
 
 ## 当前验证基线
 
-封板沿用以下本地验证及历史专项范围。本次文档整理 hygiene **4/4 PASS**，来源 `/tmp/insightagent-local-seal-hygiene.md` / `.json`；未重复后端、前端或真实模型测试。
+2026-10-09 最终复核检查提交 `0e884be`（应用/验收工具基线仍为 `1b850bc`），本轮未改运行时；分阶段重跑以下本地门禁。CI 绿仍按用户确认记录，本地检查与远端 CI 分开。
 
-- 2026-10-09 当前后端门禁 **2/2 PASS**：full slice **2220/2220**、模块 **9/9**，来源 `/tmp/insightagent-oct09-backend.md` / `.json`。验收轮仅验收工具/测试/文档修改，应用 API/SSE/Trace/export 契约不变。
-- [RAG 验收工具](../docs/business-rag-acceptance.md)修正假通过/误报与用量字段读取：静态 **17/17**，隔离 PostgreSQL/Chroma **1/1**；规划等待/取消/迟到结果与重跑 **5/5**。来源 `/tmp/insightagent-oct09-{rag-static,rag-postgres,planning-postgres}.log`。tooling **1/1 PASS**，来源 `/tmp/insightagent-oct09-tooling.md` / `.json`；hygiene **4/4 PASS**，来源 `/tmp/insightagent-oct09-hygiene.md` / `.json`。
-- [真实模型本机复验](../docs/real-model-acceptance.md)：原四场景 **3/4 完整通过**，编辑明确表达式的独立分支恢复 **1/1**；五项 Trace/delta/消息/导出一致。上下文续算规划回退，400 为自行推算，未执行要求的 Calculator；未知规划消耗与账单成本保留。已记录 **15,642 tokens** 不等于全部供应商消耗。API RAG 与 Chrome 工作台分别保留入口范围，不计候选镜像或业务签收。
-- Mac 开发态输入法/键盘三浏览器桌面/手机 **6/6**，来源 `/tmp/insightagent-oct09-keyboard.log`；Chrome 验收轮真实任务页面/交互/done、规划等待提示及控制台检查通过，内置浏览器曾出现连接失败，原因未确诊。前端 full node **217/217**、lint **0 error / 2 warning**、Turbopack/webpack 双构建保留此前门禁，验收轮未重跑完整前端。
-- 当前候选后端 **pilot-42ccf1f** + 前端 **pilot-9e78810**，此前配对 `--with-agent-fixture` 冒烟 PASS 且零残留；验收轮只读核对 ID 与应用提交差异，未重建或重跑镜像。来源 `/tmp/insightagent-pilot-9e78810-{frontend-build,smoke}.log` 与[试点记录](../docs/pilot-deployment-preflight.md)。Compose 重建/双存储恢复保留独立既有基线，不计目标环境验收。
-- 既有终态/成功保存/用量、反馈与 HTTP 协议、DAG/并发/checkpoint、RAG 分批导入及浏览器专项保留原验证范围；验收轮未重复全套。长期契约、实现与运行说明保留正文及各主题文档。本地开发收尾已封板；业务资料/用户签收及目标环境部署恢复移出本次范围，外部试点就绪未验收。
+- 后端门禁 **2/2 PASS**：full slice **2220/2220**、模块 **9/9**，来源 `/tmp/insightagent-finalcheck-backend.md` / `.json`。
+- 前端门禁 **4/4 PASS**：node **217/217**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双生产构建。在当前提交的隔离源码副本执行，127 个 tracked 前端文件与检查提交 `0e884be` 一致（排除生成的 next-env）；未复制私人环境或影响本机开发构建。来源 `/tmp/insightagent-finalcheck-frontend.md` / `.json` 与 `/tmp/insightagent-finalcheck-source.json`。
+- tooling **1/1 PASS**（含 RAG 静态 **17/17**），隔离 PostgreSQL/Chroma RAG **1/1**、规划等待/取消/迟到结果/重跑 **5/5**；导出静态 **1/1**、部署演练脚本静态自测 PASS（不计目标部署实证）。来源 `/tmp/insightagent-finalcheck-{tooling,rag,planning,export,drill}.log` 与 tooling `.md` / `.json`。
+- 本轮 hygiene **4/4 PASS**、六份活跃/验收文档本地链接核对通过；备份计划与 next-env 无变更。前后两次 backend `8000` / frontend `3001` HTTP 200，Chroma reachable。来源 `/tmp/insightagent-finalcheck-hygiene.md` / `.json`。
+- [真实 GLM 证据](../docs/real-model-acceptance.md)沿用先前原四场景 **3/4 完整通过**、编辑分支恢复 **1/1** 与 Trace/delta/导出/消息一致；Mac dev 键盘三浏览器桌面/手机 **6/6** 沿用 `/tmp/insightagent-oct09-keyboard.log`。本轮没有新增模型调用或重跑浏览器专项；规划回退与内置浏览器连接风险保留。
+- 候选后端 `pilot-42ccf1f` + 前端 `pilot-9e78810` 的历史替身联调及 Compose 恢复保留原范围，本轮未重建镜像或重跑 Compose。既有 HTTP/DAG/并发/checkpoint 与 RAG 导入专项范围继续保留。本地封板结论不变；业务验收、用户签收和目标环境部署恢复仍延期。
 
 ## 下一步前端计划
 

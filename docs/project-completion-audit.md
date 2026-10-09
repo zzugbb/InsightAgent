@@ -5,7 +5,7 @@
 - 更新日期：2026-10-09。**`project-completion-audit` 的本地开发与工程收尾已封板**。用户明确部署、目标用户签收与真实业务验收当前不具备条件，并移出本次范围；后续条件具备时再单独验收，不阻塞本次本地封板。
 - 封板范围：现有定位下的本地实现/契约、可复现问题修复、工程检查、真实 GLM 合成任务复验、候选本地联调证据核对与持久交接文档。没有必须新增的已确认功能主线；写入工具并行、HTTP/DAG checkpoint 继续延期。
 - 代码基线：`1b850bc` 已推送，封板核对时 `git fetch origin` 后本机 HEAD 与 origin/main 一致；该主线 CI 为绿由用户明确确认。本轮没有独立读取 CI run/artifact，不虚构链接或检查数量；下方本地证据与 CI 口径分开保留。
-- 最终本地验证：后端 2220/2220、模块 9/9，验收工具静态 17/17、隔离 PostgreSQL/Chroma 1/1、规划等待恢复 5/5、Mac 键盘三浏览器 6/6，tooling 1/1、hygiene 4/4。完整前端 217/217、lint 0 error/2 既有 warning 与双构建保留此前基线，未在最终验收轮重跑。来源见三份 README、实时计划及 `/tmp/insightagent-oct09-{backend,tooling,hygiene}.md` / `.json`；临时文件消失不推翻本文件的持久记录。
+- 最终本地复核（检查提交 `0e884be`，应用基线 `1b850bc`）：后端门禁2/2（2220/2220、模块9/9）、前端门禁4/4（217/217、lint0 error/2既有warning、双构建）、tooling1/1、hygiene4/4均PASS；验收工具静态17/17、隔离RAG1/1、规划恢复5/5、导出静态1/1与drill静态自测通过。前端在隔离源码副本执行，127个tracked文件与检查提交0e884be一致（排除生成next-env）。来源 `/tmp/insightagent-finalcheck-{backend,frontend,tooling,hygiene}.md` / `.json`、相关专项 `.log` 与 `/tmp/insightagent-finalcheck-source.json`。Mac键盘6/6和真实模型沿用原证据，本轮未新增供应商调用；临时文件消失不推翻持久结论。
 - 已知风险：真实 GLM 原四场景 3/4 完整通过，编辑明确表达式后的分支恢复 1/1；原上下文续算规划回退未执行要求的工具，不能宣称已修复。内置浏览器连接失败原因未确诊。提供方稳定性、自然语言执行声明与账单成本未获得全面保证。详情见[真实模型验收](real-model-acceptance.md)。
 - 外部交付口径：本地封板不表示外部试点或生产环境已就绪。A1 外部资料/稳定性/账单、A2 部署、A3 目标恢复与 A5 用户签收仍未验收；本次按用户决策延期，而非写成通过。镜像与 Compose 本地替身验证保留[试点记录](pilot-deployment-preflight.md)的原范围。
 - 后续状态：可进入日常维护或用户明确的新主线；仅依据实际复现的问题开发，不继续因外部资源缺失重复开启当前收尾主线。
@@ -55,7 +55,7 @@
 
 本地主线已封板，当前没有经复现而必须继续修复的已确认代码缺口。真实 GLM 验收保留未满足工具执行要求的原场景，成功分支不覆盖失败结论；后续有新样本或明确问题时再维护。
 
-候选后端 `pilot-42ccf1f` + 前端 `pilot-9e78810` 保留既有本地冒烟及持久化验证范围，本次封板仅整理文档，没有重建镜像、启动服务或新增真实模型调用。封板文档 hygiene **4/4 PASS**，来源 `/tmp/insightagent-local-seal-hygiene.md` / `.json`，备份计划无变更。
+候选后端 `pilot-42ccf1f` + 前端 `pilot-9e78810` 保留既有本地冒烟及持久化验证范围，最终复核重跑本地静态门禁及隔离RAG/规划恢复专项，没有重建镜像、启动服务或新增真实模型调用。本机服务前后均HTTP 200、Chroma reachable；活跃文档本地链接通过，备份计划与next-env无变更。hygiene **4/4 PASS**，来源 `/tmp/insightagent-finalcheck-hygiene.md` / `.json`。
 
 ## 下一阶段
 
