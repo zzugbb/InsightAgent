@@ -18,6 +18,8 @@ backend/.venv/bin/python -m uvicorn app.main:app --app-dir backend --host 127.0.
 
 ## 执行与稳定契约
 
+公开项目展示的[固定范围](../docs/showcase.md)允许准备案例时使用已保存的真实模型配置；公开站只回放复核后的合成案例，不访问本后端、不公开 Key 或完整应用 API。当前仅整理范围，尚未采集新案例或发布。
+
 模型规划 → 工具执行 → 安全 Observation → 有界反馈 → 最终流式回答。检索、计算与配置的 HTTP 请求执行真实逻辑；任务状态、回答、Trace 与用量由后端统一保存。
 
 | 需要了解 | 权威说明 |

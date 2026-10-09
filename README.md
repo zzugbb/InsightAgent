@@ -114,6 +114,8 @@ PostgreSQL 保存消息、任务、Trace 和用量；Chroma 保存会话级 Memo
 
 ## 项目状态
 
+另已确定[公开项目展示范围](docs/showcase.md)：拟在独立 `showcase/` 提供首页与两个案例的交互回放，目标为 Vercel 免费版；当前仅完成范围整理，尚未实现或上线，不代表完整应用已部署。
+
 本地实现与工程收尾完成，现阶段按可复现问题维护。后端、前端、浏览器、隔离存储、真实 GLM 与候选镜像各有独立验证范围，详见[验证基线](docs/acceptance.md#验证基线)与[真实模型记录](docs/acceptance.md#真实模型记录)。真实业务资料、目标用户签收和部署环境尚未验收，外部试点/生产就绪未获验证。
 
 写入工具并行、HTTP/DAG checkpoint 延期；PDF/Office/OCR 导入、内建网页搜索和图编辑器不在当前实现范围。开发与测试命令见[贡献指南](CONTRIBUTING.md)和[运行手册](docs/development-runbook.md)，业务任务复核见[验收指南](docs/acceptance.md)。

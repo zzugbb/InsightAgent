@@ -17,6 +17,7 @@
 | [RAG导入](rag-background-ingest.md) | 文件预算、持久队列、批次/权限与部分失败 |
 | [开发手册](development-runbook.md) | 检查、服务、Docker/e2e、诊断、权限与提交 |
 | [部署与恢复](pilot-deployment-preflight.md) | 镜像、预检、HTTPS、升级回滚、离线备份/恢复 |
+| [公开项目展示](showcase.md) | 独立展示应用、两个案例交互回放、固定范围与发布边界 |
 | [验收](acceptance.md) | 业务复核、签收、验证基线及真实模型证据 |
 | [API变更](api-changelog.md) | OpenAPI指纹与兼容性审查 |
 
