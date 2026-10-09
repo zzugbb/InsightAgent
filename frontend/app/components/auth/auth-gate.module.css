@@ -122,7 +122,9 @@
   margin: 0;
   font-size: clamp(2.15rem, 5vw, 4rem);
   line-height: 1.05;
-  max-width: 14ch;
+  max-width: 100%;
+  word-break: keep-all;
+  text-wrap: balance;
 }
 
 .heroDesc {
@@ -382,9 +384,35 @@
     padding-bottom: 36px;
   }
 
+  .heroTitle {
+    max-width: none;
+  }
+
   .formArea {
     border-left: 0;
     border-top: 1px solid rgba(16, 32, 45, 0.12);
     box-shadow: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .heroArea {
+    padding: 76px 24px 24px;
+    gap: 14px;
+  }
+
+  .heroTitle {
+    font-size: 1.85rem;
+    max-width: none;
+    line-height: 1.25;
+  }
+
+  .heroList {
+    display: none;
+  }
+
+  .formArea {
+    justify-content: flex-start;
+    padding: 28px 24px;
   }
 }

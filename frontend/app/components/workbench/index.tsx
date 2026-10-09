@@ -585,7 +585,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const runtimeNotice =
     settingsSummary?.mode === "remote"
       ? settingsSummary.api_key_configured
-        ? t.chat.runtimeNoticeRemote
+        ? null
         : t.chat.runtimeNoticeRemoteMissingKey
       : settingsSummary?.mode === "mock"
         ? t.chat.runtimeNoticeMock
@@ -1609,7 +1609,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         open={taskCenterDrawerOpen}
         onClose={() => setTaskCenterDrawerOpen(false)}
         placement="right"
-        size={isNarrow ? "100vw" : "min(680px, 92vw)"}
+        size={isNarrow ? "100vw" : "min(880px, 92vw)"}
         closable={false}
         destroyOnClose={false}
         maskClosable

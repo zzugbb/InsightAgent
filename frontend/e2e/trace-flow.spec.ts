@@ -26,7 +26,7 @@ for (const width of [1440, 390]) {
     await page.addInitScript((width) => {
       localStorage.setItem("insightagent.locale", "en");
       localStorage.setItem("insightagent.inspectorCollapsed", width < 900 ? "1" : "0");
-      localStorage.setItem("insightagent.inspectorWidth", "560");
+      localStorage.setItem("insightagent.inspectorWidth", "340");
     }, width);
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
@@ -57,6 +57,17 @@ for (const width of [1440, 390]) {
     await page.getByTestId("composer-send").click();
     if (width < 900) await expect(page.locator(".app-shell")).toHaveClass(/inspector-drawer-open/);
     await page.getByTestId("inspector-tab-trace").click();
+    const semanticFilter = page.getByTestId("inspector-trace-semantic-filter");
+    expect(await semanticFilter.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return [...element.querySelectorAll(".ant-segmented-item")].every((item) => {
+        const rect = item.getBoundingClientRect();
+        return rect.left >= bounds.left && rect.right <= bounds.right;
+      });
+    })).toBe(true);
+    await semanticFilter.getByText("Failure", { exact: true }).click();
+    await expect(semanticFilter.getByRole("radio", { name: "Failure", exact: true })).toBeChecked();
+    await semanticFilter.getByText("All semantics", { exact: true }).click();
     await page.locator(".trace-view-toolbar").getByText("Flow", { exact: true }).click();
     await expect(page.locator(".trace-flow-legend")).toContainText("recording order");
     await expect(page.locator('[data-id="dependency:a:c"]')).toHaveCount(1);

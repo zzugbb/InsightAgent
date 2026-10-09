@@ -12,6 +12,7 @@ import { downloadAuthenticatedExport } from "../../../lib/export-download";
 import { toUserFacingError } from "../../../lib/errors";
 import { useMessages, usePreferences } from "../../../lib/preferences-context";
 import type { TraceStepPayload } from "../../../lib/types/trace";
+import { IdentifierText } from "../../components/workbench/identifier-text";
 import { AnswerNoticeView } from "../../components/workbench/answer-notice-view";
 import { resolveAnswerNotices } from "../../components/workbench/answer-notices";
 import { TraceFlowView } from "../../components/workbench/trace-flow-view";
@@ -341,11 +342,11 @@ export default function TaskDetailPage() {
             <section className="task-detail-kpi-grid">
               <div className="inspector-kpi-item">
                 <span>{t.taskDetail.taskIdLabel}</span>
-                <strong title={task.id}>{shortenId(task.id)}</strong>
+                <strong><IdentifierText value={task.id} /></strong>
               </div>
               <div className="inspector-kpi-item">
                 <span>{t.taskDetail.sessionIdLabel}</span>
-                <strong title={task.session_id}>{shortenId(task.session_id)}</strong>
+                <strong><IdentifierText value={task.session_id} /></strong>
               </div>
               <div className="inspector-kpi-item">
                 <span>{t.taskDetail.statusLabel}</span>

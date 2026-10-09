@@ -28,6 +28,7 @@ import {
   formatTaskFailureSourceLabel,
   formatTraceStepSemanticStatsSummary,
   formatTimestamp,
+  getSessionLabel,
   getTaskLabel,
   matchesTaskGovernanceFilters,
   matchesTaskFailureSourceFilter,
@@ -283,6 +284,7 @@ export function TaskCenter({
       {
         title: t.taskCenter.tableTask,
         key: "task",
+        width: 300,
         render: (_value: unknown, task: TaskSummary) => {
           const snapshot = taskSnapshots.get(task.id);
           const failedHint = resolveTaskFailureHintDisplay(
@@ -318,7 +320,19 @@ export function TaskCenter({
             : null;
           return (
             <div className="task-center-cell-main">
-              <strong>{getTaskLabel(task, t.workbench)}</strong>
+              <a
+                className="task-center-title-link"
+                href={buildTaskDetailHref(task.id, {
+                  traceSemanticFilter: resolveTaskDetailHrefTraceSemanticFilter(
+                    snapshot, taskObservabilityFilter,
+                  ),
+                })}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(event) => event.stopPropagation()}
+              >
+                {getTaskLabel(task, t.workbench)}
+              </a>
               {semanticSummary ? (
                 <span
                   className="task-summary-governance"
@@ -385,7 +399,7 @@ export function TaskCenter({
       {
         title: t.taskCenter.tableUpdatedAt,
         key: "updated_at",
-        width: 180,
+        width: 155,
         render: (_value: unknown, task: TaskSummary) =>
           formatTimestamp(task.updated_at, localeTag),
       },
@@ -630,7 +644,7 @@ export function TaskCenter({
 
         {activeSession && scopeMode === "session" ? (
           <p className="panel-note panel-note--muted task-center-session-note">
-            {activeSession.title?.trim() || activeSession.id}
+            {getSessionLabel(activeSession, t.workbench)}
             {" · "}
             {t.chat.updatedAt(formatTimestamp(activeSession.updated_at, localeTag))}
           </p>
@@ -706,6 +720,7 @@ export function TaskCenter({
               dataSource={filteredTasks}
               className="task-center-table"
               columns={columns}
+              scroll={{ x: 685 }}
               locale={{ emptyText: t.inspector.taskEmpty }}
               rowClassName={(record) => {
                 const statusDisplay = resolveTaskStatusDisplay(record);

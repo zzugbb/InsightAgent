@@ -4,23 +4,22 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 当前状态
 
-- **`project-completion-audit` 本地开发与工程收尾已封板（2026-10-09）**。用户明确将部署、目标用户签收与真实业务验收移出本次范围；这三项保留为条件具备后的独立验收，不阻塞当前封板。裁决见[收尾审计](../docs/project-completion-audit.md)。
-- 核心能力已完成本地实现与契约验证：Execution Trace、流式输出、有界历史/Memory/RAG、Observation 反馈、工具执行、鉴权、持久化与导出；现有 DAG/只读并发、后台导入及限定步骤恢复范围保持不变。
-- 应用与验收工具基线 `1b850bc` 已推送至 main，封板核对时本机与远程引用一致；用户确认该主线 CI 为绿，未独立读取 CI run/artifact。最终复核通过下节本地门禁；未修改应用运行时。
-- 已知边界保留：真实 GLM 原四场景 3/4 完整通过、编辑分支恢复 1/1；上下文续算规划回退未执行要求的工具；内置浏览器曾连接失败，原因未确诊。提示约束、合成样本与提供方用量不能证明所有回答正确、真实业务质量或账单成本。详情见[真实模型验收](../docs/real-model-acceptance.md)。
-- 当前候选后端 `pilot-42ccf1f` + 前端 `pilot-9e78810` 的本地替身联调证据保留；生产部署、HTTPS/访问边界、升级回滚和双存储恢复仍未在目标环境验收，不能据本地封板认定外部试点就绪。
-- 后续进入按实际问题维护；没有确认必须新增的主线。写入工具并行与 HTTP/DAG checkpoint 继续延期，ESLint 10 仍为非阻塞维护候选。
+- **`project-completion-audit` 本地开发与工程收尾已封板（2026-10-09）**。部署、目标用户签收与真实业务验收按用户决策延期；本地封板不表示外部试点或生产就绪。
+- 封板后完成用户要求的五项专项维护：移除真实工具入口的测试故障注入，检查仓库提交内容，改善中英文登录文案、窄屏布局与必要 ID 的展示/复制。详情见[专项检查](../docs/post-seal-usability-audit.md)。没有新增工具能力或改变 API/SSE/Trace/export 形状。
+- 已推送应用与验收工具基线 `1b850bc` 的 CI 绿来源为用户确认；本轮维护提交尚未推送，不能沿用旧 CI 作为本轮验证。
+- 已知真实模型边界保留：原四场景 3/4 完整通过、编辑分支恢复 1/1；原上下文续算规划回退未执行要求的工具。自然语言执行声明、合成样本与提供方用量不证明全面正确、业务质量或账单成本。见[真实模型验收](../docs/real-model-acceptance.md)。
+- 旧后端 `pilot-42ccf1f` + 前端 `pilot-9e78810` 仅保留原联调证据，未包含本轮修改；本轮未重建镜像。未来部署前需重新构建、核对源码摘要并联调。
+- 继续按实际问题维护；写入工具并行、HTTP/DAG checkpoint 延期，ESLint 10 为非阻塞候选。
 
 ## 当前验证基线
 
-2026-10-09 最终复核检查提交 `0e884be`（应用/验收工具基线仍为 `1b850bc`），本轮未改运行时；分阶段重跑以下本地门禁。CI 绿仍按用户确认记录，本地检查与远端 CI 分开。
+2026-10-09 五项专项维护基于 `180ffdc` 后的工作区源码验证；本地结果与远端 CI 分开。
 
-- 后端门禁 **2/2 PASS**：full slice **2220/2220**、模块 **9/9**，来源 `/tmp/insightagent-finalcheck-backend.md` / `.json`。
-- 前端门禁 **4/4 PASS**：node **217/217**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双生产构建。在当前提交的隔离源码副本执行，127 个 tracked 前端文件与检查提交 `0e884be` 一致（排除生成的 next-env）；未复制私人环境或影响本机开发构建。来源 `/tmp/insightagent-finalcheck-frontend.md` / `.json` 与 `/tmp/insightagent-finalcheck-source.json`。
-- tooling **1/1 PASS**（含 RAG 静态 **17/17**），隔离 PostgreSQL/Chroma RAG **1/1**、规划等待/取消/迟到结果/重跑 **5/5**；导出静态 **1/1**、部署演练脚本静态自测 PASS（不计目标部署实证）。来源 `/tmp/insightagent-finalcheck-{tooling,rag,planning,export,drill}.log` 与 tooling `.md` / `.json`。
-- 本轮 hygiene **4/4 PASS**、六份活跃/验收文档本地链接核对通过；备份计划与 next-env 无变更。前后两次 backend `8000` / frontend `3001` HTTP 200，Chroma reachable。来源 `/tmp/insightagent-finalcheck-hygiene.md` / `.json`。
-- [真实 GLM 证据](../docs/real-model-acceptance.md)沿用先前原四场景 **3/4 完整通过**、编辑分支恢复 **1/1** 与 Trace/delta/导出/消息一致；Mac dev 键盘三浏览器桌面/手机 **6/6** 沿用 `/tmp/insightagent-oct09-keyboard.log`。本轮没有新增模型调用或重跑浏览器专项；规划回退与内置浏览器连接风险保留。
-- 候选后端 `pilot-42ccf1f` + 前端 `pilot-9e78810` 的历史替身联调及 Compose 恢复保留原范围，本轮未重建镜像或重跑 Compose。既有 HTTP/DAG/并发/checkpoint 与 RAG 导入专项范围继续保留。本地封板结论不变；业务验收、用户签收和目标环境部署恢复仍延期。
+- 后端门禁 **2/2 PASS**：full slice **2221/2221**、模块 **9/9**；故障标记回归先失败后通过，`-k run_tool` **349/349**。来源 `/tmp/insightagent-ui-audit-backend.{md,json,log}` 与 `insightagent-ui-audit-tools.log`。
+- 前端门禁 **4/4 PASS**：node **217/217**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双生产构建；隔离副本执行，应用/工具源码摘要匹配，未复制私人环境或影响开发构建。来源 `/tmp/insightagent-ui-audit-frontend.{md,json,log}` 与 `insightagent-ui-audit-source.json`。
+- Chromium Trace **2/2**（1440/390px，含窄 Inspector 筛选边界与末项选择）、原布局 **2/2**；Chrome 登录/注册、工作台、任务中心、详情与五类弹窗走查，390px 无页面横向溢出，768px 登录页核对，完整 ID 复制通过。首次发送按钮被开发工具遮挡的问题已修复并复跑。详见[专项检查](../docs/post-seal-usability-audit.md)。
+- 本轮 hygiene **4/4 PASS**、七份活跃/验收文档本地链接核对通过，来源 `/tmp/insightagent-ui-audit-hygiene.{md,json,log}`。后端已加载修复，8000/3001 HTTP 200、原 Chroma reachable；未操作原存储容器/卷，备份计划与 next-env 无变更。
+- 保留此前 tooling **1/1**、RAG 静态 **17/17**、隔离 RAG **1/1**、规划恢复 **5/5**、导出静态 **1/1**及 drill 静态自测基线，本轮未重跑这些专项；原真实 GLM **3/4**与分支恢复 **1/1**、Mac 键盘 **6/6**沿用原证据。本轮没有新增真实供应商调用或镜像/Compose 验证。
 
 ## 下一步前端计划
 

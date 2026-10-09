@@ -979,7 +979,6 @@ def run_tool(
     registry_provider: ToolRegistryProvider | None = None,
     registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
-    maybe_raise_tool_execution_error(name=name, prompt=prompt, attempt=attempt)
     ctx = build_tool_runtime_context(
         name=name,
         prompt=prompt,

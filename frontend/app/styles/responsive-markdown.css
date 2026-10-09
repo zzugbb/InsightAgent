@@ -203,6 +203,10 @@
     flex-direction: column;
   }
 
+  .composer-actions {
+    align-items: flex-end;
+  }
+
   .composer-shell {
     padding-top: 10px;
     padding-bottom: 12px;

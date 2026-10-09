@@ -33,7 +33,7 @@
 | ID | 优先级 | 发现与证据 | 关闭条件 |
 | --- | --- | --- | --- |
 | A1 | 试点前必须，部分已验证 | 当前智谱 `glm-5.3` 真实流式连通与任务 3/3 通过，含登录工作台发送；计算/历史、Trace/delta/export/messages/usage 一致，共 6,530 tokens 含连通验证。范围见[验收记录](real-model-acceptance.md)。2026-10-08 新增 [business-rag-acceptance.md](business-rag-acceptance.md) 工具包（独立 KB 导入、自动核对、低敏报告）；2026-10-09 验收工具判定修正，静态 17/17、隔离 PostgreSQL/Chroma 自测 1/1；本机真实四场景 3/4 完整通过、编辑分支恢复 1/1，原续算规则回退未实际执行工具。**待外部验收（缺真实业务资料）**。 | 合成资料 RAG 正文/引用与计算已验证；用工具包在目标业务资料上复验质量/引用/未记载；继续补供应商稳定性、失败恢复与账单成本。密钥不提交仓库。 |
-| A2 | 试点前必须 | `compose.full.yml` 仍是本地开发栈；[试点镜像配方与部署入口](pilot-deployment-preflight.md)已准备。当前候选为后端 `pilot-42ccf1f` + 前端 `pilot-9e78810`（ID 与范围见试点记录）；此前 `0209651` / `218f94d` 配对的 ARM64 构建、配对基础与 Agent 协议联调通过，84 项后端锁定依赖与 Python 源码摘要核验通过。禁网非 root embedding、真实 PostgreSQL/Chroma 后台导入/检索、生产/mock 任务 SSE/Trace/delta/导出、步骤恢复/取消及前端浏览器 API 地址通过；旧 `218f94d` 配对的生产 Compose 隔离重建后登录/会话/任务/Trace/messages/知识保留通过，本轮未重跑该专项，临时资源已清理。预检核验 HTTPS/CORS、凭据、六个镜像摘要、数据库一致性和模型配置；候选未推送，尚无目标环境、TLS 或升级回滚实证。 | 明确试点目标环境；用固定版本、非默认凭据、生产构建、HTTPS/访问边界完成一次部署、升级及回滚演练，并保存非敏感记录。在环境具备前保持 `未验证`。 |
+| A2 | 试点前必须 | `compose.full.yml` 仍是本地开发栈；[试点镜像配方与部署入口](pilot-deployment-preflight.md)已准备。已验证旧配对为后端 `pilot-42ccf1f` + 前端 `pilot-9e78810`，未包含本轮专项维护（ID 与范围见试点记录）；此前 `0209651` / `218f94d` 配对的 ARM64 构建、配对基础与 Agent 协议联调通过，84 项后端锁定依赖与 Python 源码摘要核验通过。禁网非 root embedding、真实 PostgreSQL/Chroma 后台导入/检索、生产/mock 任务 SSE/Trace/delta/导出、步骤恢复/取消及前端浏览器 API 地址通过；旧 `218f94d` 配对的生产 Compose 隔离重建后登录/会话/任务/Trace/messages/知识保留通过，本轮未重跑该专项，临时资源已清理。预检核验 HTTPS/CORS、凭据、六个镜像摘要、数据库一致性和模型配置；候选未推送，尚无目标环境、TLS 或升级回滚实证。 | 明确试点目标环境；用固定版本、非默认凭据、生产构建、HTTPS/访问边界完成一次部署、升级及回滚演练，并保存非敏感记录。在环境具备前保持 `未验证`。 |
 | A3 | 生产前必须，试点需决定风险接受 | 已新增[本地离线备份/隔离恢复流程](local-stack-backup-restore.md)与 [pilot-environment-drill.md](pilot-environment-drill.md)（HTTPS 只读探测、临时项目备份恢复耗时脚本、RPO/RTO 模板）。目标环境尚无真实恢复记录。**待外部验收（缺目标环境）**。 | 对目标环境实际备份并从备份恢复 PostgreSQL 与 Chroma；验证会话、Trace、知识库和登录，记录 RPO/RTO、责任人及失败回退。 |
 | A4 | 范围决策与实现 | [后台 RAG 导入](rag-background-ingest.md)已具备持久化、幂等、取消、权限、多 worker 与恢复；分批写入、确认进度、每批角色复核及 5000 切块预算已验证，40 文档 / 400 切块隔离实写通过。[完整任务分支重跑](task-reruns.md)已支持输入编辑、独立会话、幂等与来源分页；[任务内工具并发](task-tool-parallel.md)已支持内建独立检索/计算、串行回退、顺序 Trace 合并及取消/超时协调；[工具依赖与结果引用](tool-dependencies.md)已支持显式 DAG、重复工具、稳定拓扑波次和公开预览标量绑定；[HTTP 读取并发](http-read-parallel.md)已支持固定 GET/无请求体显式只读声明、配置冻结和生命周期协调；[实验性步骤恢复](task-checkpoints.md)完成内建顺序计划的成功前缀复用、失败重试、独立分支、幂等及取消/超时闭环；写入并行及 HTTP/DAG checkpoint 明确延期。请求与 LLM 尝试低敏观测已落地；OpenAPI 51 操作 / 89 组件进入门禁。 | 本地实现与限定范围已明确；真实资料与目标环境仍需验证规模、等待体验和观测/调用方流程，fixture 耗时不等于吞吐承诺。写入并行及 HTTP/DAG checkpoint 不作为小规模试点阻塞项。 |
 | A5 | 试点前必须 | 现有 e2e 证明预设路径可自动跑通，但本轮没有目标用户、真实任务样本、可用性反馈或签收标准的证据。已提供 [target-task-acceptance.md](target-task-acceptance.md) 任务/签收模板与 `export_acceptance_evidence.py` 证据导出（低敏、单会话）。**待外部验收（缺目标任务与用户）**。 | 选 2–3 个真实任务和目标用户，完成端到端走查；记录完成率、失败点、可理解性和签收结论。 |
@@ -53,9 +53,11 @@
 
 ## 当前收尾维护
 
+2026-10-09 按用户新增的五项检查完成[封板后专项维护](post-seal-usability-audit.md)：修复真实工具入口读取测试故障标记、登录文案、窄屏布局及 ID 展示。后端2221/2221、模块9/9、前端217/217及双构建通过；本轮未调用真实供应商，维护提交尚未推送，旧镜像未包含修改。原封板与外部范围裁决保留。
+
 本地主线已封板，当前没有经复现而必须继续修复的已确认代码缺口。真实 GLM 验收保留未满足工具执行要求的原场景，成功分支不覆盖失败结论；后续有新样本或明确问题时再维护。
 
-候选后端 `pilot-42ccf1f` + 前端 `pilot-9e78810` 保留既有本地冒烟及持久化验证范围，最终复核重跑本地静态门禁及隔离RAG/规划恢复专项，没有重建镜像、启动服务或新增真实模型调用。本机服务前后均HTTP 200、Chroma reachable；活跃文档本地链接通过，备份计划与next-env无变更。hygiene **4/4 PASS**，来源 `/tmp/insightagent-finalcheck-hygiene.md` / `.json`。
+旧候选后端 `pilot-42ccf1f` + 前端 `pilot-9e78810` 未包含本轮维护修改，保留既有本地冒烟及持久化验证范围，原封板复核重跑本地静态门禁及隔离RAG/规划恢复专项，没有重建镜像、启动服务或新增真实模型调用；后续本轮专项维护已安全重启开发后端加载修复。本机服务前后均HTTP 200、Chroma reachable；活跃文档本地链接通过，备份计划与next-env无变更。hygiene **4/4 PASS**，来源 `/tmp/insightagent-finalcheck-hygiene.md` / `.json`。
 
 ## 下一阶段
 

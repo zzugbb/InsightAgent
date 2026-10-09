@@ -286,6 +286,7 @@ def ensure_tool_registration(
 
 
 def maybe_raise_tool_execution_error(*, name: str, prompt: str, attempt: int) -> None:
+    """Explicit test fault injection; never call from the production runner."""
     del name
     normalized = prompt.strip().lower()
 

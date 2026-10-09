@@ -24,7 +24,7 @@ import {
   resolveRagStatusView,
 } from "./runtime-debug-modal-utils";
 import { API_BASE_URL } from "./utils";
-import { shortenId } from "./utils";
+import { IdentifierText } from "./identifier-text";
 
 const { TextArea } = Input;
 
@@ -183,11 +183,11 @@ export function RuntimeDebugModal({
       <div className="runtime-debug-topline">
         <span className="runtime-debug-chip">
           {t.inspector.session}
-          <code>{activeSessionId ? shortenId(activeSessionId) : "—"}</code>
+          <code>{activeSessionId ? <IdentifierText value={activeSessionId} /> : "—"}</code>
         </span>
         <span className="runtime-debug-chip">
           KB
-          <code>{ragAppliedKnowledgeBaseId || "default"}</code>
+          <code title={ragAppliedKnowledgeBaseId || "default"}>{ragAppliedKnowledgeBaseId || "default"}</code>
         </span>
       </div>
       <div className="runtime-debug-shell">

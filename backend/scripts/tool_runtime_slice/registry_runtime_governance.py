@@ -832,18 +832,45 @@ class RegistryRuntimeGovernanceMixin:
             [({"expression": "ignored"}, "provider-calc", "")],
         )
 
-    def test_run_tool_keeps_transient_error_semantics(self) -> None:
+    def test_run_tool_prompt_fault_markers_are_ordinary_input(self) -> None:
+        for marker in ("[tool-error]", "[mock-tool-error]", "[tool-fatal]", "[mock-tool-fatal]"):
+            for attempt in (0, 1):
+                with self.subTest(marker=marker, attempt=attempt):
+                    output = execute_tool_spec(
+                        tool_spec={"name": "calc_eval", "input": {"expression": "6*7"}},
+                        prompt=f"请说明 {marker} 的含义并计算 6*7",
+                        user_id="user-1",
+                        attempt=attempt,
+                    )
+                    self.assertEqual(output["result"], 42.0)
+
+    def test_run_tool_keeps_runner_transient_error_semantics(self) -> None:
+        def failing_runner(**_kwargs: object) -> dict[str, object]:
+            raise MockToolExecutionError("actual runner transient error", fatal=False)
+
+        registry = {
+            "custom": ToolRegistration(
+                name="custom",
+                kind="custom",
+                label="Custom",
+                retryable_by_default=True,
+                default_timeout_ms=1000,
+                requires_user_context=False,
+                supports_result_preview=True,
+                runner=failing_runner,
+            )
+        }
         with self.assertRaises(MockToolExecutionError) as ctx:
             run_tool(
-                name="mock_plan",
-                tool_input={"prompt_preview": "x"},
-                prompt="[mock-tool-error]",
+                name="custom",
+                tool_input={},
+                prompt="普通输入",
                 user_id="user-1",
                 attempt=0,
+                registry=registry,
             )
-
         self.assertFalse(ctx.exception.fatal)
-        self.assertIn("transient error", str(ctx.exception).lower())
+        self.assertIn("actual runner transient error", str(ctx.exception))
 
     def test_execute_tool_spec_keeps_calc_behavior(self) -> None:
         output = execute_tool_spec(

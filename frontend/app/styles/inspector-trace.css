@@ -305,6 +305,17 @@
   width: 100%;
 }
 
+/* Wrapped rows use item highlights; the animated thumb spans only one row. */
+.trace-filter-toolbar .ant-segmented-group {
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.trace-filter-toolbar .ant-segmented-thumb {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .trace-filter-toolbar .ant-input {
   font-size: 0.82rem;
 }
