@@ -33,6 +33,7 @@ Options:
   --questions-file <path>   Question list for business RAG
   --pilot-url <https://...> Run pilot HTTPS probe
   --report-md <path>        Default: /tmp/insightagent-local-acceptance-report.md
+  --report-json <path>      Default: /tmp/insightagent-local-acceptance-report.json
 USAGE
 }
 
@@ -48,6 +49,7 @@ while [ "$#" -gt 0 ]; do
     --questions-file) QUESTIONS_FILE="${2:-}"; shift 2 ;;
     --pilot-url) PILOT_URL="${2:-}"; shift 2 ;;
     --report-md) REPORT_MD="${2:-}"; shift 2 ;;
+    --report-json) REPORT_JSON="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
@@ -169,11 +171,92 @@ phase_pilot_probe
 phase_real_glm
 phase_pilot_images
 
+# Runtime facts for the six-item summary; read-only, never history baked into the script.
+git_ro() {
+  git -C "${ROOT_DIR}" "$@" 2>/dev/null
+}
+
+GIT_BRANCH="unknown"
+GIT_COMMIT="unknown"
+GIT_UPSTREAM="none"
+GIT_AHEAD="unknown"
+GIT_BEHIND="unknown"
+GIT_TRACKED_CHANGES="unknown"
+GIT_UNTRACKED="unknown"
+GIT_BASE_REF="none"
+GIT_COMMITS_OVER_BASE="unknown"
+BACKUP_PLAN_STATE="unknown"
+if git_ro rev-parse --is-inside-work-tree >/dev/null; then
+  GIT_BRANCH="$(git_ro symbolic-ref --short -q HEAD || echo "detached")"
+  GIT_COMMIT="$(git_ro rev-parse --short HEAD || echo "unknown")"
+  if upstream="$(git_ro rev-parse --abbrev-ref --symbolic-full-name '@{u}')"; then
+    GIT_UPSTREAM="${upstream}"
+    if counts="$(git_ro rev-list --left-right --count '@{u}...HEAD')"; then
+      GIT_BEHIND="$(printf '%s' "${counts}" | awk '{print $1}')"
+      GIT_AHEAD="$(printf '%s' "${counts}" | awk '{print $2}')"
+    fi
+  fi
+  if git_ro rev-parse --verify -q origin/main >/dev/null; then
+    GIT_BASE_REF="origin/main"
+    GIT_COMMITS_OVER_BASE="$(git_ro rev-list --count origin/main..HEAD || echo "unknown")"
+  fi
+  if porcelain="$(git_ro status --porcelain=v1 --untracked-files=normal)"; then
+    GIT_TRACKED_CHANGES="$(printf '%s\n' "${porcelain}" | awk 'NF && substr($0, 1, 2) != "??"' | wc -l | tr -d ' ')"
+    GIT_UNTRACKED="$(printf '%s\n' "${porcelain}" | awk 'substr($0, 1, 2) == "??"' | wc -l | tr -d ' ')"
+  fi
+  if git_ro diff --quiet HEAD -- data/insightagent.plan.back.md; then
+    BACKUP_PLAN_STATE="unchanged"
+  else
+    BACKUP_PLAN_STATE="modified"
+  fi
+fi
+
+PILOT_IMAGES="docker unavailable"
+if command -v docker >/dev/null 2>&1; then
+  if images="$(docker image ls --format '{{.Repository}}:{{.Tag}}' 2>/dev/null)"; then
+    PILOT_IMAGES="$(printf '%s\n' "${images}" | awk '/^insightagent-(backend|frontend):pilot-/' | sort | paste -sd ',' - | sed 's/,/, /g')"
+    [ -n "${PILOT_IMAGES}" ] || PILOT_IMAGES="none"
+  fi
+fi
+
+count_status() {
+  local wanted="$1" total=0 status
+  for status in "${PHASE_STATUS[@]}"; do
+    [ "${status}" = "${wanted}" ] && total=$((total + 1))
+  done
+  echo "${total}"
+}
+
+phases_with_status() {
+  local wanted="$1" out="" i
+  for i in "${!PHASE_NAMES[@]}"; do
+    if [ "${PHASE_STATUS[$i]}" = "${wanted}" ]; then
+      out="${out:+${out}, }${PHASE_NAMES[$i]}"
+    fi
+  done
+  echo "${out:-无}"
+}
+
+PASS_COUNT="$(count_status pass)"
+FAIL_COUNT="$(count_status fail)"
+SKIPPED_COUNT="$(count_status skipped)"
+MANUAL_COUNT="$(count_status manual)"
+GENERATED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
 {
   echo "# 本机统一验收报告"
-  echo "- generated_at: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  echo "- generated_at: ${GENERATED_AT}"
   echo "- dry_run: ${DRY_RUN}"
   echo "- delivery_conclusion: 暂不可交付外部试点"
+  echo ""
+  echo "## 仓库状态（运行时读取）"
+  echo "- branch: ${GIT_BRANCH}"
+  echo "- commit: ${GIT_COMMIT}"
+  echo "- upstream: ${GIT_UPSTREAM} (ahead ${GIT_AHEAD}, behind ${GIT_BEHIND})"
+  echo "- commits_over_base: ${GIT_COMMITS_OVER_BASE} (base ${GIT_BASE_REF})"
+  echo "- worktree: tracked_changes ${GIT_TRACKED_CHANGES}, untracked ${GIT_UNTRACKED}"
+  echo "- backup_plan: ${BACKUP_PLAN_STATE}"
+  echo "- pilot_images: ${PILOT_IMAGES}"
   echo ""
   echo "## 阶段结果"
   for i in "${!PHASE_NAMES[@]}"; do
@@ -181,21 +264,32 @@ phase_pilot_images
   done
   echo ""
   echo "## 六项汇报摘要"
-  echo "1. 改动：见各叠放 PR（CI 健壮性、RAG 工具包、目标任务模板、演练工具包、本脚本）。"
-  echo "2. 测试：以本报告阶段结果为准；VM 已跑 tooling/静态自测，真实 glm/目标环境待本机。"
-  echo "3. 未覆盖：真实业务资料、目标用户签收、目标部署 HTTPS/升级回滚、Docker 隔离 RAG 自测（无 daemon 时）。"
-  echo "4. 镜像/运行状态：未因本脚本重建候选镜像。"
-  echo "5. PR：cursor/*-11df 叠放草稿 PR，未合并。"
-  echo "6. 待外部验收：A1 业务 RAG、A5 签收、A2/A3 目标环境；交付结论不变。"
+  echo "1. 改动：本脚本只读取并运行检查，不修改代码；当前 ${GIT_BRANCH}@${GIT_COMMIT}，相对 ${GIT_BASE_REF} 多 ${GIT_COMMITS_OVER_BASE} 个提交，具体改动以对应提交/PR 为准。"
+  echo "2. 测试：pass ${PASS_COUNT} / fail ${FAIL_COUNT} / skipped ${SKIPPED_COUNT} / manual ${MANUAL_COUNT}；失败阶段：$(phases_with_status fail)。"
+  echo "3. 未覆盖：本次跳过 $(phases_with_status skipped)；需人工 $(phases_with_status manual)；真实业务资料、目标用户签收、目标部署 HTTPS/升级回滚始终需外部证据。"
+  echo "4. 镜像/运行状态：本脚本不构建、不删除镜像；本机候选镜像 ${PILOT_IMAGES}。"
+  echo "5. 提交与工作区：${GIT_BRANCH}@${GIT_COMMIT}，upstream ${GIT_UPSTREAM}（ahead ${GIT_AHEAD} / behind ${GIT_BEHIND}）；已跟踪改动 ${GIT_TRACKED_CHANGES}、未跟踪 ${GIT_UNTRACKED}；备份计划 ${BACKUP_PLAN_STATE}。"
+  echo "6. 待外部验收：A1 业务 RAG、A5 签收、A2/A3 目标环境；交付结论：暂不可交付外部试点。"
 } > "${REPORT_MD}"
 
-python3 - "${REPORT_JSON}" "${PHASE_NAMES[*]}" "${PHASE_STATUS[*]}" <<'PY'
+python3 - "${REPORT_JSON}" "${PHASE_NAMES[*]}" "${PHASE_STATUS[*]}" \
+  "${GENERATED_AT}" "${DRY_RUN}" "${GIT_BRANCH}" "${GIT_COMMIT}" "${GIT_UPSTREAM}" "${GIT_AHEAD}" \
+  "${GIT_BEHIND}" "${GIT_BASE_REF}" "${GIT_COMMITS_OVER_BASE}" "${GIT_TRACKED_CHANGES}" \
+  "${GIT_UNTRACKED}" "${BACKUP_PLAN_STATE}" "${PILOT_IMAGES}" <<'PY'
 import json, sys
-path = sys.argv[1]
-names = sys.argv[2].split() if len(sys.argv) > 2 else []
-statuses = sys.argv[3].split() if len(sys.argv) > 3 else []
+(path, names, statuses, generated_at, dry_run, branch, commit, upstream, ahead, behind,
+ base_ref, over_base, tracked, untracked, backup_plan, pilot_images) = sys.argv[1:17]
 with open(path, "w", encoding="utf-8") as f:
-    json.dump({"phases": [{"name": n, "status": s} for n, s in zip(names, statuses)]}, f, ensure_ascii=False, indent=2)
+    json.dump({
+        "generated_at": generated_at,
+        "dry_run": dry_run == "1",
+        "delivery_conclusion": "暂不可交付外部试点",
+        "git": {"branch": branch, "commit": commit, "upstream": upstream, "ahead": ahead,
+                "behind": behind, "base_ref": base_ref, "commits_over_base": over_base,
+                "tracked_changes": tracked, "untracked": untracked, "backup_plan": backup_plan},
+        "pilot_images": pilot_images,
+        "phases": [{"name": n, "status": s} for n, s in zip(names.split(), statuses.split())],
+    }, f, ensure_ascii=False, indent=2)
     f.write("\n")
 PY
 

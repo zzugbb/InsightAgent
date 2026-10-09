@@ -18,7 +18,7 @@ bash scripts/local_acceptance.sh \
 bash scripts/local_acceptance.sh --with-real-glm --with-pilot-image-rebuild
 ```
 
-报告：`/tmp/insightagent-local-acceptance-report.md`。
+报告：`/tmp/insightagent-local-acceptance-report.md`（JSON 同名 `.json`，可用 `--report-md` / `--report-json` 改路径）。报告开头的“仓库状态”和末尾“六项汇报摘要”均在运行时读取：git 分支、提交、upstream ahead/behind、相对 `origin/main` 的提交数、工作区改动计数、备份计划是否改动、阶段计数和本机 `insightagent-*:pilot-*` 镜像；脚本不写死任何历史 PR 信息，也不输出文件内容或密钥。
 
 ## 阶段说明
 

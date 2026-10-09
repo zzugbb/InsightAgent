@@ -17,6 +17,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 当前验证基线
 
+- 本轮收尾（本机）：`local_acceptance.sh` 报告六项摘要改为运行时读取 git/阶段/候选镜像状态；前端应用实现未变，详见根目录 `README.md`。
 - 本轮收尾（本机）：本机验收脚本修复（演练自测 SIGPIPE 误报、候选冒烟残留匿名卷）；前端应用与 `pilot-218f94d` 镜像未变，详见根目录 `README.md`。
 - 本轮收尾：清理实时计划 frontmatter 合并残留的冲突标记；hygiene 增加行首冲突标记扫描。本地 hygiene **4/4 PASS**，来源 `/tmp/insightagent-conflict-hygiene.md` / `.json`。前端应用实现未变。
 - 本轮收尾：`frontend-e2e` workflow 健壮性（tooling `if: always()`、诊断重跑摘要脚本）；VM `test_ci_e2e_tooling.sh frontend` 通过。
