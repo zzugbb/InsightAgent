@@ -58,8 +58,7 @@ InsightAgent/
 ├── backend/       FastAPI、执行器、持久化、Provider 与回归测试
 ├── frontend/      工作台、Trace、治理页面与浏览器测试
 ├── scripts/       发布门禁、验收、镜像与备份演练工具
-├── docs/          架构、契约、操作指南与验收证据
-└── data/          本机历史资料与只读原始计划，不是运行时主数据库
+└── docs/          架构、契约、操作指南与验收证据
 ```
 
 模块职责、数据边界及设计取舍见[架构说明](docs/architecture.md)。
@@ -107,9 +106,9 @@ npm --prefix frontend run dev
 
 ## 数据与执行边界
 
-PostgreSQL 是消息、任务、Trace 和用量的主存储。Chroma 分别保存会话级 Memory 和用户隔离知识库，shared-* 由管理员写入；当前对话上下文读取有界 PostgreSQL 历史，没有自动长期 Memory 召回。默认 embedding 在后端 Chroma Python 客户端计算，试点镜像构建期准备缓存。
+PostgreSQL 保存消息、任务、Trace 和用量；Chroma 保存会话级 Memory 与知识库向量。对话自动使用有界历史，Memory 提供手工调试入口；数据分工、隔离与 embedding 见[架构说明](docs/architecture.md)。
 
-REST、SSE、Trace delta、历史回放与 JSON v1.0 / Markdown 导出读取同一执行记录；成功状态与回答原子提交。完整字段、事件、取消/超时和恢复规则见[运行时契约](docs/runtime-contracts.md)，数据分工见[架构](docs/architecture.md)。
+实时展示、历史回放和导出使用同一执行记录。事件、终态、取消/超时、用量与恢复规则统一见[运行时契约](docs/runtime-contracts.md)。
 
 ## 项目状态
 

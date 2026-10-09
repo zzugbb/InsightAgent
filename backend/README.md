@@ -12,21 +12,21 @@ FastAPI 后端承担任务生命周期、工具驱动 Agent 执行、流式回�
 backend/.venv/bin/python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
 ```
 
-`backend/.env.example` 是开发模板，实际 `backend/.env` 不进入版本控制。环境变量覆盖文件值；模型设置按用户保存到数据库，并继承未显式覆盖的服务端默认配置。remote 缺 Key / 地址会明确报错。设置摘要仅返回 `api_key_configured`，Key 加密入库；配置继承、清除和轮换边界见[配置指南](../docs/configuration.md)。
+开发模板见 [.env.example](.env.example)，实际 `.env` 不进入版本控制。配置优先级、用户模型设置、Key 继承与轮换统一见[配置指南](../docs/configuration.md)。
 
 健康 `/health`、交互接口 `/docs`、运行时契约 `/openapi.json`。生产镜像运行非 root Uvicorn、锁定依赖并准备 embedding 缓存；使用 [Dockerfile.pilot](Dockerfile.pilot) 与[部署预检](../docs/pilot-deployment-preflight.md)，不能把开发 reload 栈当作部署。
 
 ## 执行与稳定契约
 
-- 模型规划 → 工具执行 → 安全 Observation → 有界反馈 → 最终流式回答。默认最多 3 轮、32 工具节点；DAG 最多 128 边，仅公开预览标量可绑定到 query / expression。
-- `task_retrieve` 调用实际 Chroma 知识检索；`calc_eval` 使用 AST 白名单求值。HTTP JSON 工具显式执行配置无效时拒绝，不静默回退模板；普通提示里的测试故障标记不触发工具失败。
-- 独立内建读取/计算及明确声明只读的固定 HTTP GET 可有界并发，默认串行；进程最多 8 个读取线程。Trace、审计、终态与消息由协调线程写入，取消/超时丢弃迟到结果。
-- 完成事务原子保存状态、最终 Trace、usage、assistant 消息与会话时间；提交后写 best-effort Memory 并发送 done。竞争落败不插入成功回答。
-- 规划和回答用量分阶段保存，汇总优先 overall，缺项按已知 final + planning 回退；未知消耗不补成零，费用为配置单价估算。
-- 失败重连读取历史，不能自动重放模型或工具。分支重跑创建独立会话；实验性 checkpoint 仅支持内建顺序计划。
-- 安全 header、服务端 request ID、路由模板日志与固定错误分类不回显凭据或业务正文。OpenAPI 指纹差异按[API 变更流程](../docs/api-changelog.md)审查，不能只凭指纹认定语义兼容。
+模型规划 → 工具执行 → 安全 Observation → 有界反馈 → 最终流式回答。检索、计算与配置的 HTTP 请求执行真实逻辑；任务状态、回答、Trace 与用量由后端统一保存。
 
-取消、错误、完整性提示、工具依赖、并发与后台导入的细节见[运行时契约索引](../docs/runtime-contracts.md)。
+| 需要了解 | 权威说明 |
+| --- | --- |
+| 上下文、证据预算与反馈轮次 | [Agent 上下文与反馈](../docs/architecture.md#agent-上下文与反馈) |
+| DAG、参数绑定、工具配置与只读并发 | [工具执行](../docs/tool-execution.md) |
+| SSE/Trace、成功事务、回答结束、用量与恢复 | [运行时契约](../docs/runtime-contracts.md) |
+| 后台导入、部分写入与权限 | [RAG 导入](../docs/rag-background-ingest.md) |
+| 日志与凭据保护、接口兼容性 | [安全政策](../SECURITY.md)、[API 变更流程](../docs/api-changelog.md) |
 
 ## HTTP 接口范围
 
@@ -116,17 +116,17 @@ backend/.venv/bin/python -m uvicorn app.main:app --app-dir backend --host 127.0.
 
 ## SSE 与 TraceStep 契约
 
-事件为 `start / state / trace / tool_start / tool_end / heartbeat / token / cancelled / timeout / done / error`。`trace.data.step` 与 REST `TraceStep` 同构，工具事件按 `step_id` 对齐。delta 默认 200、最大 500 条；seq 递增但不保证连续，最终回答更新也必须可见。
+SSE、REST Trace、增量同步与导出消费同一执行记录；工具事件按 `step_id` 对齐，`seq` 递增但不保证连续。完成事务原子保存成功状态、回答、Trace 与用量，再发送 `done`。
 
-远端流必须收到 `[DONE]` 或已知首 choice `finish_reason` 才能正常结束；部分输出 EOF 保存失败 Trace，不写成功消息、不发送 done、不自动重试。error 的 `code / fatal / retryable / detail / status_code` 保持兼容，diagnostic 只含低敏分类。见[流结束](../docs/runtime-contracts.md#流结束与回答完整性)、[成功事务](../docs/runtime-contracts.md#成功提交与终态竞争)与[回答完整性](../docs/runtime-contracts.md#流结束与回答完整性)。
+远端流缺少有效结束信号时保存失败 Trace；重连读取已有记录。完整事件、错误字段、delta 分页和结束判断见[运行时契约](../docs/runtime-contracts.md)。
 
 ## Memory / Chroma / Embedding
 
-PostgreSQL 是完整业务账本；`memory_{session_id}` 是会话语义记忆，`kb_{user_hash}_{knowledge_base_id}` 是知识库。默认通过 `chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)` 连接 `127.0.0.1:8001`，`shared-*` 库普通用户只读、管理员可写。
+PostgreSQL 是完整业务账本，Chroma 是 Memory / RAG 向量存储。默认连接 `127.0.0.1:8001`；collection 命名、共享权限和自动历史边界见[架构说明](../docs/architecture.md)。
 
-应用未显式传自定义 embedding；当前后端 Python 客户端的默认函数采用 ONNX MiniLM，导入 worker 与 API 都需要可用模型缓存。试点镜像构建期下载/校验/预热，禁网运行已有验证。Chroma 不可达时 Memory/RAG 接口返回 503，任务后的摘要写入不阻塞成功回答。自动对话历史来自 PostgreSQL 快照，不能把 Memory 调试接口说成已接入长期自动召回。
+embedding 在后端 Python 客户端计算，API 与导入 worker 都需要模型缓存；试点镜像构建期准备缓存。Chroma 不可达时 Memory/RAG 接口返回 503，任务后的摘要写入不阻塞成功回答。
 
-后台导入由 PostgreSQL 持久队列与监管 worker 驱动；幂等、分批确认进度、排队取消、权限复核与中断恢复见[导入契约](../docs/rag-background-ingest.md)。PostgreSQL 与 Chroma 没有跨库事务，失败后先复核部分写入，不自动重放。
+后台导入由 PostgreSQL 持久队列与监管 worker 驱动。双存储没有跨库事务，失败后需复核部分写入；幂等、取消及恢复见[导入契约](../docs/rag-background-ingest.md)。
 
 ## 检查与维护
 
@@ -139,6 +139,6 @@ bash scripts/ci_run_release_gate.sh --phase backend
 
 数据库/HTTP 集成使用隔离资源，命令和权限见[运行手册](../docs/development-runbook.md)。历史 SQLite 迁移入口 `scripts/migrate_sqlite_to_postgres.py` 仅用于已有数据迁移，当前运行时只支持 PostgreSQL；含密码的连接串不要写进共享命令记录。
 
-本地实现与工程收尾完成，后续按可复现问题维护。当前测试数量、配置脱敏回归、真实模型结果及镜像范围统一见[验证基线](../docs/acceptance.md#验证基线)，外部就绪未验收。写入并行与 HTTP/DAG checkpoint 延期。
+后端源码基线、静态/集成检查、真实模型结果和镜像范围统一见[验证基线](../docs/acceptance.md#验证基线)。
 
-沿用主题模块与 facade，不向历史大文件无限追加；新增测试放入有余量的主题。开发后同步三个 README 与受影响专题，验证集中在验证基线；开发实时计划已删除，原始备份计划永远只读。
+开发遵循[维护规则](../AGENTS.md)与[贡献指南](../CONTRIBUTING.md)，沿用主题模块和兼容 facade。

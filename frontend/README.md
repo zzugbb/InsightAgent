@@ -33,42 +33,31 @@ npm --prefix frontend run dev
 
 ## 关键实现位置
 
-- `app/components/workbench/index.tsx`：工作台主编排
-- `app/components/workbench/inspector.tsx`：轨迹与上下文面板
-- `app/components/workbench/chat-column.tsx`：消息历史、用户临时消息与流式 assistant 展示
-- `app/components/workbench/sidebar.tsx`：会话列表、会话导出入口与设置入口
-- `app/components/workbench/sidebar-settings-menu.tsx`：模型设置、审计、用量统计、知识库治理与当前用户信息入口
-- `app/components/workbench/trace-flow-view.tsx`：轨迹流程图节点渲染
-- `app/components/workbench/usage-dashboard-modal.tsx`：用量仪表盘
-- `app/components/workbench/model-settings-modal.tsx`：mock/remote 模型设置、校验与保存
-- `app/components/workbench/audit-logs-modal.tsx` / `audit-logs-modal-utils.ts`：审计日志筛选、服务端 keyword URL、分页、失败详情可读化、展开与导出
-- `app/components/workbench/knowledge-base-governance-modal.tsx`：知识库治理与导入/检索入口
-- `app/components/workbench/knowledge-import-modal.tsx` / `knowledge-import-utils.ts`：UTF-8 文件校验、预览与既有后台导入任务衔接
-- `app/components/workbench/runtime-debug-modal.tsx` / `runtime-debug-memory-section.tsx`：RAG 调试编排与按会话重建的 Memory 调试区
-- `app/tasks/[taskId]/page.tsx`：任务详情页与任务导出入口
-- `app/tasks/[taskId]/task-checkpoint-panel.tsx`：实验性起点选择、成功前缀说明、失败同键重试与独立会话接管
-- `app/tasks/[taskId]/task-rerun-panel.tsx`：独立任务分支、输入编辑、同键重试、来源分页与 Workbench 会话接管
-- `lib/stores/chat-stream-store.ts`：SSE 事件分发与 trace 状态
-- `lib/stores/chat-stream-store-utils.ts`：tool_end / tool meta 合并、preview/output/result-summary 归一化
-- `app/components/workbench/utils.ts`：trace display、tool result preview、follow-up 展示与搜索辅助
-- `app/components/workbench/model-settings-modal-utils.ts`：settings 预览、provider/source/tool registry diagnostics 与 task queue diagnostics 说明
-- `lib/api-client.ts`：REST 请求封装、Bearer 注入、refresh token 自动续期
-- `lib/types/trace.ts`：前端 TraceStep 类型
+工作台组件位于 `app/components/workbench/`，主入口如下；辅助逻辑与对应组件放在同一主题目录。
+
+| 职责 | 入口 |
+| --- | --- |
+| 主编排、消息与会话导航 | `index.tsx`、`chat-column.tsx`、`sidebar.tsx`、`sidebar-settings-menu.tsx` |
+| 轨迹、上下文与流程图 | `inspector.tsx`、`trace-flow-view.tsx`、`utils.ts` |
+| 模型设置、用量与审计 | `model-settings-modal.tsx`、`usage-dashboard-modal.tsx`、`audit-logs-modal.tsx` |
+| 知识库治理、导入与调试 | `knowledge-base-governance-modal.tsx`、`knowledge-import-modal.tsx`、`runtime-debug-modal.tsx` |
+| 任务详情、分支与步骤恢复 | `app/tasks/[taskId]/` 下的 `page.tsx`、`task-rerun-panel.tsx`、`task-checkpoint-panel.tsx` |
+| 流状态与结果合并 | `lib/stores/chat-stream-store.ts`、`lib/stores/chat-stream-store-utils.ts` |
+| 请求、认证与 Trace 类型 | `lib/api-client.ts`、`lib/types/trace.ts` |
 
 ## SSE 消费与稳定契约
 
-事件为 `start / state / trace / tool_start / tool_end / heartbeat / token / cancelled / timeout / done / error`。trace 的 step 与服务端 REST 同构，tool 事件按 step_id 合并；允许并发事件交错，不依赖单一运行工具假设。
+前端按 `step_id` 合并工具事件，允许并发交错；Trace 与 REST 记录同构。完整事件和字段见[运行时契约](../docs/runtime-contracts.md#ssetrace-与导出)。
 
-Workbench 静默拉取 `trace/delta`，失败退避并在流结束后补拉；同步健康度显示在 Context。failed 状态轮询不提前截断仍活动的 SSE，具体错误优先保留；流关闭后必要时补拉既有任务/Trace。刷新与会话切换接管已有 queued/pending/running，不创建重复任务。
+Workbench 拉取 `trace/delta`，失败退避并在流结束后补拉，同步健康度显示在 Context。刷新或切换会话会接管已有活动任务；轮询发现失败状态时仍保留 SSE 的具体错误。
 
-状态/轮询使用 normalized 状态，失败摘要优先显式 hint/source；本地筛选和处置提示不改写服务端状态。流程图虚线仅为记录顺序，实线仅为声明依赖/决策来源；缺少历史字段不推断。回答结束提示消费白名单原因及最新 seq，completed 不代表目标全部满足。
+状态与筛选使用服务端归一化字段；流程图分别展示记录顺序与声明依赖。回答结束提示按最新 `seq` 和白名单原因显示，规则见[回答完整性](../docs/runtime-contracts.md#历史与页面completion)。
 
 输入法组合中的 Enter 保留给输入法，普通 Enter 发送、Shift+Enter 换行。窄屏筛选换行、宽表格在容器内滚动；必要 ID 缩略显示，可查看/复制完整值，路由、配置与导出保留完整标识。详见[运行时契约](../docs/runtime-contracts.md)，页面复核范围见[验证基线](../docs/acceptance.md#验证基线)。
 
 ## Memory / RAG
 
-- Memory：会话 collection `memory_{session_id}`；status/add/query 为手工调试入口。完整历史在 PostgreSQL。
-- RAG：知识库 collection `kb_{user_hash}_{knowledge_base_id}`，默认 ID 为 `default`；`shared-*` 写入由管理员权限控制。
+- Memory 的 status/add/query 为会话级手工调试入口；数据存储和知识库隔离见[架构说明](../docs/architecture.md)。
 - 普通入口“设置 → 知识库 → 导入知识”支持 UTF-8 TXT/Markdown，预览后使用后台任务；同名文件归入同文档并保留版本，结果不确定时重试原载荷/幂等键。
 - 关闭弹窗停止前端轮询，已受理的后台任务继续执行；重新打开读回状态与确认进度。失败需复核已写入内容。
 - 检索测试带入目标库，展示来源、版本、distance 与召回摘要；这些字段辅助复核，不等于答案质量评分。
@@ -77,7 +66,7 @@ Workbench 静默拉取 `trace/delta`，失败退避并在流结束后补拉；�
 
 ## 安全与设置
 
-API Key 输入仅存于组件草稿，通过鉴权请求发给后端；摘要不返回 Key，保存后清空输入。access / refresh token 当前保存在浏览器 localStorage，不是 HttpOnly Cookie；部署须控制访问边界并保护同源脚本，详见[安全政策](../SECURITY.md)。
+API Key 仅在组件草稿中暂存，通过鉴权请求提交，保存后清空。模型设置操作见[配置指南](../docs/configuration.md)；access / refresh token 当前使用 localStorage，保护要求见[安全政策](../SECURITY.md)。
 
 前端继续消费服务端统一 preview/output/result-summary，避免为不同 Provider 派生独立结果语义。对话、Trace 与导出可能包含用户业务内容，分享前按资料访问权限检查。
 
@@ -91,8 +80,8 @@ npm run test:e2e
 npm run test:e2e:smoke:matrix
 ```
 
-门禁包含 Node tests、lint、Turbopack 与 webpack 双生产构建；浏览器 fixture 和真实业务路径分开统计。当前文档维护未改前端应用，沿用既有应用验证；源码、计数、桌面/手机检查与已知 warning 统一见[验证基线](../docs/acceptance.md#验证基线)。
+门禁包含 Node tests、lint、Turbopack 与 webpack 双生产构建；浏览器 fixture 和真实业务路径分开统计。源码基线、检查结果与已知 warning 统一见[验证基线](../docs/acceptance.md#验证基线)。
 
-本地收尾已封板，部署、真实资料与用户签收延期；当前按实际问题维护。Next.js / React / ESLint 精确版本见 [package.json](package.json) 与锁文件；ESLint 10 等上游兼容后再评估。写入工具并行、HTTP/DAG checkpoint 不在本轮范围。
+Next.js / React / ESLint 精确版本见 [package.json](package.json) 与锁文件；依赖升级需检查上游兼容性。
 
-开发后同步三个 README 与受影响专题，验证集中在验证基线；保留长期实现/契约参考，不再维护开发实时计划。原始完整备份计划永远只读。
+开发遵循[维护规则](../AGENTS.md)与[贡献指南](../CONTRIBUTING.md)，按影响更新专题契约与验证基线。

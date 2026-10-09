@@ -27,29 +27,65 @@ bash scripts/ci_run_release_gate.sh --phase frontend
 
 ## CI 与诊断
 
-`scripts/ci_run_release_gate.sh` 是不启动本机服务的发布前门禁聚合入口：`auto` 在 PR 中按 changed files 选择 backend/frontend 阶段，并始终跑 tooling 与 hygiene；非 PR 或 diff 不可解析时保守跑全量。`backend` 跑 full slice 与 module boundary，`frontend` 跑 node tests、lint、Next 16 默认 Turbopack production build 与显式 webpack fallback build，`tooling` 跑 CI/e2e tooling 自测，`hygiene` 跑 compileall、diff whitespace、备份计划 diff，以及 `scripts/check_conflict_markers.sh` 对受 git 管理文本文件的行首冲突标记扫描；可用 `--dry-run` 查看命令清单，可用 `--summary-file` / `--json-summary-file` 输出 CI 摘要，摘要包含 `summary_kind`、`summary_schema_version`、`service_required`、resolved phases、逐步结果、`step_summary` 聚合计数、`failed_step_labels`、release/rollback `decision_summary` 与 `operator_summary`。首个步骤失败时保留原退出码，并在退出前写出失败 decision/operator summary；空 focus phase 不应触发 `set -u` 二次失败。
-后端 full slice 已检查 `backend/api_surface_baseline.json` 是否匹配运行时 OpenAPI。更改接口时按 [`docs/api-changelog.md`](api-changelog.md) 核对兼容性、更新指纹与记录；指纹变更提示人工审查，不能替代 SSE/Trace/export 运行时契约测试。
-`scripts/ci_download_previous_release_gate_summary.sh` 通过 GitHub CLI 尝试下载同分支上一条 successful `release-gate-summary` artifact，不启动服务；缺少 `gh`、分支、run id、历史 run 或 artifact 时写 `release_gate_previous_summary_download` 低敏诊断和 `operator_summary` 并返回成功。
-`scripts/ci_release_gate_trend_summary.sh` 只读取当前和可选上一份 release gate JSON summary，不启动服务；输出 baseline/improved/regressed/changed/unchanged、步骤计数 delta、新增/移除失败步骤标签，Markdown 直接展示当前/上一份 operator 状态、主行动和关注阶段，并在 JSON 中透传 release/rollback `decision_summary` 与 `operator_summary`。旧 release gate artifact 尚无 `operator_summary` 时，会按既有 result、step summary 与失败标签派生低敏兼容摘要，避免历史基线阻断后置契约校验。GitHub release-gate workflow 会生成 previous download 诊断并上传 `release-gate-trend-summary` artifact。
-`scripts/ci_assert_operator_summary_contract.sh` 只读取 summary JSON 和可选 Markdown，不启动服务；校验低敏 `operator_summary` 必需字段、状态/严重级别枚举、标量列表值，以及 Markdown 是否暴露 operator 状态与主行动。该检查已纳入 tooling 自测、release-gate workflow 与 release readiness matrix。workflow 将 release Markdown 固定写入 `/tmp/release-gate-summary.md`，追加到当前 step summary 后仍使用原文件完成后置校验和 artifact 上传；不要跨 step 读取 `$GITHUB_STEP_SUMMARY`，GitHub 会为每个 step 提供不同文件。
+### 选择门禁
 
-`scripts/ci_release_readiness_matrix.sh` 只生成发布候选检查矩阵，支持 `--format markdown|json` 与 `--output <path>`。矩阵明确区分不需要服务的静态 release gate、previous summary 下载诊断、operator summary contract、需要已启动服务的 backend/frontend e2e，以及 e2e 后置 artifact-stage guard；并保留 release visibility summary、rollback decision log 与 artifact retention policy 三类发布/回滚可见性检查项。它不启动服务，也不替代下方 service-backed e2e 命令。
-GitHub backend/frontend e2e workflow 已按矩阵覆盖低并发 queue 阶段；backend 失败诊断可重复传 `--secondary-health-url`，用于同时采集 timeout 与 queue 实例。
-artifact-stage guard 的 main 分支严格度为 `fail-on-missing`，PR 严格度为 `fail-on-empty`；手动 `workflow_dispatch` 可用 `artifact_stage_strict_level` 覆盖。`ci_assert_artifact_stage_health.sh` 的 Markdown/JSON 输出包含低敏 `operator_summary`，用于区分可继续、需复核 warning、需补齐 artifact 的值班行动。
-本机检查、业务 RAG、真实模型人工指引与证据导出见[验收指南](acceptance.md)；没有提供输入或只返回 manual/skipped 的阶段不能计作完成。
+[发布门禁](../scripts/ci_run_release_gate.sh)不启动服务。PR 的 `auto` 按变更选择后端/前端阶段，始终检查 tooling 与 hygiene；修改 CI、脚本、Compose 或本手册时跑全量。非 PR 或 diff 无法解析时也跑全量。
 
-GitHub `backend-e2e` / `frontend-e2e` 的 “Validate e2e tooling fixtures” 步骤使用 `if: always()`，主 e2e 失败时仍运行 `test_ci_e2e_tooling.sh` 并写入 artifact guard 摘要占位，避免 finalize 把 guard 摘要缺失计入主因噪音。`frontend-e2e` 失败诊断重跑使用 `scripts/ci_rerun_frontend_e2e_diagnostics.sh`：仅在存在 `test-results/.last-run.json` 且记录失败时调用 Playwright `--last-failed`（与主跑共用输出目录，不用独立 `--output`）；脚本恒以退出码 0 结束，但在 step summary 与 `/tmp/frontend-e2e-rerun-diagnostics.{md,json}` 如实标注 `diagnostic_gate_result` 与 `playwright_exit_code`，不以 `continue-on-error` 伪装成功。
-release-gate、backend-e2e 与 frontend-e2e 上传的发布/e2e artifacts 显式保留 `14` 天。
-`scripts/ci_export_diagnostics_overview.sh` 会汇总 backend/frontend diagnostics 与 artifact guard 结果，并输出低敏 `operator_summary`，只包含状态、主行动、告警计数、guard 失败数、关注 scope 与阻塞 guard scope。
+| 阶段 | 检查范围 |
+| --- | --- |
+| `backend` | full slice、模块边界；包含 OpenAPI 基线比对 |
+| `frontend` | Node tests、lint、Turbopack 与 webpack 双生产构建 |
+| `tooling` | CI/e2e 工具自测 |
+| `hygiene` | compileall、差异空白、原始计划 diff、跟踪文本的冲突标记 |
+| `all` | 上述全部阶段 |
 
-请求日志只含 request ID、method、路由模板、状态码和完整响应耗时；SSE 建连 HTTP 200 不能说明任务成功。Provider 日志 `llm_http_attempt` 仅含模式、结果、状态族、尝试耗时与 usage 可用性；400 兼容回退可产生两次尝试，不等于任务数或账单调用数。
+查看命令用 `--dry-run`；实际运行可同时保存两种摘要：
 
 ```bash
-backend/.venv/bin/python backend/scripts/summarize_provider_attempts.py <日志文件>
+bash scripts/ci_run_release_gate.sh --phase hygiene \
+  --summary-file /tmp/release-gate-summary.md \
+  --json-summary-file /tmp/release-gate-summary.json
+```
+
+摘要包含逐步结果、失败标签、发布/回滚决策和 `operator_summary`（状态、主行动、关注阶段）。首个失败保留原退出码并写摘要；排障先看失败步骤，DRY-RUN 不能视为通过。更改接口按[API 变更流程](api-changelog.md)审查；OpenAPI 指纹不替代 SSE/Trace/导出测试。
+
+### 查找诊断与产物
+
+摘要读取与校验不启动服务；前端失败重跑需要服务和浏览器权限。参数以对应脚本的 `--help` 为准。
+
+| 目的 | 入口 | 输出与失败处理 |
+| --- | --- | --- |
+| 选择静态和服务验收范围 | [ci_release_readiness_matrix.sh](../scripts/ci_release_readiness_matrix.sh) | Markdown/JSON 检查矩阵；包含发布可见性、回滚记录与产物保留检查，不执行矩阵中的验收 |
+| 下载同分支上次成功门禁 | [ci_download_previous_release_gate_summary.sh](../scripts/ci_download_previous_release_gate_summary.sh) | 下载诊断；缺 `gh` 或历史产物时成功退出并明确缺项，不算已有对照基线 |
+| 比较当前与上次结果 | [ci_release_gate_trend_summary.sh](../scripts/ci_release_gate_trend_summary.sh) | 趋势、步骤变化与失败标签；旧摘要缺 operator 字段时派生兼容摘要 |
+| 校验摘要格式 | [ci_assert_operator_summary_contract.sh](../scripts/ci_assert_operator_summary_contract.sh) | 校验 JSON 必需字段、枚举及 Markdown 展示；失败先检查源摘要 |
+| 校验 e2e 产物是否齐全 | [ci_assert_artifact_stage_health.sh](../scripts/ci_assert_artifact_stage_health.sh) | guard 与 operator 摘要；main 用 `fail-on-missing`，PR 用 `fail-on-empty`，手动运行可指定严格度 |
+| 汇总 e2e 诊断 | [ci_export_diagnostics_overview.sh](../scripts/ci_export_diagnostics_overview.sh) | 状态、主行动、告警和阻塞 scope，不包含业务正文 |
+| 重跑前端失败案例 | [ci_rerun_frontend_e2e_diagnostics.sh](../scripts/ci_rerun_frontend_e2e_diagnostics.sh) | 已有服务与失败记录时执行 `--last-failed`；仅为诊断，检查报告中的 `playwright_exit_code` 与 `diagnostic_gate_result` |
+
+```bash
 bash scripts/ci_release_readiness_matrix.sh --format markdown
 ```
 
-汇总 request/stream 耗时 count/min/max/mean（毫秒），缺失/非法值单独计数，无样本为 null；包含错误/回退，不推算首 token、供应商推理时间或成本。tooling fixture 在 release/backend/frontend workflow 都运行；故障注入在首个无依赖命令触发，不假设 e2e runner 有 backend/.venv。`/dev/fd` 沙箱限制可能影响 shell fixture，按权限流程重跑并保留首次结果。
+服务验收命令见[下一节](#本机服务与-e2e)，业务与真实模型操作见[验收指南](acceptance.md)。缺输入、manual 或 skipped 阶段均不计作通过。
+
+### CI 排障规则
+
+- release-gate、backend-e2e、frontend-e2e 的产物保留 **14 天**。先下载对应 run 的摘要/日志；本机临时文件不是持久产物。
+- release workflow 使用 `/tmp/release-gate-summary.md` 校验和上传；不要跨 step 读取 `$GITHUB_STEP_SUMMARY`，各 step 文件不同。
+- backend/frontend e2e 覆盖独立低并发 queue；后端诊断可重复传 `--secondary-health-url`，同时检查 timeout 与 queue 实例。
+- e2e 主跑失败后，`if: always()` 的 tooling 检查仍产生 guard 摘要，避免缺失产物掩盖主因。前端诊断重跑共用主跑输出目录，只有 `.last-run.json` 记录失败才执行；入口退出 0 不代表失败案例通过。
+- tooling fixture 的故障注入从无依赖命令开始，不假设 e2e runner 存在 `backend/.venv`。shell fixture 受 `/dev/fd` 沙箱限制时，按权限流程重跑并保留首次结果。
+
+### Provider 与请求日志
+
+请求日志包含 request ID、method、路由模板、状态码和响应耗时；SSE 建连 200 不证明任务成功。`llm_http_attempt` 仅记录模式、结果、状态族、尝试耗时与用量可用性，400 兼容回退可能产生两次尝试。
+
+```bash
+backend/.venv/bin/python backend/scripts/summarize_provider_attempts.py <日志文件>
+```
+
+汇总 request/stream 耗时 count/min/max/mean（毫秒）；缺失/非法值单独计数，无样本为 null。样本包含错误和回退，不能据此推算首 token、供应商推理时间、任务数或账单成本。
 
 ## 本机服务与 e2e
 
