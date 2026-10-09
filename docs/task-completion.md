@@ -31,8 +31,6 @@ backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task_comp
 backend/.venv/bin/python backend/scripts/test_task_completion_postgres.py
 ```
 
-2026-10-08：静态 5/5；独立 PostgreSQL 6/6，包含数据库触发器注入助手插入/会话更新时间失败、并发完成、取消/执行实例/用户竞争、提交前外部读取、成功回放/导出与下一轮会话上下文。集成已进入 backend-e2e，使用本地模型替身，无真实模型请求。
+历史原子保存静态 5/5、隔离 PostgreSQL 6/6；终态用量静态 5/5、隔离 PostgreSQL 10/10。覆盖触发器注入失败回滚、并发/权限/终态竞争、外部读取、流尾/回退/保存跨时限、迟到决策及失败已知用量。集成已纳入 backend-e2e，模型仅本地替身；最新完整门禁见[验证基线](validation-baseline.md)。
 
-来源 `/tmp/insightagent-task-completion-{static,postgres}.log`；模型流 6/6、用量 3/3、步骤恢复 9/9 回归来源 `/tmp/insightagent-task-completion-{stream,usage,checkpoint}-regression.log`；完整门禁 `/tmp/insightagent-task-completion-release.md` / `.json`（10/10 PASS、后端 2180/2180、前端 206/206）。本轮未重跑浏览器。
-
-2026-10-08 终态维护：静态 `-k task_terminal_usage` **5/5**，前端用量计算 **8/8**；独立 PostgreSQL `test_task_terminal_postgres.py` **10/10**，覆盖流尾、空流回退、最终 Trace 保存跨时限，迟到决策、取消竞争、工具/决策/流失败、真实本机 HTTP usage 后 EOF、汇总/导出与成功写入失败。已进入 backend-e2e。来源 `/tmp/insightagent-task-terminal-{static,frontend,postgres}.log`；反馈、模型流、原子成功回归各 **6/6**，来源 `/tmp/insightagent-task-terminal-{feedback,stream,completion}-regression.log`。完整门禁 `/tmp/insightagent-task-terminal-release.md` / `.json`；无真实模型/目标部署或浏览器复验。
+终态用量专项：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task_terminal_usage` 和 `backend/.venv/bin/python backend/scripts/test_task_terminal_postgres.py`。历史来源 `/tmp/insightagent-task-completion-{static,postgres}.log`、`/tmp/insightagent-task-terminal-{static,frontend,postgres}.log`；不把旧完整门禁计数当作当前重跑结果。

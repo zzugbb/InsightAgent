@@ -39,7 +39,7 @@
 
 输入法组合中的 Enter 不发送；普通 Enter 发送、Shift+Enter 换行。normalized 状态驱动轮询，failure hint/source 优先显式摘要；本地语义过滤、处置提示和知识库往返不改变业务 API。
 
-failed 轮询不提前截断活动 SSE。增量同步失败可退避，流关闭后必要时补拉既有任务/Trace；列表刷新失败保留陈旧数据与草稿。Task Center/Audit/Usage 共用失败回放，不能从 UI 状态推断缺失工具调用。窄屏与 ID 显示处理见[专项检查](post-seal-usability-audit.md)。
+failed 轮询不提前截断活动 SSE。增量同步失败可退避，流关闭后必要时补拉既有任务/Trace；列表刷新失败保留陈旧数据与草稿。Task Center/Audit/Usage 共用失败回放，不能从 UI 状态推断缺失工具调用。窄屏筛选换行、宽表格在容器内滚动；必要 ID 缩略显示并可查看/复制完整值，API、路由和导出仍保留完整标识。
 
 ## 鉴权、安全与工程接口
 

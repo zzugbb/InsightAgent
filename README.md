@@ -4,7 +4,7 @@
 
 InsightAgent 把对话、知识检索、工具执行和结果回放放在同一个工作台中。用户可以查看一项任务如何规划、调用了哪些工具、检索到哪些来源，以及回答如何流式生成；任务结束后，执行轨迹与用量仍可查询、导出和复核。
 
-[快速开始](#快速开始) · [架构](docs/architecture.md) · [配置](docs/configuration.md) · [文档](docs/README.md) · [贡献](CONTRIBUTING.md)
+[快速开始](#快速开始) · [使用示例](#使用示例) · [架构](docs/architecture.md) · [配置](docs/configuration.md) · [文档](docs/README.md) · [贡献](CONTRIBUTING.md)
 
 ## 核心能力
 
@@ -19,6 +19,14 @@ InsightAgent 把对话、知识检索、工具执行和结果回放放在同一�
 | 工程验证 | OpenAPI 指纹、主题化回归测试、前后端发布门禁、浏览器 e2e、隔离 PostgreSQL/Chroma 与候选镜像协议验证。 |
 
 “可解释”指可观察的执行依据。Trace 不暴露模型内部思维过程，也不能单独证明答案正确。工具执行以实际 action 与状态为准，模型对执行行为的自然语言描述仍需核对。
+
+## 适用场景
+
+- 检索指定知识库并回答问题，复核引用来源和文档版本。
+- 把检索事实交给计算或已配置的 HTTP 工具，查看实际输入与公开结果。
+- 调试模型规划、取消或恢复任务，对照历史 Trace、导出与用量定位问题。
+
+当前工作台面向有界任务执行和复核；不提供通用操作系统控制、可视化流程编辑或自动长期记忆召回。
 
 ## 工作流
 
@@ -89,40 +97,28 @@ npm --prefix frontend run dev
 
 开发 Compose 使用开发凭据、浮动基础镜像和本地端口；单机试点使用独立的 [生产配方与预检](docs/pilot-deployment-preflight.md)。`start_insightagent.command` 是本机便利脚本，会释放应用端口并执行依赖 `up`；已有服务或旧 Chroma 数据时优先使用手动命令，先读[运行手册](docs/development-runbook.md)和[备份说明](docs/local-stack-backup-restore.md)。
 
-## SSE 与 Trace 契约
+## 使用示例
 
-`GET /api/tasks/{task_id}/stream` 负责驱动和接管任务。事件包括 `start`、`state`、`trace`、`tool_start`、`tool_end`、`heartbeat`、`token`、`cancelled`、`timeout`、`done`、`error`。
+1. 在 mock 模式输入 `计算 17 * 19`，查看回答和 Calculator 的实际 action；mock 是明确演示模式。
+2. 在模型设置保存 remote 配置。导入 UTF-8 TXT/Markdown 到指定知识库，再询问资料中的事实或派生计算；通过 Trace 核对 source / document_version 与实际工具执行。
+3. 打开任务详情查看时间线、流程图和 JSON / Markdown 导出。失败后可编辑输入创建独立分支；实验性“从步骤继续”仅复用内建顺序计划的成功前缀。
 
-`trace.data.step` 与 REST `TraceStep` 同构：`id / type / content / meta / seq?`。工具事件按 `step_id` 合并；增量接口按递增 `seq` 同步，步骤更新可有跳号。JSON v1.0 / Markdown 导出读取同一持久化记录。正常完成原子保存任务、回答消息、Trace 和用量，再发送 `done`。详细规则见[运行时契约](docs/runtime-contracts.md)。
+任务 completed 表示执行和保存结束；回答正确性、引用质量及工具声明还需结合证据复核。计费展示是配置单价估算，不是供应商账单。
 
-## Memory / RAG 与数据边界
+## 数据与执行边界
 
-| 存储 | 职责 |
-| --- | --- |
-| PostgreSQL | 用户、会话、消息、任务、Trace、用量、设置、审计及后台导入队列，是历史与回放的主存储。 |
-| Chroma Memory | `memory_{session_id}`，会话级语义记忆；任务后摘要写入为 best-effort。 |
-| Chroma RAG | `kb_{user_hash}_{knowledge_base_id}`，用户隔离的外部资料；`shared-*` 库由管理员写入。 |
+PostgreSQL 是消息、任务、Trace 和用量的主存储。Chroma 分别保存会话级 Memory 和用户隔离知识库，shared-* 由管理员写入；当前对话上下文读取有界 PostgreSQL 历史，没有自动长期 Memory 召回。默认 embedding 在后端 Chroma Python 客户端计算，试点镜像构建期准备缓存。
 
-模型对话上下文来自有界 PostgreSQL 历史快照；当前没有自动长期 Memory 召回链。应用未自定义 embedding，使用后端 Chroma Python 客户端的默认 embedding 函数；试点镜像在构建期准备模型缓存。Chroma 不可达时 Memory/RAG 接口返回 503，任务后 Memory 写入失败不阻塞成功回答。详见[架构与 embedding 边界](docs/architecture.md)。
+REST、SSE、Trace delta、历史回放与 JSON v1.0 / Markdown 导出读取同一执行记录；成功状态与回答原子提交。完整字段、事件、取消/超时和恢复规则见[运行时契约](docs/runtime-contracts.md)，数据分工见[架构](docs/architecture.md)。
 
-## 验证与当前状态
+## 项目状态
 
-**本地开发与工程收尾已封板，当前按实际问题维护。** 最新后端 full slice 2224/2224、模块边界 9/9；tooling 1/1、hygiene 4/4。前端应用未变，沿用 `103ea1f` 的 node 217/217、lint 0 error / 2 个既有 warning、Turbopack/webpack 双构建；Trace 桌面/手机及布局专项分别 2/2。各次执行范围与来源见[验证基线](docs/validation-baseline.md)。
+本地实现与工程收尾完成，现阶段按可复现问题维护。后端、前端、浏览器、隔离存储、真实 GLM 与候选镜像各有独立验证范围，详见[验证基线](docs/validation-baseline.md)与[真实模型记录](docs/real-model-acceptance.md)。真实业务资料、目标用户签收和部署环境尚未验收，外部试点/生产就绪未获验证。
 
-真实 GLM 合成任务原四场景 3/4 完整通过，编辑分支恢复 1/1；原同会话续算规划回退未满足实际调用计算工具要求。合成资料通过不等于业务签收，提供方 token 记录不等于账单成本。部署、真实业务资料与目标用户签收延期，外部试点/生产就绪尚未验收。旧候选镜像未包含当前应用维护，部署前须重新构建并联调。详见[收尾审计](docs/project-completion-audit.md)与[真实模型验收](docs/real-model-acceptance.md)。
-
-写入工具并行和 HTTP/DAG checkpoint 延期；PDF/Office/OCR 导入、内建网页搜索和图编辑器不在当前实现范围。
-
-```bash
-bash scripts/ci_run_release_gate.sh --phase auto
-```
-
-该门禁不启动服务；隔离数据库、浏览器和真实模型验收各有独立范围，命令与权限见[开发运行手册](docs/development-runbook.md)。
+写入工具并行、HTTP/DAG checkpoint 延期；PDF/Office/OCR 导入、内建网页搜索和图编辑器不在当前实现范围。开发与测试命令见[贡献指南](CONTRIBUTING.md)和[运行手册](docs/development-runbook.md)，业务任务复核见[验收指南](docs/acceptance.md)。
 
 ## 文档与维护
 
 从[文档导航](docs/README.md)按使用、开发、运行或验收查找资料。接口与实现入口分别见[后端 README](backend/README.md)、[前端 README](frontend/README.md)；契约变更记录见[API 变更记录](docs/api-changelog.md)。
 
-每轮开发同步三个 README 与实时计划。当前状态和验证摘要保持简洁，长期技术参考保留在 README 和专题文档中；原始完整计划 `data/insightagent.plan.back.md` 永远只读，当前范围以实时计划和收尾审计为准。
-
-贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)，安全问题见 [SECURITY.md](SECURITY.md)。项目采用 [MIT License](LICENSE)。
+README 提供项目与模块入口，专题文档维护稳定行为，验证基线记录当前状态和证据。贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)，安全问题见 [SECURITY.md](SECURITY.md)。项目采用 [MIT License](LICENSE)。

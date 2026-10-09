@@ -96,43 +96,23 @@ backend/.venv/bin/python -m uvicorn app.main:app --app-dir backend --host 127.0.
 
 ## 关键实现位置
 
-- `app/config.py`：统一配置读取
-- `app/schemas/trace.py`：`TraceStep` / `TraceStepMeta` 与解析校验
-- `app/api/routes/`：`health`、`auth`、`sessions`、`tasks`、`task_reruns`、`settings`、`rag`、`audit`
-- `app/db.py`：PostgreSQL 连接、初始化与索引
-- `app/providers/`：provider 抽象、mock provider、OpenAI-compatible remote provider
-- `app/services/chat_execution_service.py`：任务流编排与 SSE 主链
-- `app/services/task_rerun_{service,schema}.py` 与 `app/api/routes/task_reruns.py`：完整任务分支的原子创建、幂等、独立会话与来源关系；详见[任务分支契约](../docs/task-reruns.md)
-- `app/services/task_tool_{execution,parallel}.py`：任务工具协调、内建读取并发窗口、共享线程上限及顺序 Trace 合并
-- `app/services/task_queue_service.py`：单进程任务执行槽位、capacity-aware oldest eligible FIFO 等待调度、安全等待快照、等待项移除与测试重置入口
-- `app/services/tool_runtime.py`：tool runtime 兼容 facade，汇总旧导出路径
-- `app/services/tool_runtime_planning.py`：planner、provider planner 与 payload normalization
-- `app/services/task_checkpoint_service.py`：内建顺序计划资格、成功前缀快照与新 Trace/usage 复用；分支创建与既有任务执行接管
-- `app/services/tool_plan_dependencies.py`：显式工具依赖图校验、稳定拓扑波次与公开预览标量绑定；`task_tool_execution.py` 协调执行与持久化，`task_tool_parallel.py` 限定内建工具并发
-- `app/services/tool_runtime_display.py`：tool 显示名、语义分类、输出归一化与 `run_tool` 旧导出实现
-- `app/services/tool_runtime_execution.py`：runtime context、attempt 与前半段执行语义
-- `app/services/tool_runtime_execution_flow.py`：trace event、RAG follow-up、iteration 与 service effects
-- `app/services/tool_runtime_http_json.py`：HTTP JSON request/template/mapping 核心
-- `app/services/tool_runtime_http_json_execution.py`：HTTP JSON runner、execution spec、summary 与 diagnostics
-- `app/services/tool_http_parallel_policy.py`：HTTP GET 显式只读资格、固定方法/请求体校验与弱引用 runner 身份登记
-- `app/services/tool_runtime_http_json_response.py`：响应读取、解码、错误格式化和敏感信息脱敏
-- `app/services/tool_runtime_registry.py`：registry/file/provider-source facade
-- `app/services/tool_runtime_registry_settings.py`：settings override、provider artifacts 与 diagnostics 实现
-- `app/services/tool_runtime_registry_runtime.py`：registry service action、preflight 与 runtime artifacts 实现
-- `app/services/tool_runtime_registry_public.py`：兼容 wrapper 安装器
-- `app/services/chat_persistence_service.py`：会话/任务持久化与治理列处理
-- `app/services/chat_persistence_trace_export.py`：Trace 展示、响应摘要与任务 export
-- `app/services/chat_persistence_usage.py`：usage summary/dashboard 与 session export response summary
-- `scripts/tool_runtime_slice/`：后端 slice 测试主题包；`backend/scripts/test_tool_runtime_slice.py` 是兼容入口
-- `app/services/chroma_memory_service.py`：会话 Memory 的 status/add/query 与任务后摘要 best-effort 写入
-- `app/services/conversation_context.py` / `agent_knowledge_context.py`：有界会话快照与模型 RAG 正文/版本证据
-- `app/services/agent_tool_context.py`：公开 HTTP 工具结果的模型证据、脱敏与 JSON 预算；不改变 Trace/Observation 展示
-- `app/services/chroma_rag_service.py`：RAG ingest/query/status、knowledge base list/clear/delete 与 shared/private 语义
-- `app/services/rag_ingest_{jobs,schema,worker,runner}.py` 与 `app/api/routes/rag_ingest.py`：持久化后台导入、分批确认进度、领取/恢复与子进程监管；共享 lazy chunking 在 `app/services/rag_chunking.py`，详见[后台导入契约](../docs/rag-background-ingest.md)
-- `app/services/settings_service.py`：用户级模型设置读取/保存与 `api_key` 加密解密
-- `app/services/auth_service.py` / `auth_session_service.py`：用户认证、access token、refresh token 轮换与会话撤销
-- `app/services/audit_service.py`：审计事件写入、分页查询与筛选
-- `tasks.usage_json`：任务完成时持久化 usage，供任务列表、导出与 dashboard 复用
+下表服务文件位于 `app/services/`，对应契约见[技术文档](../docs/README.md#开发参考)。继续沿用主题模块与兼容 facade，避免扩大主编排文件。
+
+| 职责 | 入口 |
+| --- | --- |
+| 配置 / 存储 / schema | `app/config.py`、`app/db.py`、`app/schemas/trace.py` |
+| HTTP 路由 / 模型 | `app/api/routes/`、`app/providers/` |
+| 任务生命周期 / 队列 | `chat_execution_service.py`、`task_queue_service.py` |
+| 分支 / checkpoint | `task_rerun_{service,schema}.py`、`task_checkpoint_service.py`、`app/api/routes/task_reruns.py` |
+| 调度 / DAG / 并发 | `task_tool_{execution,parallel}.py`、`tool_plan_dependencies.py`、`tool_http_parallel_policy.py` |
+| 运行时 facade / 规划 / 单工具 | `tool_runtime.py`、`tool_runtime_planning.py`、`tool_runtime_display.py`、`tool_runtime_execution.py`、`tool_runtime_execution_flow.py` |
+| HTTP JSON / 脱敏 | `tool_runtime_http_json.py`、`tool_runtime_http_json_execution.py`、`tool_runtime_http_json_response.py` |
+| 注册表 / 来源 / 诊断 | `tool_runtime_registry.py` 及 `_settings.py`、`_runtime.py`、`_public.py` 主题模块 |
+| 持久化 / Trace / 导出 / 用量 | `chat_persistence_service.py`、`chat_persistence_trace_export.py`、`chat_persistence_usage.py`；账本 `tasks.usage_json` |
+| 历史 / 模型证据 | `conversation_context.py`、`agent_knowledge_context.py`、`agent_tool_context.py` |
+| Memory / RAG / 导入 | `chroma_memory_service.py`、`chroma_rag_service.py`、`rag_ingest_{jobs,schema,worker,runner}.py`、`rag_chunking.py`、`app/api/routes/rag_ingest.py` |
+| 设置 / 认证 / 审计 | `settings_service.py`、`auth_service.py`、`auth_session_service.py`、`audit_service.py` |
+| 回归入口 | `scripts/tool_runtime_slice/` 主题包，`scripts/test_tool_runtime_slice.py` 兼容入口 |
 
 ## SSE 与 TraceStep 契约
 
@@ -159,6 +139,6 @@ bash scripts/ci_run_release_gate.sh --phase backend
 
 数据库/HTTP 集成使用隔离资源，命令和权限见[运行手册](../docs/development-runbook.md)。历史 SQLite 迁移入口 `scripts/migrate_sqlite_to_postgres.py` 仅用于已有数据迁移，当前运行时只支持 PostgreSQL；含密码的连接串不要写进共享命令记录。
 
-本地收尾已封板，后续按可复现问题维护。本轮 full slice 2224/2224、模块 9/9，配置脱敏回归 3/3；来源与范围见[当前验证基线](../docs/validation-baseline.md)。真实 GLM 原四场景 3/4、编辑分支恢复 1/1，旧镜像未包含当前维护，外部就绪未验收。写入并行与 HTTP/DAG checkpoint 延期。
+本地实现与工程收尾完成，后续按可复现问题维护。当前测试数量、配置脱敏回归、真实模型结果及镜像范围统一见[验证基线](../docs/validation-baseline.md)，外部就绪未验收。写入并行与 HTTP/DAG checkpoint 延期。
 
-沿用主题模块与 facade，不向历史大文件无限追加；新增测试放入有余量的主题。开发后同步三个 README 和实时计划，原始备份计划永远只读。
+沿用主题模块与 facade，不向历史大文件无限追加；新增测试放入有余量的主题。开发后同步三个 README 与受影响专题，验证集中在验证基线；开发实时计划已删除，原始备份计划永远只读。

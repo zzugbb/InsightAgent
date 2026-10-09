@@ -52,7 +52,7 @@ Trace 持久化/重连轮询、执行 owner/heartbeat/stale recovery、备份/�
 
 开发 Compose 仅发布到 127.0.0.1；它仍使用开发密码、浮动镜像、启动安装依赖及 reload/dev。`compose.pilot.yml` 不发布数据库/Chroma，应用端口也只发布到 loopback，HTTPS 代理和访问控制另行准备。使用[预检与镜像配方](pilot-deployment-preflight.md)，不要在公开日志运行会展开秘密的 `docker compose config`。
 
-本轮只修改 Compose 定义，**不会改变已运行容器的端口绑定**。应用变更须待备份后由操作者安排；已有旧 Chroma `/chroma/chroma` 挂载可能漏掉容器内 `/data`，禁止直接重建。详见[备份恢复](local-stack-backup-restore.md)。
+修改 Compose 文件**不会改变已运行容器的端口绑定**；新配置须待备份后由操作者安排应用。已有旧 Chroma `/chroma/chroma` 挂载可能漏掉容器内 `/data`，禁止直接重建。详见[备份恢复](local-stack-backup-restore.md)。
 
 ## 密钥保存、备份和轮换
 

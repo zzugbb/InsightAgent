@@ -31,5 +31,4 @@ cd frontend
 node --test --experimental-strip-types app/components/workbench/usage-accounting.node.test.ts
 ```
 
-
 专项已纳入静态门禁与 backend-e2e；真实供应商已记录用量、放弃规划的未知消耗与账单边界见[真实模型验收](real-model-acceptance.md)。

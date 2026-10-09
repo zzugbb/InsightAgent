@@ -47,5 +47,4 @@ node --test --experimental-strip-types app/components/workbench/answer-notices.n
 npx playwright test e2e/answer-completion.spec.ts --project=chromium --workers=1 --reporter=list --output=/tmp/insightagent-answer-completion-e2e-results
 ```
 
-
 上述专项使用本地模型/业务 API 替身，不能证明所有真实回答遵守提示；真实样本与风险见[验收记录](real-model-acceptance.md)。

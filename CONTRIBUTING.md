@@ -11,10 +11,10 @@
 1. 说明具体触发条件和预期行为；缺陷优先补能复现原问题的测试。
 2. 沿用主题模块与兼容 facade，控制单文件规模，不机械增加包装层。
 3. 运行受影响专项与对应门禁；浏览器/数据库/真实模型结果分别记载，不能把替身通过写成业务验收。
-4. 同步 `README.md`、`backend/README.md`、`frontend/README.md` 和实时计划；专题文档保留稳定规则，证据集中在验收记录。
+4. 同步三个 README 与受影响专题；当前状态和验证集中在 `docs/validation-baseline.md`，不要重复追加开发流水账。
 5. 检查 diff、冲突标记、秘密与生成产物。提交使用简体中文 Conventional Commits，例如 `fix: 修复取消后的任务状态同步`。
 
-`data/insightagent.plan.back.md` 是原始完整计划，永远只读。实时计划 `.cursor/plans/insightagent_开发计划_306e7915.plan.md` 已 tracked 但被 ignore，提交时必要用 `git add -f`。
+`data/insightagent.plan.back.md` 是原始完整计划，永远只读。开发实时计划已删除，历史过程从 Git 查询；不要重建计划文件或把历史目标写成已实现能力。
 
 ## 验证入口
 

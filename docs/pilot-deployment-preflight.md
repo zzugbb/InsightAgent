@@ -1,8 +1,8 @@
-# 试点部署配置预检
+# 试点部署指南
 
-此流程用于准备 A2 试点部署证据。仓库中的 `compose.full.yml` 是开发栈，包含 `--reload`、`npm run dev`、启动时安装依赖及默认 PostgreSQL 密码，不作为试点部署文件。单机试点使用 `compose.pilot.yml` 和 `scripts/pilot_compose.py`；目标主机需要另行提供 HTTPS 代理、证书及访问控制。
+此流程用于单机试点的配置、镜像与环境验证；目标部署尚未验收。仓库中的 `compose.full.yml` 是开发栈，包含 `--reload`、`npm run dev`、启动时安装依赖及默认 PostgreSQL 密码，不作为试点部署文件。单机试点使用 `compose.pilot.yml` 和 `scripts/pilot_compose.py`；目标主机需要另行提供 HTTPS 代理、证书及访问控制。
 
-2026-10-09 封板后[五项专项维护](post-seal-usability-audit.md)修改了后端工具入口与前端页面。下方旧配对 `pilot-42ccf1f` / `pilot-9e78810` 的原验证仍有效，但镜像未包含本轮修改，不能与当前源码混算；未来部署前需重新构建匹配配对、核对源码摘要并执行联调。本轮没有重建或部署。
+已有候选的本地联调属于历史替身证据，不包含最新源码维护。实际发布须从待发布源码重新构建配对，记录仓库镜像摘要并联调；本指南不默认认可任何旧 tag。范围见[验证基线](validation-baseline.md)。
 
 ## 配置文件
 
@@ -53,9 +53,7 @@ docker build -f frontend/Dockerfile.pilot \
 
 构建后推送到目标镜像仓库并取得仓库返回的摘要，再填写 `PILOT_BACKEND_IMAGE` 和 `PILOT_FRONTEND_IMAGE`。后端锁文件是从已验证的 Linux ARM64 / Python 3.14 镜像导出的版本基线；升级直接依赖时应在隔离镜像中重新解析、验证并更新它。版本约束没有锁定 wheel 哈希，跨架构可用性也尚未验证；镜像摘要用于固定最终构建产物。目标环境的镜像拉取、健康检查、TLS/访问边界和回滚仍需实测。
 
-### 历史候选与当前源码
-
-最近历史配对是后端 `pilot-42ccf1f` / 前端 `pilot-9e78810`，不含封板后的应用维护。镜像 ID、基础镜像与源码摘要、既有协议/持久化范围集中于[历史镜像证据](pilot-image-evidence.md)。部署前以将要发布的源码重新构建，示例中的历史 tag 不应直接当作当前发布候选。
+### 镜像隔离联调
 
 替换示例中的候选版本为已从待发布源码构建的镜像；Docker 和四份镜像已就绪时，可运行隔离联调（运行和访问本机端口通常需要提权）：
 
@@ -78,7 +76,7 @@ backend/.venv/bin/python scripts/smoke_pilot_images.py \
 
 在上方 `smoke_pilot_images.py` 命令追加 `--with-agent-fixture`。它先完成原有 mock 链路，再在同一临时网络启动只读 Python HTTP 替身容器；仅给临时测试用户配置固定的假 Key 与内部模型地址，通过镜像的真实 HTTP Provider 和公开 API 执行场景。替身不保存或输出提示词、请求头或密钥，健康摘要只保留固定模型标签、调用计数和无效请求数。缺少历史、知识正文/来源/版本或计算证据时拒绝回答，防止规则回退误报通过。
 
-已验证的协议场景、计数与旧源码镜像来源见[历史镜像证据](pilot-image-evidence.md)。该专项使用本地协议替身，不证明真实模型质量或目标 TLS；源码更新后需重新构建配对并执行联调。
+协议专项核对历史/会话隔离、正文与来源/版本驱动计算、空正文/429 用量及导出一致性；历史 7/7 场景为本地协议替身证据，不证明真实模型质量或目标 TLS。源码更新后须重建配对并复验。
 
 ## 单机试点 Compose
 
@@ -120,7 +118,7 @@ backend/.venv/bin/python scripts/pilot_compose.py down \
 
 入口先检查六个镜像摘要、HTTPS/CORS、独立密钥、Compose 数据库一致性、模型配置是否齐全和主机端口，再解析清单。未配置真实 key 时会拒绝启动，不用 mock 代替正式试点。输出只有固定码与 action，不输出 Compose 解析结果、Docker stdout/stderr 或配置值；不要额外运行 `docker compose config` 并把包含密钥的输出写入公开日志。`check` 的 PASS 仅证明配置/语法；`up` 的 PASS 证明容器健康等待成功。`restart` 仅重启现有容器，不应用新的配置；配置或镜像变更用 `up`，并保持相同 project 名称。`stop`/`down` 的 PASS 表示命令成功，不表示备份已完成。
 
-升级/回滚仍须先备份、记录固定新旧镜像摘要并进行数据兼容检查。`down` 保留两份卷；更换 project 名称会创建另一组数据卷，不能把这种启动当作恢复。当前[快照工具](local-stack-backup-restore.md)的已验证范围仍是开发栈，本轮容器重建读回不替代备份恢复或 RPO/RTO 验收。
+升级/回滚仍须先备份、记录固定新旧镜像摘要并进行数据兼容检查。`down` 保留两份卷；更换 project 名称会创建另一组数据卷，不能把这种启动当作恢复。[快照工具](local-stack-backup-restore.md)的已验证范围是开发栈，容器重建读回不替代目标备份恢复或 RPO/RTO 验收。
 
 ### Compose 隔离验证
 
@@ -135,7 +133,7 @@ backend/.venv/bin/python scripts/smoke_pilot_compose.py \
 
 脚本先解析原生产清单并核对 remote、前端无密钥、无源码挂载/启动命令覆盖；随后仅在随机命名 fixture 项目中覆盖为 mock、本地镜像 tag 和随机 loopback 端口，不发出真实模型请求。实际验证健康启动、前端 API 地址、后台导入/检索、任务/Trace/导出、步骤恢复与取消；然后移除全部容器、保留卷并重新创建，核对登录、会话、任务/Trace/messages 和知识召回保留。结束时仅删除自己的测试容器、网络和卷，检查清理后才报告 PASS，摘要 scope 为 `local_compose_mock_recreate`。
 
-旧配对的持久化实证与历史门禁集中于[镜像证据](pilot-image-evidence.md)。本轮未重跑 Compose 持久化；配置自测与最新源码门禁见[验证基线](validation-baseline.md)，目标镜像拉取、TLS、真实模型、升级回滚及备份恢复仍未验收。
+历史 Compose 持久化通过仅覆盖本地 mock 栈；最新源码与继承范围见[验证基线](validation-baseline.md)。目标镜像拉取、TLS、真实模型、升级回滚与备份恢复仍须分别验收。
 
 ## 目标环境演练记录
 
@@ -144,4 +142,20 @@ backend/.venv/bin/python scripts/smoke_pilot_compose.py \
 3. 在目标环境运行预检并保存其固定检查码结果；部署后核对 HTTPS、登录、会话、任务/SSE/Trace、RAG、导出、健康摘要和低敏日志。真实 LLM 成功路径需目标环境的有效账号；本机 GLM 验收不能替代部署验证。
 4. 升级前保存 PostgreSQL/Chroma 备份，按照[恢复流程](local-stack-backup-restore.md)记录恢复可用性；以固定旧镜像摘要执行一次回滚，核对数据、登录和主链路。记录升级/回滚时间、失败点、责任人和最终结论。
 
-目标环境及这些实测记录尚未具备，因此 A2 当前仍为 `待实证`。
+可用 `bash scripts/pilot_https_probe.sh --url https://pilot.example.com` 只读检查 HTTPS/health 与证书日期。配置 PASS、health 200 和登录成功都不代替完整任务、升级回滚与双存储恢复验收。
+
+### 备份恢复演练与签收
+
+仅使用**未被占用的一次性临时项目名**运行以下命令；脚本会启动依赖、停止项目、备份、向全新 `-restored` 项目恢复卷，最后删除这两个测试项目的容器与卷。不要填现有开发项目名，也不要未经备份重建旧 Chroma 容器。旧挂载 `/chroma/chroma` 可能漏掉容器内实际 `/data`，先按[备份恢复说明](local-stack-backup-restore.md)保存数据。
+
+```bash
+bash scripts/pilot_backup_restore_drill.sh \
+  --project insightagent-drill-example \
+  --snapshot-dir /tmp/insightagent-drill-snapshot
+```
+
+先用 `--dry-run` 检查目标与操作。JSON 的 backup_seconds / restore_seconds 只是快照与卷恢复耗时：该脚本不会启动恢复项目并检查业务数据，不能作为完整 RTO 或恢复可用性验收。真正的数据写入/读回与应用核对按[手动恢复流程](local-stack-backup-restore.md)执行；RPO 需按恢复数据的新旧程度复核，不能从备份耗时推算。
+
+签收记录包含：环境与源码/镜像摘要、演练日期、责任人、备份频率/保留/路径、主密钥保管、PostgreSQL/Chroma 实际数据路径、恢复后业务核对、允许与实测 RPO/RTO、回滚决策人、失败处理及通过/不通过/待重试。配置值和业务原文保存在受控环境记录中，不提交仓库。
+
+目标环境及实测记录尚未具备，部署与恢复保持待验收。

@@ -1,56 +1,31 @@
-# Development Runbook
+# 开发运行手册
 
-本文件记录当前 Codex 沙箱下 InsightAgent 的高频运行、e2e 与提交路径。目标是后续开发直接走正确命令和权限，不再用失败来探测环境。
+从仓库根目录执行下方命令；最新结果与运行实例范围见[验证基线](validation-baseline.md)。本手册维护命令、权限和排障规则，具体协议见专题文档。
 
 ## 快速规则
 
-- 后端 Python 统一用 `backend/.venv/bin/python`，不要临时找系统 Python 或重装依赖。
-- 前端 Node 依赖已在 `frontend/node_modules`，常规检查在 `frontend/` 下用 `npm` 脚本。
-- 单元/slice/lint 通常不需要提权。
-- 访问本机 Docker、监听本机端口、访问本机 e2e 服务、写 `.git/index` 通常需要提权。
-- `data/insightagent.plan.back.md` 永远不要修改。
-- `.cursor/plans/insightagent_开发计划_306e7915.plan.md` 虽在 `.gitignore` 范围内，但当前是 tracked 文件，文档同步和提交必须包含它。
-- 每个主线确认封板后，整理 `README.md`、`backend/README.md`、`frontend/README.md` 与实时计划文件：仅收敛“进度/封板状态相关块”，保留当前状态、当前验证基线、下一步计划/候选主线、稳定契约与少量高信号摘要；删除或收缩按轮流水账、旧失败过程和重复验证清单。
-- 文档收敛不是把整份 README 改成短状态页；接口范围、运行方式、关键实现位置、SSE/Trace 契约、Memory/RAG 说明、文档维护约定等长期参考章节应保留，除非对应功能真的被删除或迁移。
-- 控制单文件规模：新增测试/实现优先落到主题文件；主题文件明显膨胀时先拆出新主题文件或新模块，再继续追加。历史上的 `backend/scripts/test_tool_runtime_slice.py` 和 `app/services/tool_runtime.py` 已按该规则拆成 slice 主题包与 facade 模块。
-- `backend/scripts/tool_runtime_slice` 主题文件保持 <= 2500 行；临近上限时拆到 `_partN.py`，原主题文件保留为组合 facade，后续新增测试进入有余量的分片。
-- `test_tool_runtime_slice.py -k <pattern>` 沿用 unittest 子串筛选；有效筛选与 full slice 行为不变，显式筛选零匹配时会打印 pattern 并以退出码 5 结束。
-- `test_tool_runtime_slice.py --list-tests [-k <pattern>]` 只列出发现到的测试 ID 与总数，不执行测试；可用于提交前确认 selector 的真实覆盖范围。
-- `test_tool_runtime_slice.py --list-selections` 动态列出六个维护选择器及其覆盖数，任一选择器零匹配时返回 5；该命令不能与 `-k` 组合。
-- tooling fixture 会同时在 release-gate 与 backend/frontend E2E workflow 中运行；失败注入测试不能假设 E2E runner 存在 `backend/.venv`，应在首个无依赖命令上注入确定性退出码。
-- 本地 PostgreSQL/Chroma 离线备份与隔离恢复见 [`docs/local-stack-backup-restore.md`](local-stack-backup-restore.md)；备份前必须停止对应 Compose 项目，恢复只写入全新项目卷。`compose.full.yml` 与 `docker-compose.yml` 的 Chroma 持久卷现挂载 `/data`，与当前镜像日志中的 persist path 一致；旧容器若曾使用 `/chroma/chroma`，重建前先保存容器内 `/data`，不能假设旧命名卷包含数据。
-- 后端请求观测日志为单行 JSON，字段为 `event=http_request`、服务端 `request_id`、method、路由模板、status_code、duration_ms；原始 URL/query/header/body 和异常正文不进入该日志。`X-Request-ID` 对已配置 CORS 来源可读。流式响应耗时到流关闭为止，SSE 建连后的业务失败不能只用 HTTP 200 判断，应结合 SSE/Trace 失败事件。
-- 远端 OpenAI 兼容提供方每次实际 HTTP 尝试输出 `event=llm_http_attempt` 单行 JSON：`mode`、`outcome`、`status_family`、`duration_ms`、`usage_available`，无模型、主机、密钥、提示词或响应正文。`outcome` 描述本次 HTTP/流处理结果，不代表最终任务成功；`stream_options` 不兼容后的 400 回退会记两次尝试。用 `backend/.venv/bin/python backend/scripts/summarize_provider_attempts.py <日志文件>` 离线汇总（按 request/stream 输出有效耗时 count/min/max/mean，单位毫秒；非法或缺失耗时单独计数，无样本为 null）；耗时包含错误/回退，不能推断首 token 或供应商生成时间。该数量是上游 HTTP 尝试数，不是任务数、账单调用数或 token 用量。目标环境仍需验证采集、留存和告警。
-- A2 试点部署前用 [`docs/pilot-deployment-preflight.md`](pilot-deployment-preflight.md) 的镜像配方、只读预检与演练记录模板；后端 `requirements.pilot.lock` 约束试点镜像的完整安装版本，Docker 构建期会运行 `pip check` 并比较 `pip freeze`。变更直接依赖后须在隔离环境重新解析并更新锁，再构建候选镜像验证。`scripts/check_pilot_deploy_config.py` 只输出固定检查码。`backend/.venv/bin/python scripts/smoke_pilot_images.py --backend-image <本地后端镜像> --frontend-image <本地前端镜像> --expected-api-base-url <前端构建时 API 地址>` 先在禁网容器中核对非 root 默认 embedding，再用临时 Docker 栈验证生产模式/mock 模型下的后台导入、真实 Chroma 检索、任务 SSE/Trace/delta/导出、步骤恢复、排队取消，以及前端静态资源和浏览器 API 地址；需本机 Docker/端口及 Node/Playwright，不能替代真实模型、目标 HTTPS/访问边界或升级回滚验证。后端默认 embedding 在构建期准备，候选镜像不能依赖首次运行下载模型。无服务自测用 `backend/.venv/bin/python scripts/test_pilot_task_smoke.py`，已接入 tooling 门禁。
+- Python 使用 `backend/.venv/bin/python`（Python 3.14）；前端使用已安装的 Node 24+ 与 npm，不为常规检查重装依赖。
+- slice / Node tests / lint / 静态检查通常不需提权。Docker、本机监听/访问、浏览器 e2e、写 `.git/index` 通常需提权；不要用首次失败反复探测权限。
+- 原始完整计划 `data/insightagent.plan.back.md` 永远只读。开发实时计划已删除，不重新创建；同步三个 README、受影响专题和验证基线。
+- 现有服务先查端口和健康；测试用独立 fixture，不重建开发 PostgreSQL/Chroma。旧 Chroma `/chroma/chroma` 挂载可能漏掉实际 `/data`，先按[备份说明](local-stack-backup-restore.md)保护数据。
+- 沿用主题模块与 facade；后端 slice 主题 <=2500 行，临近上限拆 `_partN.py`。更改数量级或接口时同步审查调用方和契约。
+- 不输出真实 env、Key、密码、token、业务正文和原始异常。审批通道连接失败时重试同一必要操作，不绕过拒绝。
 
-- 当前候选镜像的 Agent 协议专项：在 `smoke_pilot_images.py` 命令追加 `--with-agent-fixture`；使用同一临时 Docker 栈及内部 HTTP 替身，核对历史/会话隔离、真实 Chroma 正文与来源/版本驱动反馈、空正文/429 规划用量和 Trace/delta/导出。只给临时用户设置假 Key，不请求真实供应商；scope 为 `local_production_protocol_fixture`，资源清理后才输出成功。无服务自测 `backend/.venv/bin/python scripts/test_pilot_agent_smoke.py` 已纳入 tooling。详细范围见[试点部署](pilot-deployment-preflight.md)。
-- 生产单机试点使用 `compose.pilot.yml` 和 `backend/.venv/bin/python scripts/pilot_compose.py check|up|stop|restart|down --env-file <仓库外配置> --project <固定名称>`；入口校验匹配的内部 PostgreSQL 凭据、模型配置、loopback 主机端口和镜像摘要，不打印 Compose 解析值。`up` 等待健康，`down` 保留卷。HTTPS 代理由目标环境提供。无环境/key 时保持未验证；Docker Compose 操作需提权。隔离持久化验证为 `scripts/smoke_pilot_compose.py`，仅使用随机新项目与 mock，结束删除自己的测试卷；命令和范围见[试点部署](pilot-deployment-preflight.md)。
-
-## 不需要提权的常用命令
-
-后台 RAG 导入的状态、幂等、批次进度和重启口径见 [RAG 后台导入](rag-background-ingest.md)。专项静态测试用 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag_ingest`（原任务专项与批次专项一起执行）；真实数据库锁与中断恢复用 `backend/.venv/bin/python backend/scripts/test_rag_ingest_postgres.py`，加 `--with-chroma` 验证 400 切块实际批量写入与部分失败。两者需要提权访问 Docker/本机随机端口，自动清理独立测试容器。backend-e2e workflow 使用 `--with-chroma`。
-
-从仓库根目录运行：
+## 静态检查
 
 ```bash
 backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py
-backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k queue
-backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task
+backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k security
 backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py --list-tests -k queue
 backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py --list-selections
-backend/.venv/bin/python scripts/test_local_stack_snapshot.py
 backend/.venv/bin/python backend/scripts/check_api_surface.py
-backend/.venv/bin/python backend/scripts/summarize_provider_attempts.py <日志文件>
-python3 -m py_compile backend/app/config.py backend/app/services/chat_execution_service.py backend/app/services/task_queue_service.py
 bash scripts/ci_run_release_gate.sh --phase auto
-bash scripts/ci_release_readiness_matrix.sh --format markdown
-bash scripts/ci_download_previous_release_gate_summary.sh --workflow release-gate.yml --branch main --current-run-id 123 --summary-file /tmp/previous-release-gate-download-summary.md --json-summary-file /tmp/previous-release-gate-download-summary.json
-bash scripts/ci_release_gate_trend_summary.sh --current-json /tmp/release-gate-summary.json --summary-file /tmp/release-gate-trend-summary.md --json-summary-file /tmp/release-gate-trend-summary.json
-bash scripts/ci_assert_operator_summary_contract.sh --summary-json /tmp/release-gate-summary.json --summary-kind release_gate --markdown /tmp/release-gate-summary.md
-git diff --check
-git diff --cached --check
-git diff -- data/insightagent.plan.back.md
+bash scripts/ci_run_release_gate.sh --phase frontend
 ```
+
+`-k` 是 unittest 子串筛选，零匹配退出码 5；`--list-tests` 仅发现、不执行，`--list-selections` 列出六个维护选择器且不可与 `-k` 同用。前端 Node 文件列表以门禁脚本 `FRONTEND_NODE_TESTS` 为准，不在文档重复维护。
+
+## CI 与诊断
 
 `scripts/ci_run_release_gate.sh` 是不启动本机服务的发布前门禁聚合入口：`auto` 在 PR 中按 changed files 选择 backend/frontend 阶段，并始终跑 tooling 与 hygiene；非 PR 或 diff 不可解析时保守跑全量。`backend` 跑 full slice 与 module boundary，`frontend` 跑 node tests、lint、Next 16 默认 Turbopack production build 与显式 webpack fallback build，`tooling` 跑 CI/e2e tooling 自测，`hygiene` 跑 compileall、diff whitespace、备份计划 diff，以及 `scripts/check_conflict_markers.sh` 对受 git 管理文本文件的行首冲突标记扫描；可用 `--dry-run` 查看命令清单，可用 `--summary-file` / `--json-summary-file` 输出 CI 摘要，摘要包含 `summary_kind`、`summary_schema_version`、`service_required`、resolved phases、逐步结果、`step_summary` 聚合计数、`failed_step_labels`、release/rollback `decision_summary` 与 `operator_summary`。首个步骤失败时保留原退出码，并在退出前写出失败 decision/operator summary；空 focus phase 不应触发 `set -u` 二次失败。
 后端 full slice 已检查 `backend/api_surface_baseline.json` 是否匹配运行时 OpenAPI。更改接口时按 [`docs/api-changelog.md`](api-changelog.md) 核对兼容性、更新指纹与记录；指纹变更提示人工审查，不能替代 SSE/Trace/export 运行时契约测试。
@@ -61,161 +36,86 @@ git diff -- data/insightagent.plan.back.md
 `scripts/ci_release_readiness_matrix.sh` 只生成发布候选检查矩阵，支持 `--format markdown|json` 与 `--output <path>`。矩阵明确区分不需要服务的静态 release gate、previous summary 下载诊断、operator summary contract、需要已启动服务的 backend/frontend e2e，以及 e2e 后置 artifact-stage guard；并保留 release visibility summary、rollback decision log 与 artifact retention policy 三类发布/回滚可见性检查项。它不启动服务，也不替代下方 service-backed e2e 命令。
 GitHub backend/frontend e2e workflow 已按矩阵覆盖低并发 queue 阶段；backend 失败诊断可重复传 `--secondary-health-url`，用于同时采集 timeout 与 queue 实例。
 artifact-stage guard 的 main 分支严格度为 `fail-on-missing`，PR 严格度为 `fail-on-empty`；手动 `workflow_dispatch` 可用 `artifact_stage_strict_level` 覆盖。`ci_assert_artifact_stage_health.sh` 的 Markdown/JSON 输出包含低敏 `operator_summary`，用于区分可继续、需复核 warning、需补齐 artifact 的值班行动。
-本机统一验收入口：`bash scripts/local_acceptance.sh`（默认安全、分阶段、失败不中断后续阶段）；清单见 [`docs/local-acceptance-checklist.md`](local-acceptance-checklist.md)。真实 glm 与镜像重建需显式参数。
+本机检查、业务 RAG、真实模型人工指引与证据导出见[验收指南](acceptance.md)；没有提供输入或只返回 manual/skipped 的阶段不能计作完成。
 
 GitHub `backend-e2e` / `frontend-e2e` 的 “Validate e2e tooling fixtures” 步骤使用 `if: always()`，主 e2e 失败时仍运行 `test_ci_e2e_tooling.sh` 并写入 artifact guard 摘要占位，避免 finalize 把 guard 摘要缺失计入主因噪音。`frontend-e2e` 失败诊断重跑使用 `scripts/ci_rerun_frontend_e2e_diagnostics.sh`：仅在存在 `test-results/.last-run.json` 且记录失败时调用 Playwright `--last-failed`（与主跑共用输出目录，不用独立 `--output`）；脚本恒以退出码 0 结束，但在 step summary 与 `/tmp/frontend-e2e-rerun-diagnostics.{md,json}` 如实标注 `diagnostic_gate_result` 与 `playwright_exit_code`，不以 `continue-on-error` 伪装成功。
 release-gate、backend-e2e 与 frontend-e2e 上传的发布/e2e artifacts 显式保留 `14` 天。
 `scripts/ci_export_diagnostics_overview.sh` 会汇总 backend/frontend diagnostics 与 artifact guard 结果，并输出低敏 `operator_summary`，只包含状态、主行动、告警计数、guard 失败数、关注 scope 与阻塞 guard scope。
 
-前端检查：node 门禁的完整文件列表以 `scripts/ci_run_release_gate.sh` 内 `FRONTEND_NODE_TESTS` 为准；下方命令须与其保持一致。
+请求日志只含 request ID、method、路由模板、状态码和完整响应耗时；SSE 建连 HTTP 200 不能说明任务成功。Provider 日志 `llm_http_attempt` 仅含模式、结果、状态族、尝试耗时与 usage 可用性；400 兼容回退可产生两次尝试，不等于任务数或账单调用数。
 
 ```bash
-cd frontend
-npm run lint
-node --test --experimental-strip-types \
-  lib/stores/chat-stream-store-utils.node.test.ts \
-  app/components/workbench/runtime-debug-modal-utils.node.test.ts \
-  app/components/workbench/audit-logs-modal-utils.node.test.ts \
-  app/components/workbench/model-settings-modal-utils.node.test.ts \
-  app/components/workbench/task-queue-diagnostics-contract.type.test.ts \
-  app/components/workbench/utils.node.test.ts \
-  app/components/workbench/usage-accounting.node.test.ts \
-  app/components/workbench/answer-notices.node.test.ts \
-  app/components/workbench/trace-flow-layout.node.test.ts \
-  app/components/workbench/knowledge-base-governance-modal-utils.node.test.ts \
-  app/components/workbench/knowledge-import-utils.node.test.ts \
-  app/components/workbench/task-center-pagination.node.test.ts \
-  app/components/workbench/workbench-runtime-notice.node.test.ts \
-  app/components/workbench/workbench-ui-state.node.test.ts \
-  app/components/workbench/workbench-layout.node.test.ts \
-  app/components/workbench/workbench-trace-sync.node.test.ts \
-  app/components/workbench/workbench-recovery.node.test.ts \
-  app/next-major-readiness.node.test.ts \
-  app/runtime-dependency-contract.node.test.ts \
-  app/source-file-size.node.test.ts \
-  app/tasks/task-detail-page-utils.node.test.ts
+backend/.venv/bin/python backend/scripts/summarize_provider_attempts.py <日志文件>
+bash scripts/ci_release_readiness_matrix.sh --format markdown
 ```
 
-## 需要提权的本机服务
+汇总 request/stream 耗时 count/min/max/mean（毫秒），缺失/非法值单独计数，无样本为 null；包含错误/回退，不推算首 token、供应商推理时间或成本。tooling fixture 在 release/backend/frontend workflow 都运行；故障注入在首个无依赖命令触发，不假设 e2e runner 有 backend/.venv。`/dev/fd` 沙箱限制可能影响 shell fixture，按权限流程重跑并保留首次结果。
 
-普通沙箱下，backend 访问 `127.0.0.1:5432` PostgreSQL / Chroma 或 frontend 监听 `127.0.0.1:3001` 会经常遇到 `Operation not permitted` / `EPERM`。后续需要启动项目或跑 e2e 时，直接按流程申请提权启动：
+## 本机服务与 e2e
 
-后端，工作目录 `backend/`：
-
-```bash
-.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-```
-
-前端，工作目录 `frontend/`：
+先检查已有端口和服务（本机访问通常需提权）：
 
 ```bash
-npm run dev -- --hostname 127.0.0.1 --port 3001
-```
-
-健康检查也需要提权访问本机端口：
-
-```bash
+lsof -nP -iTCP:8000 -sTCP:LISTEN
+lsof -nP -iTCP:3001 -sTCP:LISTEN
 curl -sS http://127.0.0.1:8000/health
 curl -I http://127.0.0.1:3001
 ```
 
-如果提权审批因为审核通道连接中断被拒，不要绕路用等价命令规避；重新发起同一必要命令的明确审批。
-
-## e2e 路径
-
-[回答完整性提示](answer-completion.md)：静态 `-k answer_completion`（9 个）、独立数据库 `backend/scripts/test_answer_completion_postgres.py`（14 个；包含空流回退后的增量/回放、消息分页/筛选独立性、历史 completion 传递/隔离与旧 Trace 容错，Docker/本机 HTTP 提权并自动清理）；会话静态 `-k conversation_context`（11 个，白名单与 JSON 预算）；前端 `answer-notices.node.test.ts`（9 个，消息/任务/活动流版本优先）。浏览器用 `npx playwright test e2e/answer-completion.spec.ts --project=chromium --workers=1 --reporter=list --output=/tmp/insightagent-answer-completion-e2e-results`，需要本机服务/浏览器提权；1440px 英文/390px 中文，Enter 发送、超过一页任务、筛选、刷新、详情与返回聊天，仅业务 API fixture。
-
-[任务终态边界](task-completion.md)：静态 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task_terminal_usage`（5 个）；集成 `backend/.venv/bin/python backend/scripts/test_task_terminal_postgres.py`（10 个，需要 Docker/本机随机端口提权，自动清理）。覆盖生成结束/回退/保存跨时限、迟到决策、取消竞争、失败已知用量与汇总/导出；前端仅规划记录用 `usage-accounting.node.test.ts` 验证。仅本地模型替身，已接入 backend-e2e。
-
-[任务成功保存专项](task-completion.md)：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task_completion_atomic`（5 个静态测试）；`backend/.venv/bin/python backend/scripts/test_task_completion_postgres.py`（6 个独立 PostgreSQL 场景，需要 Docker/本机随机端口提权，自动清理）。用数据库触发器验证助手插入/会话更新失败回滚，并检查并发完成、终态/权限竞争、外部读取、回放/导出与下一轮上下文；已接入 backend-e2e，模型仅本地替身。
-
-[任务总用量专项](usage-accounting.md)：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k usage_accounting`（8 个后端静态测试）；`backend/.venv/bin/python backend/scripts/test_usage_accounting_postgres.py`（3 个独立 PostgreSQL 场景，需 Docker/随机端口提权，自动清理）；前端计算专项 `usage-accounting.node.test.ts`（6 个，已纳入 release gate）。核对多轮任务的 summary/dashboard/趋势/榜单/会话导出、overall 优先与旧数据回退、混合来源筛选和用户隔离；模型仅本地替身，已接入 backend-e2e。
-
-[远端模型流结束专项](provider-stream-completion.md)：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k provider_stream_completion`（12 个静态测试）；`backend/.venv/bin/python backend/scripts/test_provider_stream_postgres.py`（6 个真实本机 HTTP/独立 PostgreSQL 场景）。后者需要 Docker/随机端口提权并自动清理，仅使用本地模型协议替身，已纳入 backend-e2e。验证部分 EOF 失败、批量 Trace 边界后的尾部、delta/导出、失败重连不重放、400 兼容回退及正常结束帧。
-
-[供应商规划等待与失败恢复](real-model-acceptance.md)（替身复现）：`backend/.venv/bin/python backend/scripts/test_provider_planning_wait_postgres.py`（5 个独立 PostgreSQL + 本机 HTTP/离线 Provider 场景，需 Docker/随机端口提权，自动清理）。覆盖首轮慢规划 heartbeat、规划期取消、空规划 HTTP 规则回退用量/Trace、失败后分支重跑；已纳入 backend-e2e。不替代真实模型长等待或账单验收。
-
-公开 HTTP 工具结果的模型证据专项：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k agent_tool_context`（7 个静态边界）；`backend/.venv/bin/python backend/scripts/test_agent_tool_context_postgres.py`（3 个真实本机 HTTP/独立 PostgreSQL 场景，模型为本地替身，需提权访问 Docker/随机端口，自动清理；已纳入 backend-e2e）。核对同命中数/不同正文的分支、单轮最终回答、公开字段与嵌套脱敏、Trace/delta/导出一致性。
-
-聊天输入键盘专项为 `frontend/e2e/composer-keyboard.spec.ts`，使用 API fixture 模拟 composition/isComposing/229 确认事件、Shift+Enter 换行与正常发送。本地 dev 复验：`cd frontend && npx playwright test e2e/composer-keyboard.spec.ts --project=chromium --project=firefox --project=webkit --workers=1 --reporter=list --output=/tmp/insightagent-composer-keyboard-results`（`playwright.config.ts` 在非 CI 下用 `npm run dev`）。与 GitHub `frontend-e2e` 一致的生产构建复验：`cd frontend && CI=1 npx playwright test e2e/composer-keyboard.spec.ts --project=chromium`（webServer 为 `npm run build && npm run start`）。运行时错误覆盖层断言使用 `nextjs-portal [data-nextjs-dialog]` 计数为 0，与同仓库其它 e2e 一致；生产无 dev overlay 时不应要求裸 `nextjs-portal` 存在。需要前端服务、本机端口及浏览器提权；三浏览器各覆盖 1440px/390px，这不代替操作系统输入法人工验收。新 spec 自动纳入 frontend full Chromium 发现范围。
-
-[Agent 核心对齐](agent-core-alignment.md)：静态反馈边界用 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k agent_feedback`；会话和模型证据专项分别为 `-k conversation_context`、`-k agent_knowledge_context`。核心场景用 `backend/.venv/bin/python backend/scripts/test_agent_core_scenarios_postgres.py`（独立 PostgreSQL/Chroma、实际知识写入/检索与本地 Provider，自动清理；已进入 backend-e2e）；持久化/条件分支/必填输入与绑定/实际输入防重复/图与调用失败规划用量/取消用 `backend/.venv/bin/python backend/scripts/test_agent_feedback_postgres.py`（20 个；需提权访问 Docker/随机本机端口，独立 PostgreSQL 与本地模型替身，自动清理）。前端专项为 `e2e/trace-flow.spec.ts` 和知识文件导入 `e2e/knowledge-import.spec.ts`，业务 API 全部使用 fixture，需临时前端服务与浏览器权限。文件解码/预算专项为 `knowledge-import-utils.node.test.ts`，已进入 frontend node 门禁。
-
-[步骤恢复（实验功能）](task-checkpoints.md)专项使用 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task_checkpoint`；实际快照复用、幂等、失败重试与取消/超时用 `backend/.venv/bin/python backend/scripts/test_task_checkpoint_postgres.py`，需提权访问 Docker/随机本机端口，独立 PostgreSQL/mock 自动清理，已接入 backend-e2e workflow。前端专项为 `e2e/task-checkpoints.spec.ts`，桌面/手机截图输出到 `/tmp`。
-
-
-[HTTP 读取并发](http-read-parallel.md)专项用 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k http_parallel`；真实本机 HTTP 的重叠、模板、503 重试、结果绑定、Trace/delta/export、取消与超时用 `backend/.venv/bin/python backend/scripts/test_http_parallel_postgres.py`。需要提权访问 Docker/随机本机端口，使用独立 PostgreSQL 和临时 HTTP fixture，自动清理，不请求真实供应商；已接入 backend-e2e workflow。
-
-[工具依赖与结果引用](tool-dependencies.md)专项用 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k tool_dependency`；实际 Provider 规划、重复工具、Trace/delta/export、失败审计和依赖生命周期用 `backend/.venv/bin/python backend/scripts/test_tool_dependencies_postgres.py`，需要提权访问 Docker/随机本机端口，使用独立 PostgreSQL 与本地规划 fixture，自动清理，不请求远端模型。已接入 backend-e2e workflow。
-
-[任务内工具并发](task-tool-parallel.md)默认 `TASK_TOOL_MAX_CONCURRENT=1`（串行）；设为 2 可验证内建独立检索/计算组合。静态专项使用 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task_parallel`；真实任务生命周期与导出用 `backend/.venv/bin/python backend/scripts/test_task_parallel_postgres.py`，需要 Docker/随机本机端口及提权，独立 PostgreSQL 与 mock，自动清理。已接入 backend-e2e workflow。
-
-[任务分支重跑](task-reruns.md)专项用 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task_rerun`；原子创建、并发幂等、来源删除及既有 stream/export 闭环用 `backend/.venv/bin/python backend/scripts/test_task_rerun_postgres.py`。后者需要提权访问 Docker/随机本机端口，使用独立临时 PostgreSQL 和 mock，测试后清理；已加入 backend-e2e workflow。
-
-Docker 依赖通常已启动，可先普通查看：
+缺少服务时分别开终端启动，不重复启动已有实例：
 
 ```bash
-docker compose ps
+backend/.venv/bin/python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+npm --prefix frontend run dev -- --hostname 127.0.0.1 --port 3001
 ```
 
-backend/frontend 服务启动后，e2e 需要访问本机端口，直接申请提权运行：
+服务准备后运行：
 
 ```bash
 bash scripts/ci_run_backend_e2e.sh --phase main --base-url http://127.0.0.1:8000 --log-dir /tmp
 bash scripts/ci_run_frontend_e2e.sh --phase full --api-base-url http://127.0.0.1:8000 --frontend-base-url http://127.0.0.1:3001
 ```
 
-低并发队列专项 e2e 需要单独启动一个 backend，避免影响默认 full Chromium 并发基线：
+低并发 queue 使用独立后端 `8011`，设置 `TASK_QUEUE_MAX_CONCURRENT=1 TASK_QUEUE_POLL_INTERVAL_SEC=0.1`；前端通过 `NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8011` 指向该实例。backend/frontend 队列检查均用 `--phase queue` 与对应地址，不改变默认 full 的并发基线。测试后仅停止自己启动的会话，再检查端口，无权停他人服务。
+
+键盘专项在 `frontend/` 运行：
 
 ```bash
-TASK_QUEUE_MAX_CONCURRENT=1 TASK_QUEUE_POLL_INTERVAL_SEC=0.1 backend/.venv/bin/python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8011
-bash scripts/ci_run_backend_e2e.sh --phase queue --base-url http://127.0.0.1:8011 --log-dir /tmp
+npx playwright test e2e/composer-keyboard.spec.ts --project=chromium --project=firefox --project=webkit --workers=1 --reporter=list --output=/tmp/insightagent-composer-keyboard-results
+# CI 生产构建路径：webServer 执行 npm run build && npm run start
+CI=1 npx playwright test e2e/composer-keyboard.spec.ts --project=chromium
 ```
 
-低并发前端队列专项需要同时启动 backend 与 frontend，并让 frontend 指向 `8011`。backend 与 frontend 是两个长驻会话；测试脚本从仓库根目录单独运行：
+业务 API 用 fixture，三浏览器覆盖1440/390px；composition/isComposing/229 不等于真实操作系统输入法全面验收。错误覆盖层检查 `nextjs-portal [data-nextjs-dialog]` 为0，生产环境不要求裸 portal 存在。非CI playwright.config.ts 会启动 dev；已有本机服务须按配置判断复用，避免重复拉起。
 
-```bash
-TASK_QUEUE_MAX_CONCURRENT=1 TASK_QUEUE_POLL_INTERVAL_SEC=0.1 backend/.venv/bin/python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8011
-cd frontend && NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8011 npm run dev -- --hostname 127.0.0.1 --port 3001
-bash scripts/ci_run_frontend_e2e.sh --phase queue --api-base-url http://127.0.0.1:8011 --frontend-base-url http://127.0.0.1:3001
-```
+## 隔离专项入口
 
-单条 Chromium 复验在 `frontend/` 下运行，也需要提权：
+下表命令均为 `backend/.venv/bin/python backend/scripts/<文件>`；需要 Docker/随机本机端口，创建独立数据资源并自动清理，模型为本地替身，不请求真实供应商。静态 selector 与浏览器命令见各专题；下表描述覆盖范围，不宣称在每次文档维护中重跑。
 
-```bash
-PLAYWRIGHT_API_BASE_URL=http://127.0.0.1:8000 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001 npm run test:e2e -- e2e/workbench-remote-errors.spec.ts:527
-```
+| 主题 | 文件 |
+| --- | --- |
+| [Agent 上下文/反馈](agent-core-alignment.md) | `test_agent_core_scenarios_postgres.py`、`test_agent_feedback_postgres.py`、`test_agent_tool_context_postgres.py` |
+| [依赖](tool-dependencies.md) / [任务并发](task-tool-parallel.md) / [HTTP 并发](http-read-parallel.md) | `test_tool_dependencies_postgres.py`、`test_task_parallel_postgres.py`、`test_http_parallel_postgres.py` |
+| [分支](task-reruns.md) / [步骤恢复](task-checkpoints.md) | `test_task_rerun_postgres.py`、`test_task_checkpoint_postgres.py` |
+| [原子成功/终态](task-completion.md) | `test_task_completion_postgres.py`、`test_task_terminal_postgres.py` |
+| [回答提示](answer-completion.md) / [流结束](provider-stream-completion.md) / [用量](usage-accounting.md) | `test_answer_completion_postgres.py`、`test_provider_stream_postgres.py`、`test_usage_accounting_postgres.py` |
+| [RAG 导入](rag-background-ingest.md) | `test_rag_ingest_postgres.py --with-chroma`（实际400切块与部分失败） |
+| [规划等待与恢复](real-model-acceptance.md) | `test_provider_planning_wait_postgres.py` |
 
-跑完后停止本轮启动的 backend/frontend 会话，并确认端口无残留：
-
-```bash
-lsof -nP -iTCP:8000 -sTCP:LISTEN
-lsof -nP -iTCP:3001 -sTCP:LISTEN
-```
+这些场景已接入 backend-e2e；前端 Trace/导入/恢复/回答 fixture 由 full Chromium 发现。备份自测、生产镜像锁定依赖/embedding、试点 Compose、真实模型与业务工具分别见[恢复](local-stack-backup-restore.md)、[部署](pilot-deployment-preflight.md)、[验收](acceptance.md)，不混算。
 
 ## 提交路径
 
-当前环境普通 `git add` / `git commit` 经常失败：
-
-```text
-fatal: Unable to create '.git/index.lock': Operation not permitted
-```
-
-后续提交可以在确认 diff 后直接申请提权 stage/commit。因为 `.cursor/` 被 ignore，实时计划文件需要强制 add：
+普通沙箱写 `.git/index.lock` 常被拒，检查 diff 后可直接申请提权 stage/commit。指定本次变更文件，不加入实际 env 或原始计划：
 
 ```bash
-git add README.md backend/README.md frontend/README.md <changed-files>
-git add -f .cursor/plans/insightagent_开发计划_306e7915.plan.md
+git diff --check
+git add <本次变更文件>
 git diff --cached --check
 git diff --cached -- data/insightagent.plan.back.md
-git commit -m "<message>"
-```
-
-提交后最终核对：
-
-```bash
+git commit -m "docs: 整理项目文档"
 git status --short
 git log -1 --oneline
-git diff -- data/insightagent.plan.back.md
-git status --short --ignored .cursor/plans/insightagent_开发计划_306e7915.plan.md
 ```
+
+提交使用简体中文 Conventional Commits。本地提交与 Git 推送分别处理，新的本地检查不沿用旧 CI 绿作远端验证；历史交接记录从 Git 查询。
