@@ -25,6 +25,8 @@
 | `tool_executed` / `tool_not_executed` | Trace 工具名 |
 | （内置）`tool_claim_vs_trace` | 回答声称计算但 Trace 无 `calc_eval` 等 |
 
+`tool_executed` 只认本任务 `action` 且 `tool.status=done`，排除 checkpoint 复用；`tool_not_executed` 也拒绝失败调用尝试。所有题目必须任务 completed 且回答非空。工具声明检测为启发式：明确否定不因工具词误报，历史/条件/模糊提及进入 `manual_review`，不能代替人工审查。用量取实际平铺字段；无效/部分字段保持未知，`known` 表示已有记录可汇总，不保证所有失败或放弃的提供方尝试均已计入。报告目录自动创建。
+
 `checks.manual` 字符串列表进入报告，需人工判断（例如真实模型规划是否超时回退）。
 
 资料目录：递归读取 `.md` / `.txt`，文件名作为 `source` / `document_id`。

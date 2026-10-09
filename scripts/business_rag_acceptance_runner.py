@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import sys
@@ -99,9 +100,9 @@ class QuestionResult:
 
     @property
     def verdict(self) -> str:
-        if not self.auto_pass:
+        if any(item.status == "fail" for item in self.auto_checks):
             return "auto_fail"
-        if self.manual_notes:
+        if self.manual_notes or any(item.status != "pass" for item in self.auto_checks):
             return "manual_review"
         return "auto_pass"
 
@@ -114,27 +115,45 @@ def summarize_usage(task: dict[str, Any]) -> dict[str, Any]:
         payload = json.loads(raw) if isinstance(raw, str) else raw
     except (TypeError, json.JSONDecodeError):
         return {"known": False, "reason": "invalid_usage_json"}
-    overall = payload.get("overall") if isinstance(payload, dict) else None
-    if isinstance(overall, dict) and overall.get("total_tokens") is not None:
-        return {
-            "known": True,
-            "total_tokens": overall.get("total_tokens"),
-            "planning_tokens": (payload.get("planning") or {}).get("total_tokens"),
-            "final_tokens": (payload.get("final") or {}).get("total_tokens"),
-        }
+    if not isinstance(payload, dict):
+        return {"known": False, "reason": "invalid_usage_json"}
+
+    def token(value: object) -> int | None:
+        if type(value) is int:
+            return value if value >= 0 else None
+        if type(value) is float and math.isfinite(value) and value >= 0 and value.is_integer():
+            return int(value)
+        return None
+
+    def stage_total(prefix: str) -> int | None:
+        total = token(payload.get(prefix + "total_tokens"))
+        if total is not None:
+            return total
+        prompt = token(payload.get(prefix + "prompt_tokens"))
+        completion = token(payload.get(prefix + "completion_tokens"))
+        return prompt + completion if prompt is not None and completion is not None else None
+
+    final, planning = stage_total(""), stage_total("planning_")
+    total = token(payload.get("overall_total_tokens"))
+    if "overall_total_tokens" not in payload:
+        has_planning = any(str(key).startswith("planning_") for key in payload)
+        total = final if not has_planning else (final + planning if final is not None and planning is not None else None)
+    if total is not None:
+        return {"known": True, "total_tokens": total, "planning_tokens": planning, "final_tokens": final}
     return {"known": False, "reason": "partial_or_unknown_overall"}
 
 
-def trace_tool_names(steps: list[dict[str, Any]]) -> set[str]:
+def trace_tool_names(steps: list[dict[str, Any]], *, successful_only: bool = True) -> set[str]:
     names: set[str] = set()
     for step in steps:
         meta = step.get("meta") or {}
         tool = meta.get("tool")
-        if isinstance(tool, dict) and tool.get("name"):
+        if (
+            step.get("type") == "action" and isinstance(tool, dict)
+            and (not successful_only or tool.get("status") == "done") and tool.get("name")
+            and meta.get("checkpoint_reused") is not True
+        ):
             names.add(str(tool["name"]))
-        step_type = meta.get("step_type") or step.get("type")
-        if step_type == "rag_retrieval":
-            names.add("task_retrieve")
     return names
 
 
@@ -185,6 +204,7 @@ def run_auto_checks(
     answer: str,
     tools: set[str],
     sources: set[str],
+    attempted_tools: set[str] | None = None,
 ) -> list[CheckResult]:
     results: list[CheckResult] = []
     for check in checks:
@@ -206,7 +226,7 @@ def run_auto_checks(
             results.append(CheckResult(kind, "pass" if ok else "fail", f"expected tool {tool}, saw {sorted(tools)}"))
         elif kind == "tool_not_executed":
             tool = str(check.get("tool") or "")
-            ok = tool not in tools
+            ok = tool not in (attempted_tools if attempted_tools is not None else tools)
             results.append(CheckResult(kind, "pass" if ok else "fail", f"forbidden tool {tool}"))
         else:
             results.append(CheckResult(kind or "unknown", "fail", "unsupported auto check kind"))
@@ -214,13 +234,34 @@ def run_auto_checks(
 
 
 def compare_tool_claims(answer: str, tools: set[str]) -> CheckResult:
-    claims_calc = any(token in answer for token in ("计算工具", "Calculator", "calc_eval", "Python"))
-    executed_calc = "calc_eval" in tools
-    if claims_calc and not executed_calc:
-        return CheckResult("tool_claim_vs_trace", "fail", "answer implies calculation tool but trace has no calc_eval")
-    if claims_calc and executed_calc:
-        return CheckResult("tool_claim_vs_trace", "pass", "calculation claim matches trace")
-    return CheckResult("tool_claim_vs_trace", "pass", "no conflicting tool claim detected")
+    # A lexical check cannot establish arbitrary natural-language execution claims.
+    # Reject clear affirmative claims; leave ambiguous mentions for human review.
+    tool_pattern = r"计算工具|Calculator|calc_eval|Python"
+    mentions: list[str] = []
+    needs_review = False
+    for clause in re.split(r"[，,。.!！?？;；\n]", answer):
+        if not re.search(tool_pattern, clause, re.IGNORECASE):
+            continue
+        if re.search(r"上一轮|上轮|历史|复用|如需|需要|需在|应当|可以|可用于|建议|如果|希望|请", clause):
+            needs_review = True
+            continue
+        negated = re.search(
+            rf"(?:没有|未|并未|未曾|不曾|尚未|不包含|不能)(?:实际|真正|成功)?(?:调用|使用|执行|运行)?[^，。]{{0,20}}(?:{tool_pattern})"
+            rf"|(?:{tool_pattern})[^，。]{{0,12}}(?:未(?:实际|真正|成功)?(?:调用|使用|执行|运行)|没有调用|(?:仍)?未完成)",
+            clause, re.IGNORECASE,
+        )
+        if not negated:
+            mentions.append(clause)
+    if not mentions and needs_review:
+        return CheckResult("tool_claim_vs_trace", "review", "historical or conditional tool mention requires human review")
+    if not mentions:
+        return CheckResult("tool_claim_vs_trace", "pass", "no conflicting tool claim detected")
+    if "calc_eval" in tools:
+        return CheckResult("tool_claim_vs_trace", "pass", "calculation mention has successful trace evidence")
+    affirmative = any(re.search(r"调用|使用|执行|运行|验证|通过", clause) for clause in mentions)
+    if affirmative:
+        return CheckResult("tool_claim_vs_trace", "fail", "affirmative calculation claim lacks successful calc_eval evidence")
+    return CheckResult("tool_claim_vs_trace", "review", "ambiguous tool mention requires human review")
 
 
 class BusinessRagAcceptanceRunner:
@@ -281,7 +322,10 @@ def evaluate_question(
     tools = trace_tool_names(steps)
     sources = trace_sources(steps)
     checks = spec.get("checks") or {}
-    auto = run_auto_checks(checks.get("auto") or [], answer=answer, tools=tools, sources=sources)
+    auto = run_auto_checks(checks.get("auto") or [], answer=answer, tools=tools, sources=sources,
+                           attempted_tools=trace_tool_names(steps, successful_only=False))
+    auto.insert(0, CheckResult("task_completed", "pass" if task.get("status") == "completed" else "fail", "task must be completed"))
+    auto.insert(1, CheckResult("answer_present", "pass" if answer.strip() else "fail", "final answer must be nonempty"))
     auto.append(compare_tool_claims(answer, tools))
     manual = [str(item) for item in (checks.get("manual") or [])]
     return QuestionResult(
@@ -333,6 +377,8 @@ def build_report(
 
 
 def write_report(report: dict[str, Any], output_md: Path, output_json: Path) -> None:
+    output_md.parent.mkdir(parents=True, exist_ok=True)
+    output_json.parent.mkdir(parents=True, exist_ok=True)
     output_json.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     lines = [
         "# Business RAG acceptance report",

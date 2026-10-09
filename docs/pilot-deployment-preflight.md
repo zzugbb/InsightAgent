@@ -51,7 +51,13 @@ docker build -f frontend/Dockerfile.pilot \
 
 构建后推送到目标镜像仓库并取得仓库返回的摘要，再填写 `PILOT_BACKEND_IMAGE` 和 `PILOT_FRONTEND_IMAGE`。后端锁文件是从已验证的 Linux ARM64 / Python 3.14 镜像导出的版本基线；升级直接依赖时应在隔离镜像中重新解析、验证并更新它。版本约束没有锁定 wheel 哈希，跨架构可用性也尚未验证；镜像摘要用于固定最终构建产物。目标环境的镜像拉取、健康检查、TLS/访问边界和回滚仍需实测。
 
-### 当前本地候选记录（2026-10-08）
+### 当前本地候选记录（2026-10-09）
+
+- 后端 `insightagent-backend:pilot-42ccf1f`，ID `sha256:981c5025b88bfea3f354592629cef55a481b7f893d1a9f1b5b89842a9b7536c2`，ARM64；前端 `insightagent-frontend:pilot-9e78810`，ID `sha256:010b1e010ba8a49a0f22c3166b844bf228fe415032264acf435aa6c2437a583e`，ARM64。本轮只读 Docker inspect 核对；本轮应用/依赖/配方未改，未重建镜像。
+- 既有配对 `--with-agent-fixture` 冒烟 PASS，前后卷/网络零新增，来源 `/tmp/insightagent-pilot-9e78810-{frontend-build,smoke}.log`，已记录于 `c909306`；本轮未重跑镜像专项。后端应用/配方/依赖相对 `42ccf1f` 无提交差异，前端应用相对 `9e78810` 无提交差异（排除 README）。
+- 当前本机真实模型复验见[验收记录](real-model-acceptance.md)，与镜像替身验证分开。候选未推送/部署；目标 HTTPS、升级回滚与备份恢复仍待验。
+
+### 历史候选记录（2026-10-08，0209651 / 218f94d）
 
 - 后端从干净应用提交 `0209651385e38097747d0698b1be88901e731ddc` 构建，包含执行证据与检索绑定提示修复；tag `insightagent-backend:pilot-0209651`，revision label `0209651`，ID `sha256:6e819a52ad6ba75485cdaeb4659630dc0371c5c4e2d655635cb16697024bc313`，ARM64，用户 `10001:10001`。
 - 前端应用源码/锁文件/构建配方相对 `218f94d` 未变（仅 README 更新，`git diff --exit-code 218f94d HEAD -- frontend ':(exclude)frontend/README.md'` 通过）；复用 `insightagent-frontend:pilot-218f94d`，revision label `218f94d`，ID `sha256:5f740a3bfd07961c1ab4e225c7774fdafb6186fe06b800968244b5dbb8c2a634`，ARM64，用户 `node`，API 地址 `https://api.pilot.example.com`。

@@ -5,7 +5,7 @@
 ## 当前状态
 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization`、`next-major-upgrade-readiness`。
-- 最近封板：`agent-core-alignment` 的本地实现与契约验证已封板：有界对话上下文、工具反馈决策、RAG 正文/来源证据、Trace 关系与知识文件导入均完成。可进入后续维护或下一条按实际需求选定的主线；真实模型效果验收仍属于外部待验项。
+- 最近封板：`agent-core-alignment` 的本地实现与契约验证已封板：有界对话上下文、工具反馈决策、RAG 正文/来源证据、Trace 关系与知识文件导入均完成。可进入后续维护或下一条按实际需求选定的主线；真实模型已完成本机合成复验，业务资料效果与目标用户签收仍待外部验收。
 - 当前阶段：持续推进[项目收尾](docs/project-completion-audit.md)，按现有定位修复主链路并核对交付证据；Agent 核心本地实现/契约已封板，真实模型基础链路与合成 RAG 已验证，业务任务质量与目标部署验收继续收尾。
 - 当前维护完成：[真实 RAG 验收修复](docs/real-model-acceptance.md)：最终回答接收成功工具/复用结果清单，明确自行推算不等于工具执行；内建检索规划声明实际可绑定字段，检索正文中的数值由后续反馈发起计算。外部 SSE/Trace/export 与规则回退保持原契约；此前规划失败用量、反馈参数和回答增量修复保留。
 - A2 [试点镜像与部署入口](docs/pilot-deployment-preflight.md)已准备：84 个后端依赖版本锁定、非 root 默认 embedding 构建缓存通过禁网验证；新增生产 `compose.pilot.yml`、低敏预检/操作入口与健康启动顺序。隔离 mock 下重建全部容器后，登录、会话、任务/Trace 与 Chroma 知识保留；目标部署、TLS、候选镜像真实模型与升级回滚仍待实测。
@@ -16,27 +16,12 @@
 
 ## 当前验证基线
 
-- 本轮候选（本机）：用干净 `9e78810` 工作树按 `frontend/Dockerfile.pilot` 重建前端候选 `insightagent-frontend:pilot-9e78810`（revision label `9e78810`，ID `sha256:010b1e01…583e`，ARM64，用户 `node`，API 地址 `https://api.pilot.example.com`），包含 #3 前端改动；后端运行时自 `42ccf1f` 无变化，继续用 `pilot-42ccf1f`。`smoke_pilot_images.py --with-agent-fixture` 配对 **PASS**（7 场景：5 完成/2 失败替身，13 规划/5 回答请求），前后卷/网络/镜像零新增，来源 `/tmp/insightagent-pilot-9e78810-{frontend-build,smoke}.log`。候选未推送、未部署。
-- 本轮收尾（本机）：`local_acceptance.sh` 报告的“六项汇报摘要”不再写死历史 PR 文字，改为运行时读取 git 分支/提交/upstream ahead-behind/相对 origin/main 提交数/工作区改动计数/备份计划是否改动，以及阶段 pass/fail/skipped/manual 计数与本机 `pilot-*` 候选镜像；新增 `--report-json`，JSON 同步带 `git` 字段；非 git 目录降级为 unknown。`test_local_acceptance.sh` 覆盖运行时字段、过时文字守卫与非 git 降级；tooling 门禁 PASS、hygiene PASS、`local_acceptance.sh --skip-gate` 无失败阶段，来源 `/tmp/insightagent-report-runtime-tooling.log`、`/tmp/insightagent-report-runtime-local-acceptance.md` / `.json`。
-- 本轮收尾（本机）：修复本机验收两处 Mac 问题。`test_pilot_drill_scripts.sh` 改为先捕获演练 dry-run 输出再匹配（原 `| grep -q` 在 `pipefail` 下 grep 提前退出，上游 SIGPIPE 退出 141，旧写法 Mac 5/5 复现），并把 dry-run 打印的恢复项目名校正为与实际执行一致的 `<project>-restored`；`smoke_pilot_images.py` 清理改为 `docker rm -f -v`，并逐个核对本轮容器挂载的卷（postgres 镜像声明 VOLUME，此前残留匿名卷），不 prune、不碰命名卷与 5432/8001 数据。冒烟无服务单测 **9/9**、tooling 门禁 PASS、`local_acceptance.sh --skip-gate` 无失败阶段；`pilot-42ccf1f` + `pilot-218f94d` `--with-agent-fixture` 冒烟 PASS，前后卷/网络零差异，来源 `/tmp/insightagent-pilot-42ccf1f-cleanup-smoke.log`、`/tmp/insightagent-sigpipe-tooling.log`、`/tmp/insightagent-sigpipe-local-acceptance.md`。
-- 本轮收尾：清理实时计划 frontmatter 合并残留的冲突标记；hygiene 增加行首冲突标记扫描。本地 hygiene **4/4 PASS**，来源 `/tmp/insightagent-conflict-hygiene.md` / `.json`。
-- 本轮收尾（项 E）：统一本机验收 `scripts/local_acceptance.sh` 与 [local-acceptance-checklist.md](docs/local-acceptance-checklist.md)；干跑自测通过。
-- 上轮收尾（项 D）：[目标环境部署与恢复演练工具包](docs/pilot-environment-drill.md)（`pilot_https_probe.sh`、`pilot_backup_restore_drill.sh`）；`test_pilot_drill_scripts.sh` 通过。**待外部验收（缺目标环境）**。
-- 上轮收尾（项 C）：[目标业务端到端验收模板](docs/target-task-acceptance.md)与 `scripts/export_acceptance_evidence.py`（单会话低敏证据包）；静态自测 **1/1**。**待外部验收（缺目标任务与用户）**。
-- 上轮收尾（项 B）：新增 [真实业务 RAG 验收工具包](docs/business-rag-acceptance.md)（`scripts/business_rag_acceptance_runner.py` + 合成 fixture）；VM 静态自测 **2/2**，Docker 隔离自测待本机/CI 有 daemon 时执行。状态 **待外部验收（缺真实业务资料）**。
-- 本轮收尾：加固 `frontend-e2e`/`backend-e2e` workflow——主 e2e 失败后仍 `if: always()` 跑 tooling 自测，避免 artifact guard 摘要缺失混入 `missing_count` 噪音；诊断重跑改用 `scripts/ci_rerun_frontend_e2e_diagnostics.sh`（同目录 `--last-failed`、摘要如实标 `diagnostic_gate_result`，不 `continue-on-error` 伪装成功）。VM tooling 自测通过（含 `test_ci_rerun_frontend_e2e_diagnostics.sh`、`test_ci_workflow_guards.sh`、`ci_run_release_gate.sh --phase tooling`）。
-- 本轮收尾：[规划等待与失败恢复](docs/real-model-acceptance.md)（替身 **5/5**）：规划等待 heartbeat/取消探测；取消后迟到规划不写 Trace/用量。前端 gate **217/217** + 双构建。后端 **2220/2220**；真实 glm/镜像重建待本机。
-- 本轮收尾：修复 GitHub `frontend-e2e` #194/#195 中 `composer-keyboard.spec.ts` 在生产构建下的误失败。根因是 Playwright 在 `CI=1` 时由 `npm run build && npm run start` 启动，无开发态 `nextjs-portal`，`not.toContainText("Runtime Error")` 在元素缺失时失败；断言改为与同仓库其它 e2e 一致的 `nextjs-portal [data-nextjs-dialog]` 计数为 0，dev 仍可捕获运行时错误对话框，生产无 overlay 时通过。云端 VM 生产模式 Chromium **2/2**（`CI=1 npx playwright test e2e/composer-keyboard.spec.ts --project=chromium`）；`errors` 控制台断言在生产构建下首次执行并通过。门禁一致的前端 node **217/217**（`scripts/ci_run_release_gate.sh` 所列 21 个 `*.node.test.ts`，含 `app/next-major-readiness.node.test.ts` 8 项）；`docs/development-runbook.md` 已补齐该文件，避免与 release gate 列表漂移。文档原先记录的输入法/键盘三浏览器 **6/6** 为用户本机 `npm run dev` 结果，修复后 dev 三浏览器复验**待用户 Mac**；候选镜像未重建，应用实现未变。
-- 上轮收尾：[规划等待排查](docs/real-model-acceptance.md)已核对两次约 60 秒异常，补齐离线请求/流耗时统计；不增加超时或重试，根因与恢复体验仍待实证。专项 **11/11**，新增 3 个耗时边界测试，来源 `/tmp/insightagent-provider-latency-static.log`。后端门禁 **2/2 PASS**（full slice **2220/2220**、模块 **9/9**），来源 `/tmp/insightagent-provider-latency-release.md` / `.json`。
-- 前轮执行证据后端门禁 **2/2 PASS**，来源 `/tmp/insightagent-execution-evidence-release.md` / `.json`：full slice **2217/2217**、module boundary **9/9**；执行证据专项 **7/7**、独立 PostgreSQL/Chroma 核心场景 **11/11**，来源 `/tmp/insightagent-execution-evidence-{static,postgres}.log`。前端未变，保留上一完整门禁 **10/10 PASS** 的前端 node **217/217**、lint **0 error / 2 个既有 warning**与双构建基线（`/tmp/insightagent-planning-call-usage-release.md` / `.json`）；本轮未重跑全量前端。
-- 规划调用用量专项基线：提供方静态 **8/8**、独立 PostgreSQL 反馈/规划 **20/20**、用量汇总 **3/3**、终态 **10/10**、远端流 **6/6**；来源 `/tmp/insightagent-planning-call-usage-{static,postgres,accounting-regression,terminal-regression,stream-regression}.log`。覆盖真实本机 HTTP 空正文/429、完整/部分/缺失用量、首轮回退与后续失败、Trace/delta/export 和请求隔离；模型仅协议替身。该专项为前轮验证，保留其范围；当前后端修复门禁见本节首项。
-- 保留空流回退回答 **14/14**、终态 **10/10**、成功保存 **6/6**，来源 `/tmp/insightagent-fallback-trace-*.log`；历史消息/会话静态 **9/11**、前端提示计算 **9/9** 与 Chromium 桌面英文/手机中文 **2/2** 保留 `/tmp/insightagent-message-completion-*.log` 基线。会话/Chroma 核心 **9/9** 保留；本轮未重跑这些交互或模型专项。
-- 保留用量计算后端 **8/8** / 前端 **6/6**（`/tmp/insightagent-usage-accounting-{static,frontend}.log`）及公开工具证据 **3/3**、HTTP 并发 **7/7**（`/tmp/insightagent-tool-evidence-{postgres,http-regression}.log`）；本轮未重跑这些专项。
-- 已验证前端基线：输入法/键盘三浏览器桌面/手机 **6/6**（用户本机 `npm run dev`，见 `/tmp/insightagent-composer-keyboard-e2e.log`）、生产构建 Chromium **2/2**（本轮云端 VM `CI=1` 专项）、知识导入 Chromium **7/7**、布局复核 **2/2**、Trace **2/2**；来源 `/tmp/insightagent-knowledge-import-e2e.log`、`/tmp/insightagent-knowledge-import-layout.log`、`/tmp/insightagent-trace-flow-e2e.log`。前轮镜像联调仅核对浏览器 API 地址，未重跑这些交互专项；输入法事件 fixture 不代替操作系统人工验收。
-- 历史 service-backed 基线：完整 Chromium **77 passed / 1 skipped**、完整重跑 PostgreSQL **11/11**、步骤恢复 **9/9**、内建并发 **6/6**、DAG **7/7**、RAG **21/21** 与 400 切块实写，均保留原验证范围。
-- 当前[本地候选镜像](docs/pilot-deployment-preflight.md)：后端 `pilot-0209651` 覆盖执行证据/检索规划修复，ARM64 构建和 78 个 Python 文件源码摘要一致；前端应用代码未变，复用 `pilot-218f94d`。新配对禁网 embedding、生产模式任务/RAG 与 Agent HTTP 协议联调 PASS，清理核验通过；来源 `/tmp/insightagent-pilot-0209651-{backend-retry,source-proof,smoke}.log`。Compose 重建持久化保留原 `218f94d` 配对基线，本轮未重跑；真实模型实测仍为本机开发服务，目标部署待验。
-- 镜像 Agent 协议专项 **7/7**：通过实际 HTTP Provider 核对历史传递/会话隔离、两种 RAG 正文驱动的反馈分支、来源/版本、空正文回退/失败及 429 请求间用量隔离；5 个任务完成、2 个失败，13 次规划/5 次回答请求，Trace/delta/导出/用量一致。来源 `/tmp/insightagent-pilot-0209651-smoke.log`，仅本地协议替身；无服务自测 **9/9**、清理失败不输出 PASS 的回归已纳入 tooling，成功摘要在资源清理后输出；前轮 tooling **1/1**、hygiene **3/3** PASS，来源 `/tmp/insightagent-pilot-agent-{tooling,hygiene}.md` / `.json`。
-- 2026-10-08 [真实模型配置验收](docs/real-model-acceptance.md)部分通过：智谱 `glm-5.3` 极短流式请求成功，真实任务 **3/3**（计算、历史续算及登录工作台发送）完成；Trace/delta/导出/消息与提供方用量一致。三任务共 **6,405 tokens**，加连通验证共 **6,530 tokens**；本机开发服务实测，未计作候选镜像或目标部署验证。真实 RAG 合成资料检索/反馈计算 2/2 通过；未知日期回答正确但首轮超时回退（严格报告 2/3），注入规划超时的真实回答明确未执行计算；业务资料质量、失败恢复体验与账单成本仍待验收；目标 HTTPS/升级回滚、恢复 RPO/RTO 与用户签收未验证，项目总完成度不估百分比。
+- 2026-10-09 当前后端门禁 **2/2 PASS**：full slice **2220/2220**、模块 **9/9**，来源 `/tmp/insightagent-oct09-backend.md` / `.json`。本轮仅验收工具/测试/文档修改，应用 API/SSE/Trace/export 契约不变。
+- [RAG 验收工具](docs/business-rag-acceptance.md)修正假通过/误报与用量字段读取：静态 **17/17**，隔离 PostgreSQL/Chroma **1/1**；规划等待/取消/迟到结果与重跑 **5/5**。来源 `/tmp/insightagent-oct09-{rag-static,rag-postgres,planning-postgres}.log`。tooling **1/1 PASS**，来源 `/tmp/insightagent-oct09-tooling.md` / `.json`；hygiene **4/4 PASS**，来源 `/tmp/insightagent-oct09-hygiene.md` / `.json`。
+- [真实模型本机复验](docs/real-model-acceptance.md)：原四场景 **3/4 完整通过**，编辑明确表达式的独立分支恢复 **1/1**；五项 Trace/delta/消息/导出一致。上下文续算规划回退，400 为自行推算，未执行要求的 Calculator；未知规划消耗与账单成本保留。已记录 **15,642 tokens** 不等于全部供应商消耗。API RAG 与 Chrome 工作台分别保留入口范围，不计候选镜像或业务签收。
+- Mac 开发态输入法/键盘三浏览器桌面/手机 **6/6**，来源 `/tmp/insightagent-oct09-keyboard.log`；Chrome 本轮真实任务页面/交互/done、规划等待提示及控制台检查通过，内置浏览器曾出现连接失败，原因未确诊。前端 full node **217/217**、lint **0 error / 2 warning**、Turbopack/webpack 双构建保留此前门禁，本轮未重跑完整前端。
+- 当前候选后端 **pilot-42ccf1f** + 前端 **pilot-9e78810**，此前配对 `--with-agent-fixture` 冒烟 PASS 且零残留；本轮只读核对 ID 与应用提交差异，未重建或重跑镜像。来源 `/tmp/insightagent-pilot-9e78810-{frontend-build,smoke}.log` 与[试点记录](docs/pilot-deployment-preflight.md)。Compose 重建/双存储恢复保留独立既有基线，不计目标环境验收。
+- 既有终态/成功保存/用量、反馈与 HTTP 协议、DAG/并发/checkpoint、RAG 分批导入及浏览器专项保留原验证范围；本轮未重复全套。长期契约、实现与运行说明保留正文及各主题文档。当前项目仍 **暂不可交付外部试点**，待业务资料/用户签收及目标环境部署恢复。
 
 ## 当前开发计划
 
@@ -214,7 +199,7 @@ docker compose -f compose.full.yml up -d
 
 ## 下一步
 
-- [项目收尾](docs/project-completion-audit.md)持续进行：本轮修复 `frontend-e2e` 输入法用例在生产构建下的覆盖层断言，等待 PR 上 GitHub `frontend-e2e` 复验；补 A2/A3 目标部署/恢复与 A5 真实用户签收证据；修复后 dev 三浏览器输入法复验待用户 Mac。
+- [项目收尾](docs/project-completion-audit.md)持续进行：本机真实 GLM 原四场景 3/4 完整通过，编辑分支恢复 1/1；Mac dev 三浏览器输入法/键盘 6/6 已复验。继续核对业务资料引用、规划回退与账单成本；补 A2/A3 目标部署/恢复与 A5 真实用户签收证据。远端 CI 本轮未核验。
 - [Agent 核心对齐](docs/agent-core-alignment.md)本地实现与契约已封板；真实模型效果与目标部署/恢复验收仍待外部资源。
 
 ## 文档维护约定

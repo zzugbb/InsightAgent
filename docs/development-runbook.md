@@ -133,7 +133,7 @@ curl -I http://127.0.0.1:3001
 
 [远端模型流结束专项](provider-stream-completion.md)：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k provider_stream_completion`（12 个静态测试）；`backend/.venv/bin/python backend/scripts/test_provider_stream_postgres.py`（6 个真实本机 HTTP/独立 PostgreSQL 场景）。后者需要 Docker/随机端口提权并自动清理，仅使用本地模型协议替身，已纳入 backend-e2e。验证部分 EOF 失败、批量 Trace 边界后的尾部、delta/导出、失败重连不重放、400 兼容回退及正常结束帧。
 
-[供应商规划等待与失败恢复](real-model-acceptance.md)（替身复现）：`backend/.venv/bin/python backend/scripts/test_provider_planning_wait_postgres.py`（4 个独立 PostgreSQL + 本机 HTTP/离线 Provider 场景，需 Docker/随机端口提权，自动清理）。覆盖首轮慢规划 heartbeat、规划期取消、空规划 HTTP 规则回退用量/Trace、失败后分支重跑；已纳入 backend-e2e。不替代真实模型长等待或账单验收。
+[供应商规划等待与失败恢复](real-model-acceptance.md)（替身复现）：`backend/.venv/bin/python backend/scripts/test_provider_planning_wait_postgres.py`（5 个独立 PostgreSQL + 本机 HTTP/离线 Provider 场景，需 Docker/随机端口提权，自动清理）。覆盖首轮慢规划 heartbeat、规划期取消、空规划 HTTP 规则回退用量/Trace、失败后分支重跑；已纳入 backend-e2e。不替代真实模型长等待或账单验收。
 
 公开 HTTP 工具结果的模型证据专项：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k agent_tool_context`（7 个静态边界）；`backend/.venv/bin/python backend/scripts/test_agent_tool_context_postgres.py`（3 个真实本机 HTTP/独立 PostgreSQL 场景，模型为本地替身，需提权访问 Docker/随机端口，自动清理；已纳入 backend-e2e）。核对同命中数/不同正文的分支、单轮最终回答、公开字段与嵌套脱敏、Trace/delta/导出一致性。
 
