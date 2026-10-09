@@ -1,13 +1,13 @@
 # 开发运行手册
 
-从仓库根目录执行下方命令；最新结果与运行实例范围见[验证基线](validation-baseline.md)。本手册维护命令、权限和排障规则，具体协议见专题文档。
+从仓库根目录执行下方命令；最新结果与运行实例范围见[验证基线](acceptance.md#验证基线)。本手册维护命令、权限和排障规则，具体协议见专题文档。
 
 ## 快速规则
 
 - Python 使用 `backend/.venv/bin/python`（Python 3.14）；前端使用已安装的 Node 24+ 与 npm，不为常规检查重装依赖。
 - slice / Node tests / lint / 静态检查通常不需提权。Docker、本机监听/访问、浏览器 e2e、写 `.git/index` 通常需提权；不要用首次失败反复探测权限。
 - 原始完整计划 `data/insightagent.plan.back.md` 永远只读。开发实时计划已删除，不重新创建；同步三个 README、受影响专题和验证基线。
-- 现有服务先查端口和健康；测试用独立 fixture，不重建开发 PostgreSQL/Chroma。旧 Chroma `/chroma/chroma` 挂载可能漏掉实际 `/data`，先按[备份说明](local-stack-backup-restore.md)保护数据。
+- 现有服务先查端口和健康；测试用独立 fixture，不重建开发 PostgreSQL/Chroma。旧 Chroma `/chroma/chroma` 挂载可能漏掉实际 `/data`，先按[备份说明](pilot-deployment-preflight.md#开发栈备份恢复)保护数据。
 - 沿用主题模块与 facade；后端 slice 主题 <=2500 行，临近上限拆 `_partN.py`。更改数量级或接口时同步审查调用方和契约。
 - 不输出真实 env、Key、密码、token、业务正文和原始异常。审批通道连接失败时重试同一必要操作，不绕过拒绝。
 
@@ -94,15 +94,15 @@ CI=1 npx playwright test e2e/composer-keyboard.spec.ts --project=chromium
 
 | 主题 | 文件 |
 | --- | --- |
-| [Agent 上下文/反馈](agent-core-alignment.md) | `test_agent_core_scenarios_postgres.py`、`test_agent_feedback_postgres.py`、`test_agent_tool_context_postgres.py` |
-| [依赖](tool-dependencies.md) / [任务并发](task-tool-parallel.md) / [HTTP 并发](http-read-parallel.md) | `test_tool_dependencies_postgres.py`、`test_task_parallel_postgres.py`、`test_http_parallel_postgres.py` |
-| [分支](task-reruns.md) / [步骤恢复](task-checkpoints.md) | `test_task_rerun_postgres.py`、`test_task_checkpoint_postgres.py` |
-| [原子成功/终态](task-completion.md) | `test_task_completion_postgres.py`、`test_task_terminal_postgres.py` |
-| [回答提示](answer-completion.md) / [流结束](provider-stream-completion.md) / [用量](usage-accounting.md) | `test_answer_completion_postgres.py`、`test_provider_stream_postgres.py`、`test_usage_accounting_postgres.py` |
+| [Agent 上下文/反馈](architecture.md#agent-上下文与反馈) | `test_agent_core_scenarios_postgres.py`、`test_agent_feedback_postgres.py`、`test_agent_tool_context_postgres.py` |
+| [依赖](tool-execution.md#依赖与结果绑定) / [任务并发](tool-execution.md#任务内并发) / [HTTP 并发](tool-execution.md#http-只读并发) | `test_tool_dependencies_postgres.py`、`test_task_parallel_postgres.py`、`test_http_parallel_postgres.py` |
+| [分支](runtime-contracts.md#完整任务分支重跑) / [步骤恢复](runtime-contracts.md#实验性步骤恢复) | `test_task_rerun_postgres.py`、`test_task_checkpoint_postgres.py` |
+| [原子成功/终态](runtime-contracts.md#成功提交与终态竞争) | `test_task_completion_postgres.py`、`test_task_terminal_postgres.py` |
+| [回答提示](runtime-contracts.md#流结束与回答完整性) / [流结束](runtime-contracts.md#流结束与回答完整性) / [用量](runtime-contracts.md#用量口径) | `test_answer_completion_postgres.py`、`test_provider_stream_postgres.py`、`test_usage_accounting_postgres.py` |
 | [RAG 导入](rag-background-ingest.md) | `test_rag_ingest_postgres.py --with-chroma`（实际400切块与部分失败） |
-| [规划等待与恢复](real-model-acceptance.md) | `test_provider_planning_wait_postgres.py` |
+| [规划等待与恢复](acceptance.md#真实模型记录) | `test_provider_planning_wait_postgres.py` |
 
-这些场景已接入 backend-e2e；前端 Trace/导入/恢复/回答 fixture 由 full Chromium 发现。备份自测、生产镜像锁定依赖/embedding、试点 Compose、真实模型与业务工具分别见[恢复](local-stack-backup-restore.md)、[部署](pilot-deployment-preflight.md)、[验收](acceptance.md)，不混算。
+这些场景已接入 backend-e2e；前端 Trace/导入/恢复/回答 fixture 由 full Chromium 发现。备份自测、生产镜像锁定依赖/embedding、试点 Compose、真实模型与业务工具分别见[恢复](pilot-deployment-preflight.md#开发栈备份恢复)、[部署](pilot-deployment-preflight.md)、[验收](acceptance.md)，不混算。
 
 ## 提交路径
 

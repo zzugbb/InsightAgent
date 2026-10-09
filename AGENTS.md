@@ -1,33 +1,14 @@
-# AGENTS
+# 维护规则
 
-本仓库的开发规则（强制）：
+InsightAgent已完成本地实现与工程收尾。后续围绕可复现问题或维护者明确的新需求变更；部署、业务资料和用户签收仍待外部验收，写入并行与HTTP/DAG checkpoint延期，不因持续推进自动扩展范围。
 
-1. 永远不要修改备份的完整开发计划文件：`data/insightagent.plan.back.md`。
-2. 每次开发完成后，必须同步更新以下文档：
-   - `README.md`
-   - `backend/README.md`
-   - `frontend/README.md`
-   - 影响范围内的专题文档；当前状态与验证统一维护在 `docs/validation-baseline.md`
-3. 每个主线确认封板后，必须额外整理上述活跃文档：
-   - 仅收敛“进度/封板状态相关块”：只保留当前状态、当前验证基线、下一步计划/候选主线、稳定契约与少量高信号摘要
-   - 删除或收缩按轮流水账、旧失败过程、重复验证清单和阶段内细碎过程描述
-   - 明确主线封板结论、最终验证来源，以及是否可进入下一主线
-   - 不要整段删除长期参考章节，例如接口范围、运行方式、关键实现位置、SSE/Trace 契约、Memory/RAG 说明、文档维护约定
-4. 运行测试、e2e、启动项目和提交前，先参考 `docs/development-runbook.md`：
-   - 后端使用 `backend/.venv/bin/python`
-   - 本机端口 / Docker 访问、e2e、本地服务启动通常需要提权
-   - `git add` / `git commit` 写 `.git/index` 通常需要提权
-   - 实时计划已按维护者要求删除，不重新创建；历史过程记录从 Git 历史查阅
-5. 控制单文件规模，避免无限追加：
-   - 新增测试、文档或实现时，优先放入已有主题文件；如果主题文件已经明显膨胀，先拆分到新主题文件/新模块
-   - 不把历史大文件当作默认追加点；曾经的 `backend/scripts/test_tool_runtime_slice.py` 和 `app/services/tool_runtime.py` 已拆分为主题包与 facade 模块，后续继续沿用该拆分方式
-   - 单轮变更如果会显著增加单文件长度，应同步评估拆分方案，再继续实现
+- `data/insightagent.plan.back.md`是原始完整计划，永远只读。已删除的实时计划和开发流水账不重新创建，历史从Git查询。
+- 运行/测试/提交前读[开发手册](docs/development-runbook.md)。Python统一用`backend/.venv/bin/python`，前端用Node24+与npm；Docker、本机端口、浏览器e2e和写Git索引按当前环境权限流程执行。
+- 先查已有服务与健康，不重复启动。PostgreSQL/Chroma数据保留；旧Chroma实际`/data`可能不在旧挂载卷内，未经备份不重建/删除容器或卷，见[恢复规则](docs/pilot-deployment-preflight.md#开发栈备份恢复)。
+- 不输出或提交真实env、Key、密码、token、私人会话、数据库备份或构建/测试产物。使用[安全政策](SECURITY.md)与[配置指南](docs/configuration.md)。
+- 沿用主题模块和兼容facade，不无限追加主编排或历史大文件。后端slice主题≤2500行，临近上限先拆分，再增加测试。
+- 保留长期接口与运行契约，按影响同步三个README及主题文档；验证、已知风险和外部状态统一在[验收基线](docs/acceptance.md#验证基线)。纯文档变更核对链接/命令与hygiene，不重复跑无关全量测试。
+- 区分源码完成、本地替身、真实模型、浏览器、镜像、CI和外部签收；completed不等于目标全部满足，未知用量不补零，旧CI/镜像不代表新源码已验证。
+- 提交采用简体中文Conventional Commits，提交前检查暂存差异和原始计划；推送或部署按维护者授权处理，不虚报远端或目标环境结果。
 
-## Cursor Cloud specific instructions
-
-云端代理的 Python 3.14、Node 24 与 Docker 由环境镜像提供。依赖安装和开机拉起服务走环境的 `install` / `start`；命令细节仍以 `docs/development-runbook.md` 为准。
-
-- 后端使用 `python3.14` 创建的 `backend/.venv/bin/python`。没有 `backend/.env` 时，从 `backend/.env.example` 复制；默认 mock 模式不需要模型密钥。
-- Node 24 在 `/usr/local/bin`。代理运行时自带的 `node` 可能更旧，跑前端命令前把 `/usr/local/bin` 放到 `PATH` 最前面。
-- PostgreSQL 与 Chroma 使用 `docker compose -f compose.full.yml up -d postgres chroma`。这里没有 Docker Desktop，`start` 会启动 `dockerd`（fuse-overlayfs 与 userland proxy）。不要执行 `./start_insightagent.command`。
-- 开发服务监听 `127.0.0.1:8000` 与 `127.0.0.1:3001`。若容器在跑但宿主机端口连不上，先检查 `docker-proxy`、端口与日志；现有 PostgreSQL/Chroma 须先确认备份与实际持久路径，再安排重建，不能用 `--force-recreate` 直接排障。
+项目介绍见[README](README.md)，文档入口见[docs](docs/README.md)。环境安装由各执行环境提供，不把本机macOS或旧云端绝对路径当成通用前提。

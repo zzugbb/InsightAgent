@@ -96,7 +96,7 @@ backend/.venv/bin/python -m uvicorn app.main:app --app-dir backend --host 127.0.
 
 ## 关键实现位置
 
-下表服务文件位于 `app/services/`，对应契约见[技术文档](../docs/README.md#开发参考)。继续沿用主题模块与兼容 facade，避免扩大主编排文件。
+下表服务文件位于 `app/services/`，对应契约见[技术文档](../docs/README.md)。继续沿用主题模块与兼容 facade，避免扩大主编排文件。
 
 | 职责 | 入口 |
 | --- | --- |
@@ -118,7 +118,7 @@ backend/.venv/bin/python -m uvicorn app.main:app --app-dir backend --host 127.0.
 
 事件为 `start / state / trace / tool_start / tool_end / heartbeat / token / cancelled / timeout / done / error`。`trace.data.step` 与 REST `TraceStep` 同构，工具事件按 `step_id` 对齐。delta 默认 200、最大 500 条；seq 递增但不保证连续，最终回答更新也必须可见。
 
-远端流必须收到 `[DONE]` 或已知首 choice `finish_reason` 才能正常结束；部分输出 EOF 保存失败 Trace，不写成功消息、不发送 done、不自动重试。error 的 `code / fatal / retryable / detail / status_code` 保持兼容，diagnostic 只含低敏分类。见[流结束](../docs/provider-stream-completion.md)、[成功事务](../docs/task-completion.md)与[回答完整性](../docs/answer-completion.md)。
+远端流必须收到 `[DONE]` 或已知首 choice `finish_reason` 才能正常结束；部分输出 EOF 保存失败 Trace，不写成功消息、不发送 done、不自动重试。error 的 `code / fatal / retryable / detail / status_code` 保持兼容，diagnostic 只含低敏分类。见[流结束](../docs/runtime-contracts.md#流结束与回答完整性)、[成功事务](../docs/runtime-contracts.md#成功提交与终态竞争)与[回答完整性](../docs/runtime-contracts.md#流结束与回答完整性)。
 
 ## Memory / Chroma / Embedding
 
@@ -139,6 +139,6 @@ bash scripts/ci_run_release_gate.sh --phase backend
 
 数据库/HTTP 集成使用隔离资源，命令和权限见[运行手册](../docs/development-runbook.md)。历史 SQLite 迁移入口 `scripts/migrate_sqlite_to_postgres.py` 仅用于已有数据迁移，当前运行时只支持 PostgreSQL；含密码的连接串不要写进共享命令记录。
 
-本地实现与工程收尾完成，后续按可复现问题维护。当前测试数量、配置脱敏回归、真实模型结果及镜像范围统一见[验证基线](../docs/validation-baseline.md)，外部就绪未验收。写入并行与 HTTP/DAG checkpoint 延期。
+本地实现与工程收尾完成，后续按可复现问题维护。当前测试数量、配置脱敏回归、真实模型结果及镜像范围统一见[验证基线](../docs/acceptance.md#验证基线)，外部就绪未验收。写入并行与 HTTP/DAG checkpoint 延期。
 
 沿用主题模块与 facade，不向历史大文件无限追加；新增测试放入有余量的主题。开发后同步三个 README 与受影响专题，验证集中在验证基线；开发实时计划已删除，原始备份计划永远只读。

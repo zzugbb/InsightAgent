@@ -17,7 +17,7 @@
 ## 真实模型 Key 的使用路径
 
 1. 登录后选择 remote，填写提供方标签、实际模型名称、OpenAI-compatible API 基础地址和 Key。标签不意味着该供应商已通过真实兼容验收。
-2. “校验”探测连接/授权；成功不证明 chat/completions、流式结束或工具规划都正常。随后用小任务核对实际 Trace 和回答，参考[真实模型验收](real-model-acceptance.md)。
+2. “校验”探测连接/授权；成功不证明 chat/completions、流式结束或工具规划都正常。随后用小任务核对实际 Trace 和回答，参考[真实模型验收](acceptance.md#真实模型记录)。
 3. 保存时由服务端加密写入 `user_settings.api_key_enc`。设置响应只返回 `api_key_configured`，前端保存后清空 Key 草稿，不将 Key 放入 localStorage。
 4. remote 空 Key / 地址表示沿用既有值，不能把空输入当成删除按钮。切到 mock 会清空用户保存的连接值；服务端全局默认 Key 仍有继承可能，当前没有单独的“撤销继承”配置。真正停用某个 Key 需在供应商侧撤销，并检查服务端默认值。
 
@@ -52,7 +52,7 @@ Trace 持久化/重连轮询、执行 owner/heartbeat/stale recovery、备份/�
 
 开发 Compose 仅发布到 127.0.0.1；它仍使用开发密码、浮动镜像、启动安装依赖及 reload/dev。`compose.pilot.yml` 不发布数据库/Chroma，应用端口也只发布到 loopback，HTTPS 代理和访问控制另行准备。使用[预检与镜像配方](pilot-deployment-preflight.md)，不要在公开日志运行会展开秘密的 `docker compose config`。
 
-修改 Compose 文件**不会改变已运行容器的端口绑定**；新配置须待备份后由操作者安排应用。已有旧 Chroma `/chroma/chroma` 挂载可能漏掉容器内 `/data`，禁止直接重建。详见[备份恢复](local-stack-backup-restore.md)。
+修改 Compose 文件**不会改变已运行容器的端口绑定**；新配置须待备份后由操作者安排应用。已有旧 Chroma `/chroma/chroma` 挂载可能漏掉容器内 `/data`，禁止直接重建。详见[备份恢复](pilot-deployment-preflight.md#开发栈备份恢复)。
 
 ## 密钥保存、备份和轮换
 

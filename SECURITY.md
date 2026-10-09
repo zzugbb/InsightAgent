@@ -26,7 +26,7 @@ InsightAgent 当前有本地实现与契约验证基线，外部试点/生产安
 - 工具输入、检索资料与模型输出视为不可信。AST 与结果绑定白名单限制执行范围，提示词注入与自然语言误述不能仅靠提示保证避免。
 - 取消/超时不能撤销已发送的外部操作；失败后台导入可能部分写入，先复核再决定重试。
 
-`compose.full.yml` / `docker-compose.yml` 是开发文件，loopback 绑定仅对新应用配置生效。禁止未经备份重建旧存储容器。正式部署、升级回滚、备份恢复及 RPO/RTO 需目标环境实测，流程见[部署预检](docs/pilot-deployment-preflight.md)与[恢复说明](docs/local-stack-backup-restore.md)。
+`compose.full.yml` / `docker-compose.yml` 是开发文件，loopback 绑定仅对新应用配置生效。禁止未经备份重建旧存储容器。正式部署、升级回滚、备份恢复及 RPO/RTO 需目标环境实测，流程见[部署预检](docs/pilot-deployment-preflight.md)与[恢复说明](docs/pilot-deployment-preflight.md#开发栈备份恢复)。
 
 ## 凭据误提交后的处理
 

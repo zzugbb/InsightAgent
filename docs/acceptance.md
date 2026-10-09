@@ -1,6 +1,6 @@
 # 验收指南
 
-本机工程检查、真实模型验证、业务签收和部署实证分别记录。当前本地收尾完成，真实业务资料、目标用户和部署环境待提供；本文是可执行指南，不包含未发生的签收。已有结果见[验证基线](validation-baseline.md)与[真实模型记录](real-model-acceptance.md)。
+本机工程检查、真实模型验证、业务签收和部署实证分别记录。当前本地收尾完成，真实业务资料、目标用户和部署环境待提供；本文是可执行指南，不包含未发生的签收。已有结果见[验证基线](acceptance.md#验证基线)与[真实模型记录](acceptance.md#真实模型记录)。
 
 ## 本机检查入口
 
@@ -60,3 +60,104 @@ backend/.venv/bin/python scripts/export_acceptance_evidence.py \
 ```
 
 可多次指定 `--task-id` 限定任务；证据包仅含指纹与低敏元数据，不含消息正文或密钥。目标 HTTPS、升级回滚、备份恢复与 RPO/RTO 按[部署指南](pilot-deployment-preflight.md#目标环境演练记录)单独实测，不把合成资料、模型替身或静态预检计作部署签收。
+
+## 验证基线
+
+更新：2026-10-09。本地实现与工程收尾完成，现阶段按可复现问题维护；部署、真实业务资料和目标用户签收按维护者决定延期。写入工具并行、HTTP/DAG checkpoint 和 ESLint 10 不属于当前收尾。外部试点/生产就绪尚未验收，没有经确认必须新增的功能主线。
+
+### 源码与验证范围
+
+| 范围 | 已完成结果 | 来源 |
+| --- | --- | --- |
+| 后端 `bc1346f` | full slice 2224/2224、模块 9/9，含 OpenAPI 指纹；摘要脱敏新增 3/3 | `/tmp/insightagent-docs-backend.{log,md,json}`、`insightagent-docs-security-red.log` |
+| 静态运维与工具 | 预检 5/5、Compose 7/7、普通故障标记 1/1；tooling 1/1、hygiene 4/4 | `/tmp/insightagent-docs-tooling.{md,json}`、`insightagent-docs-tooling-retry.log`、`insightagent-docs-hygiene.{log,md,json}` |
+| 前端应用 `103ea1f` | node 217/217、lint 0 error / 2 既有 warning、Turbopack/webpack 双构建 | `/tmp/insightagent-ui-audit-frontend.{log,md,json}`、`insightagent-ui-audit-final-build-{turbo,webpack}.log` |
+| 浏览器 `103ea1f` | Chromium Trace 1440/390px 2/2、原布局 2/2；Chrome 登录/工作台/任务/治理、完整 ID 复制；Mac 键盘三浏览器/两尺寸 6/6 | `/tmp/insightagent-ui-audit-{trace,e2e}.log`；运行命令见[手册](development-runbook.md) |
+| 页面只读复核 `bc1346f` | Chrome 390×900：登录/注册、任务中心→详情、Failure 筛选；无页面横向溢出，覆盖层/console error 0；两个 ID 复制入口可见 | 本机开发页；复制内容与完整 e2e 沿用上一行 |
+| 隔离验收工具 | RAG 静态 17/17、独立 PostgreSQL/Chroma 1/1，规划等待/取消/迟到结果/重跑 5/5，导出静态 1/1 与 drill 自测 | `/tmp/insightagent-oct09-{rag-static,rag-postgres,planning-postgres}.log`、`insightagent-finalcheck-*` |
+| 真实 GLM | 原四场景 3/4 完整通过，编辑表达式的独立分支恢复 1/1；原续算回退未实际调用计算工具 | [真实模型验收](acceptance.md#真实模型记录) |
+
+tooling 首跑受沙箱 `/dev/fd` 限制，同命令提权复跑通过。后端定位摘要修复与开发 Compose loopback 定义已落源码；`bc1346f` 检查时未重启服务/容器，不能把运行实例视为已加载这些修改。端口 8000/3001 当时 HTTP 200、Chroma reachable。
+
+### 工具与页面维护结论
+
+- 检索调用真实 Chroma，计算使用 AST 白名单，HTTP 工具按显式配置执行；remote 缺连接值明确失败。canonical mock、协议 fixture 和历史名称兼容属于必要演示/测试路径，不是实际工具假结果。
+- 普通 prompt 的测试故障标记已不影响生产 runner；登录中英文改为实际能力与估算费用，窄屏筛选、任务抽屉、发送按钮和长 ID 展示已修复。完整标识仍保留在 API/路由/导出和排障元数据中。
+- 已检查跟踪文件，无真实 env、数据库、缓存、构建结果、日志或私钥产物；常见秘密特征扫描无命中，不等于完整 Git 历史或所有凭据类型已审计。`data/insightagent.plan.back.md` SHA256 保持 `5f6f79c4c7faf8a3becad7e6d7805fd86304425a2319b2702730fd4a54e4525d`。
+
+### 镜像、CI 与外部验收
+
+- 历史配对 `pilot-42ccf1f` / `pilot-9e78810` 未包含 `103ea1f` 页面/工具维护与 `bc1346f` 摘要修复。旧 `0209651` / `218f94d` 配对有 ARM64 构建、禁网 384 维 embedding、生产 PostgreSQL/Chroma、SSE/Trace/导出、恢复/取消及 Agent HTTP 协议 7/7 证据；旧 `218f94d` 配对隔离 Compose 重建后数据保留通过。均为本地模型替身，最新镜像未重建。历史摘要/配方来源可从 `65f1fde` 与 `bc1346f` 的 Git 文档查询，不沿用旧 tag 直接发布。
+- 已推送基线 `1b850bc` 的 CI 绿由维护者确认，后续本地维护没有据此获得新的远端验证。提交是否推送、当前 CI 和运行健康应实时查询，不从本文历史状态推断。
+- 真实业务引用/冲突版本/无依据回答、目标任务签收与供应商账单按[验收指南](acceptance.md)另行核对；HTTPS/访问边界、升级回滚、双存储恢复、RPO/RTO 与责任人按[部署指南](pilot-deployment-preflight.md)实测。配置 PASS 不改变未验收结论。
+
+### 文档清理验证
+
+
+文档按用途收敛到docs下10份；工具/任务专题已合并，真实模型记录与验证基线集中在本文件，备份恢复集中到部署指南。AGENTS转为维护规则，原始计划保持只读。本次仅改文档与验收脚本的文档路径指引，不改应用逻辑、模型设置或数据，不新增供应商调用、服务重启、镜像构建或部署；完整应用门禁沿用上表源码基线。158个本地链接、接口清单51/51、文档命令路径、原始计划摘要核对通过，已删除文件引用为0；hygiene 4/4、既有验收干跑自测通过。来源 `/tmp/insightagent-docs-consolidation-check.json`、`/tmp/insightagent-docs-consolidation-local-acceptance.log` 与 `/tmp/insightagent-docs-consolidation-hygiene.{log,md,json}`。
+
+## 真实模型记录
+
+更新：2026-10-09。使用已保存的智谱 `glm-5.3` remote 设置，服务为本机 `8000` / `3001` 与真实 PostgreSQL/Chroma；不记录凭据或私人对话，不计作镜像或目标部署实测。历史验收会话与独立合成库保留，临时日志消失不推翻本文件记录。
+
+**最近原四场景 3/4 完整通过，明确表达式的独立分支恢复 1/1。** 同会话续算回答正确但规划回退未调用要求的计算工具，成功分支不覆盖该结果。业务资料、目标用户、供应商账单及部署未验收，范围见[验证基线](acceptance.md#验证基线)。
+
+### 最近复验（2026-10-09）
+
+应用基线 `c909306`，后端运行时相对 `42ccf1f` 无提交差异。计算/续算/恢复用 Chrome，RAG 用已鉴权业务 HTTP。
+
+| 场景 | 任务 ID | 结果 | 规划 / 回答 / 已记录总 tokens |
+| --- | --- | --- | --- |
+| API 合成资料预算加倍 | `535bf6b7-b931-4c45-b40c-06210edba50e` | 检索与实际计算 14，通过；回答来源与 sha256 版本均存在 | 4103 / 1284 / 5387 |
+| API 资料未记载上线日期 | `a9b24874-087d-4cf2-9779-b99fcef5ced3` | 真实规划/检索，明确未记载，来源版本存在，通过 | 2635 / 1067 / 3702 |
+| 工作台 29×13 | `3fef852d-43f1-4412-b35c-2c4cb4ec9eac` | Enter 发送、实际 Calculator、377、done，通过 | 1186 / 1346 / 2532 |
+| 工作台上轮结果加 23 | `de625991-a505-48f6-ad3b-f12313aeffed` | 回答自行推算 400 正确，明确本轮未执行计算工具；规划走规则回退，未满足实际调用工具要求 | 未知 / 931 / 931（仅已知回答） |
+| 上述任务的独立分支，编辑为 377+23 | `d43ea50d-2096-4e32-933c-a0a896421e48` | 详情 → 分支重跑 → 编辑 → 创建并运行，实际 Calculator、400、done，通过；父子关联核对通过 | 1745 / 1345 / 3090 |
+
+五项均 completed；Trace、全量 delta、JSON v1.0、Markdown 和 assistant 消息一致，不能写成目标 5/5。已记录 **15,642 tokens**：四项完整规划+回答 14,711，回退续算仅已知回答 931；未返回的失败/放弃规划消耗未知，不是全部供应商消耗或账单成本。
+
+两条 RAG 任务约 46.072 / 46.007 秒，17 / 21 个 heartbeat，首次约 2.123 / 2.098 秒；小样本不能作为性能承诺。Chrome 等待文案、恢复路径及父子关联正常，无捕获的框架覆盖层/warn/error。Codex 内置浏览器登录后曾 `Failed to fetch`，原因未确诊，不能宣称所有浏览器通过。
+
+- 保留会话：API `3624659a-40c4-4de1-a56f-2ab0d988d8f2`（真实模型收尾复验）、Chrome `9c5fc72f-57db-4f2e-a17c-4253596a785c`（工作台真实模型复验）、分支 `4d4cf1f7-f12c-4476-8833-08261cf43c66`；独立合成库 `acceptance-toolkit-oct09-1791508418` 保留。无旧知识库或业务数据清理。
+
+最终低敏证据 `/tmp/insightagent-oct09-real-verified.{json,md,log}`、`/tmp/insightagent-oct09-real-evidence.json`；早期未修正用量读取的报告不作为最终用量依据。验收工具要求 completed/非空回答、done action，不把 checkpoint 复用算成调用；自然语言声明检测是启发式，操作见[验收指南](acceptance.md)。静态 17/17、隔离 RAG 1/1、规划等待/取消/迟到结果/分支恢复 5/5，来源 `/tmp/insightagent-oct09-{rag-static,rag-postgres,planning-postgres}.log`，属于本地替身验证。
+
+### 初始基础验证（2026-10-08）
+
+应用来源 `218f94d`，本机开发服务。实际流式连通 125 tokens、约 4.06 秒，结束原因 stop。验收会话 `06a94f04-8c6d-4756-9bb7-8bbf1fbc7979`。
+
+| 入口与场景 | 任务 ID | 结果 | 规划 tokens | 回答 tokens | 总 tokens |
+| --- | --- | --- | ---: | ---: | ---: |
+| 后端任务服务：17×19 | `f6b9601f-85ea-45e7-b6a8-5728d2347a98` | completed，323 | 873 | 747 | 1,620 |
+| 后端任务服务：上轮结果加 7 | `3c075773-7cde-48d4-8f8e-2e7e69219e8d` | completed，330 | 1,617 | 1,171 | 2,788 |
+| 登录浏览器工作台发送：23×11 | `293b69e5-2c3e-43ed-95b4-96ac64c10365` | completed，253，UI 显示 done | 1,462 | 535 | 1,997 |
+
+三任务 3/3，6,405 tokens，加连通共 **6,530**。前两项调用任务服务，第三项覆盖工作台→HTTP→SSE；真实规划、计算、历史、消息、Trace/delta/导出和规划+回答用量一致。来源 `/tmp/insightagent-real-model-configured-tasks.{json,log}`；不将服务调用范围说成浏览器全路径。
+
+### RAG 引用与执行声明（2026-10-08）
+
+此前发现回答声称执行了未调用的计算工具，以及规划尝试绑定检索正文预算。已向最终模型提供成功执行/复用清单；检索绑定只允许 hit_count / knowledge_base_id，正文事实通过后续反馈规划计算。运行时仍拒绝非法路径；提示约束不能保证模型所有回答绝不误述。
+
+| 场景 | 任务 ID | 结论 | 已返回 tokens |
+| --- | --- | --- | ---: |
+| 正文预算 7 → 真实检索、反馈计算 14 | `dfcc2a7a-bd7d-4183-aa4f-b8f969434253` | PASS；来源 `star-sail-guide.md` / `sha256:0816e12da7d64061` | 5,612 |
+| 正文预算 5 → 真实检索、反馈计算 10 | `a9b22b66-be93-42c8-9173-57dc39b0dc3c` | PASS；来源 `star-sail-guide.md` / `sha256:0c54ed5d00e3146e` | 5,995 |
+| 询问资料未记载的上线日期 | `f0c7487b-c73f-409e-a319-b795771845d4` | 首轮规划约 60 秒超时后规则检索；真实回答明确未记载，来源/版本正确。因验收脚本强制要求真实规划，严格结果 FAIL，不能计入全规划成功 | 2,138（仅已知最终用量） |
+| 注入规划超时 → 真实最终回答 | `6a15ac46-9054-4df3-b4c2-f5b8ec1ff384` | 明确没有调用计算工具，14 为自行推算；请求缺口说明正确 | 1,706（仅已知最终用量） |
+
+正常检索/计算 **2/2**；严格前三场景 **2/3**，未知日期回答正确但约 60 秒首轮规划超时回退。第四项仅最终回答是真实模型，规划超时为注入，不算全程真实规划。Trace/delta/导出、正文、来源/版本及已知用量一致。来源 `/tmp/insightagent-real-rag-acceptance-fixed.{json,log}`、`/tmp/insightagent-real-fallback-acceptance.{json,log}`；修复前记录 `/tmp/insightagent-real-rag-acceptance.{json,log}`。执行证据静态 7/7、独立 PostgreSQL/Chroma 核心 11/11 为历史本地验证。
+
+### 规划等待与恢复边界
+
+只读汇总的 HTTP 尝试耗时如下，含错误/回退；两组任务和轮数不同，不能据均值变化宣称性能改善：
+
+| 日志样本 | 非流式请求数 | 请求 min / mean / max（秒） | 流式请求数 | 流 min / mean / max（秒） | outcome 为 unexpected_error |
+| --- | ---: | --- | ---: | --- | ---: |
+| 修复前真实 RAG | 4 | 3.096 / 33.304 / 60.081 | 2 | 10.280 / 15.519 / 20.758 | 1 |
+| 修复后真实 RAG | 7 | 4.156 / 21.307 / 60.075 | 3 | 22.946 / 27.185 / 32.979 | 1 |
+
+来源 `/tmp/insightagent-provider-latency-{before,fixed}.json`。Provider 默认 socket timeout 60 秒；两次异常约 60 秒、另一次成功请求 59.094 秒。日志不足以区分连接、读取、推理等待或确诊供应商根因，不能推算失败率、首 token 时间和账单。
+
+首轮规划在线程中执行，流主循环每 2 秒发 heartbeat 并检查取消/超时。取消后不等规划线程结束，迟到结果不改写 Trace、消息或用量；底层供应商调用仍可能跑完并收费。隔离 `test_provider_planning_wait_postgres.py` 5/5 验证等待、取消、空规划回退用量和失败分支恢复，不代替真实一分钟等待体验。保留首轮规则回退、后续规划失败及未知用量规则，没有延长超时或新增自动重试。
+
+真实业务引用、冲突版本、无依据回答、目标用户等待体验、成本与目标环境另行验收；当前工程维护不把上述未验收项写成通过。

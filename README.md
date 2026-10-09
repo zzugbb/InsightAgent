@@ -44,7 +44,7 @@ flowchart LR
     X --> E[历史回放 / 导出]
 ```
 
-首轮规划失败时采用既有规则回退；后续决策失败按任务错误处理。轮次、工具数和证据大小均有上限。完整执行边界见[Agent 核心契约](docs/agent-core-alignment.md)。
+首轮规划失败时采用既有规则回退；后续决策失败按任务错误处理。轮次、工具数和证据大小均有上限。完整执行边界见[Agent 核心契约](docs/architecture.md#agent-上下文与反馈)。
 
 ## 架构与技术栈
 
@@ -95,7 +95,7 @@ npm --prefix frontend run dev
 
 [健康检查](http://127.0.0.1:8000/health) · [API 文档](http://127.0.0.1:8000/docs) · [OpenAPI](http://127.0.0.1:8000/openapi.json)
 
-开发 Compose 使用开发凭据、浮动基础镜像和本地端口；单机试点使用独立的 [生产配方与预检](docs/pilot-deployment-preflight.md)。`start_insightagent.command` 是本机便利脚本，会释放应用端口并执行依赖 `up`；已有服务或旧 Chroma 数据时优先使用手动命令，先读[运行手册](docs/development-runbook.md)和[备份说明](docs/local-stack-backup-restore.md)。
+开发 Compose 使用开发凭据、浮动基础镜像和本地端口；单机试点使用独立的 [生产配方与预检](docs/pilot-deployment-preflight.md)。`start_insightagent.command` 是本机便利脚本，会释放应用端口并执行依赖 `up`；已有服务或旧 Chroma 数据时优先使用手动命令，先读[运行手册](docs/development-runbook.md)和[备份说明](docs/pilot-deployment-preflight.md#开发栈备份恢复)。
 
 ## 使用示例
 
@@ -113,7 +113,7 @@ REST、SSE、Trace delta、历史回放与 JSON v1.0 / Markdown 导出读取同�
 
 ## 项目状态
 
-本地实现与工程收尾完成，现阶段按可复现问题维护。后端、前端、浏览器、隔离存储、真实 GLM 与候选镜像各有独立验证范围，详见[验证基线](docs/validation-baseline.md)与[真实模型记录](docs/real-model-acceptance.md)。真实业务资料、目标用户签收和部署环境尚未验收，外部试点/生产就绪未获验证。
+本地实现与工程收尾完成，现阶段按可复现问题维护。后端、前端、浏览器、隔离存储、真实 GLM 与候选镜像各有独立验证范围，详见[验证基线](docs/acceptance.md#验证基线)与[真实模型记录](docs/acceptance.md#真实模型记录)。真实业务资料、目标用户签收和部署环境尚未验收，外部试点/生产就绪未获验证。
 
 写入工具并行、HTTP/DAG checkpoint 延期；PDF/Office/OCR 导入、内建网页搜索和图编辑器不在当前实现范围。开发与测试命令见[贡献指南](CONTRIBUTING.md)和[运行手册](docs/development-runbook.md)，业务任务复核见[验收指南](docs/acceptance.md)。
 

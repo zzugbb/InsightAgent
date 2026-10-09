@@ -152,7 +152,7 @@ phase_real_glm() {
     return 0
   fi
   echo "WARNING: --with-real-glm 将消耗真实供应商用量；请确认已配置本机 remote 模型。" >&2
-  record_phase "real_glm" "manual" "待用户在本机按 docs/real-model-acceptance.md 执行连通与规划等待验收"
+  record_phase "real_glm" "manual" "待用户在本机按 docs/acceptance.md#真实模型记录 执行连通与规划等待验收"
 }
 
 phase_pilot_images() {

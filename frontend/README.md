@@ -63,7 +63,7 @@ Workbench 静默拉取 `trace/delta`，失败退避并在流结束后补拉；�
 
 状态/轮询使用 normalized 状态，失败摘要优先显式 hint/source；本地筛选和处置提示不改写服务端状态。流程图虚线仅为记录顺序，实线仅为声明依赖/决策来源；缺少历史字段不推断。回答结束提示消费白名单原因及最新 seq，completed 不代表目标全部满足。
 
-输入法组合中的 Enter 保留给输入法，普通 Enter 发送、Shift+Enter 换行。窄屏筛选换行、宽表格在容器内滚动；必要 ID 缩略显示，可查看/复制完整值，路由、配置与导出保留完整标识。详见[运行时契约](../docs/runtime-contracts.md)，页面复核范围见[验证基线](../docs/validation-baseline.md)。
+输入法组合中的 Enter 保留给输入法，普通 Enter 发送、Shift+Enter 换行。窄屏筛选换行、宽表格在容器内滚动；必要 ID 缩略显示，可查看/复制完整值，路由、配置与导出保留完整标识。详见[运行时契约](../docs/runtime-contracts.md)，页面复核范围见[验证基线](../docs/acceptance.md#验证基线)。
 
 ## Memory / RAG
 
@@ -91,7 +91,7 @@ npm run test:e2e
 npm run test:e2e:smoke:matrix
 ```
 
-门禁包含 Node tests、lint、Turbopack 与 webpack 双生产构建；浏览器 fixture 和真实业务路径分开统计。当前文档维护未改前端应用，沿用既有应用验证；源码、计数、桌面/手机检查与已知 warning 统一见[验证基线](../docs/validation-baseline.md)。
+门禁包含 Node tests、lint、Turbopack 与 webpack 双生产构建；浏览器 fixture 和真实业务路径分开统计。当前文档维护未改前端应用，沿用既有应用验证；源码、计数、桌面/手机检查与已知 warning 统一见[验证基线](../docs/acceptance.md#验证基线)。
 
 本地收尾已封板，部署、真实资料与用户签收延期；当前按实际问题维护。Next.js / React / ESLint 精确版本见 [package.json](package.json) 与锁文件；ESLint 10 等上游兼容后再评估。写入工具并行、HTTP/DAG checkpoint 不在本轮范围。
 

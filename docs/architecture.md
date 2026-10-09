@@ -70,4 +70,42 @@ Chroma 不可达时 Memory/RAG 请求返回 503；成功回答之后的 Memory �
 
 早期 tool-runtime-productionization 的长期结论是：把注册表、规划、单工具策略、结果投影与副作用编排按主题分开，保留旧导出 facade；停止没有调用收益的 wrapper 搬移。新增需求由实际问题驱动，优先复用最近的 typed seam，避免多次 hydration / dict 转换和同族包装层膨胀。
 
-2026-05 的设计/交接流水账已退出当前文档树；原记录可从 Git 历史查看。本节保留有效决策，当前行为以[运行时契约](runtime-contracts.md)、代码和[验证基线](validation-baseline.md)为准。原始完整计划 `data/insightagent.plan.back.md` 始终只读，不因历史目标自动扩大当前实现。
+2026-05 的设计/交接流水账已退出当前文档树；原记录可从 Git 历史查看。本节保留有效决策，当前行为以[运行时契约](runtime-contracts.md)、代码和[验证基线](acceptance.md#验证基线)为准。原始完整计划 `data/insightagent.plan.back.md` 始终只读，不因历史目标自动扩大当前实现。
+
+## Agent 上下文与反馈
+
+### 会话上下文与知识证据
+
+- 普通非 canonical mock 任务在执行开始时读取同用户、同会话中本任务创建前已完成的问答配对，按最近任务选取并恢复时间顺序。失败、取消、未配对、跨用户/会话内容，以及在本任务创建后才完成的答案均排除。
+- 最多 6 轮，单消息最多 4,000 字符，历史 JSON 最多 16,000 字符；按完整配对裁剪，最新一对即使 JSON 转义膨胀也会缩短到预算内。SQL 读取同样限制条数和每条内容大小。
+- 首轮规划、后续决策与最终回答共享同一快照。规则回退、实际工具执行、当前 task.prompt/message 与 Memory 追加仍使用本次原始输入，避免历史工具标记重放；完整分支重跑的新会话不复制父会话，checkpoint 分支与 canonical mock 演示保持原行为。
+- 历史 assistant 上下文可选携带最终回答步骤的白名单 `completion` 原因，计入上述 JSON 预算；模型收到截断/执行限制及“结束不代表目标完成”的提示，损坏或缺失记录不推断。见[回答完整性](runtime-contracts.md#流结束与回答完整性)。
+- 首轮 Trace.meta 可选追加 `conversation_context` 的 `turn_count`、`character_count` 与 `truncated`，不持久化整份模型历史提示词。
+- 模型额外接收已脱敏 RAG Trace 的正文与知识库、来源、文档 ID、版本/hash，优先最近检索；最多 6 片段、单片段 1,200 字符、证据 JSON 8,000 字符，标记为不可信数据，并指导引用提供的来源/版本。计数型 Observation 和已有 Trace/导出保持原形状；证据提供不保证真实模型一定正确引用。
+- 后续维护补齐公开 HTTP 工具结果：成功 action 的公开结果字段进入模型反馈与最终回答，补足计数摘要丢失的搜索条目等内容。只读取 `effective_result_output_keys` 并复用脱敏；最多 6 项、单项 JSON 3,000/总 JSON 8,000 字符，最多三层容器、每容器最多 6 项、单字符串最多 1,200 字符，并可进一步收缩以满足 JSON 预算；裁剪标记 `truncated`。失败结果、原始响应/输入/注册表配置不进入新增证据，原 Observation/Trace/export 与 canonical mock 保持原行为。
+- 会话消息仍在 PostgreSQL，Chroma Memory 仍沿用已有追加/调试职责；这里没有新增长期语义回忆或附件服务。
+
+### Agent 执行契约
+
+执行方式为结构化工具规划 → 执行 → 安全 Observation → 下一轮工具规划 → 最终流式回答。复用现有 Provider、工具注册表、DAG 调度、取消/超时、SSE 和持久化。
+
+- `AGENT_MAX_ROUNDS=3`，包含首轮，范围 1–8；设为 1 保持旧单轮行为。每任务最多 32 个业务工具节点，不计首轮 planner 工具。
+- 只有首轮模型规划有效且包含业务工具时才启动反馈。canonical Mock、首轮规则回退、无业务工具和 checkpoint 分支保持单轮；不将 Mock 规则输出宣称为自主模型决策。
+- 反馈使用任务启动时的工具注册表快照；各轮仍由现有执行器校验工具与用户资源权限。
+- 后续规划只接受完整有效的工具列表；query/expression 必须明确给出非空文本，或由合法 input_bindings 提供，不从原请求或反馈提示补齐缺失参数。普通不完整决策整批拒绝为 invalid_decision；非法依赖图保留 tool_dependency_plan_invalid 与失败状态，不回退执行。首轮兼容默认值、检索可选 top_k/knowledge_base_id 及合法绑定保持可用。决策阶段 Provider 异常沿用任务失败处理。
+- 首次/后续规划模型已返回但依赖图非法时，保持原图错误和失败状态，保存该次实际规划用量；调用以空正文错误终结时也保存其真实用量，首轮仍规则回退、后续仍失败；部分/缺失字段不估算，详见[用量口径](runtime-contracts.md#用量口径)。
+- 各轮 DAG 独立；依赖与标量绑定仅引用本轮节点。跨轮通过安全 Observation 传递信息，不能引用上一轮 DAG 节点 ID。
+- 跨轮防重复按工具名与实际输入比较；静态参数在决策时检查，绑定节点在结果替换后、启动工具/事件/并发工作线程前再检查。绑定占位值与节点 ID 不作为执行身份；相同模板得到不同参数可继续，同轮 DAG 重复节点和工具内部重试保持原行为。
+- 任一就绪批次包含之前轮次的重复输入时，整批不启动；已执行的本轮上游结果保留，复用 `repeated_action` 停止 Trace/最终回答提示，停止时不额外调用决策模型，seq 及规划用量延续已有记录。
+- 根据模型返回的工具列表动态追加行动；空列表结束工具阶段。轮次、总节点数、Observation 上限（24,000 字符）或重复规划动作触发终止；已有工具重试仍由执行器控制。
+- 最终回答接收白名单工具停止原因与证据/未解决事项说明，并在最终 Trace 可选记录 agent_stop_reason；模型结束原因与聊天/详情提示见[回答完整性](runtime-contracts.md#流结束与回答完整性)，不宣称真实模型一定遵循提示。
+- 终止 Trace 的 `agent_decision` 为 `no_tools`、`max_rounds`、`max_tool_calls`、`observation_limit`、`repeated_action` 或 `invalid_decision`；继续执行为 `continue`。到达限制表示结束工具阶段，不证明任务需求已全部满足。
+- 每轮执行完毕、进入下一次模型决策前立即持久化已完成 Trace；取消/超时在决策前后复核，迟到决策不得追加工具。
+- Trace.meta 可选追加 `agent_round`、`agent_decision`、`agent_from_step_ids`；SSE 事件名、Trace ID/seq、delta 和 JSON v1.0/Markdown 导出形状兼容。
+- 成功任务的用量汇总包含首轮规划、后续决策（包括空列表/被拒绝响应）与最终回答；提供方缺失字段沿用估算规则。没有模型调用的限额终止步骤 token/cost 为 0。
+- [任务/会话用量统计](runtime-contracts.md#用量口径)消费已持久化的 overall 总量，字段缺失时回退 final + planning；Dashboard、会话汇总与导出保持相同口径，来源筛选包含规划阶段，不改变任务明细。
+- [正常任务成功保存](runtime-contracts.md#成功提交与终态竞争)将 completed/Trace/usage、assistant 消息与会话更新时间一起提交，避免成功状态可见但下一轮缺失回答；失败回滚与终态竞争沿用既有处理。
+- 多轮任务不生成单轮 checkpoint 快照；`AGENT_MAX_ROUNDS=1` 和已有 checkpoint 分支仍保留原有资格。完整任务分支重跑不受影响。
+
+
+实现入口：`conversation_context.py`、`agent_knowledge_context.py`、`agent_tool_context.py`、`agent_feedback.py`（均在 `backend/app/services/`）。静态与隔离验证命令见[开发手册](development-runbook.md#隔离专项入口)。
