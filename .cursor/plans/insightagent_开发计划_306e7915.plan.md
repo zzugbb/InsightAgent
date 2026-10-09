@@ -4,7 +4,7 @@ overview: 持续推进项目收尾；核心本地实现/契约已封板，执行
 current_focus:
   mainline: project-completion-audit
   status: 持续收尾中；核心本地契约已封板，基础真实模型/合成 RAG 已验证，本次新后端候选配对联调通过；业务质量/目标部署待验
-  latest_change: 2026-10-09 local_acceptance 报告六项摘要改为运行时读取 git/阶段/镜像状态（tooling/hygiene PASS）；2026-10-08 本机修复演练自测 SIGPIPE 误报与候选冒烟残留匿名卷（冒烟单测 9/9、tooling PASS、冒烟 PASS 零残留）；local_acceptance.sh 统一本机验收入口；dry-run 自测通过；试点部署/恢复演练工具包；目标任务验收模板与 export 静态 1/1；真实业务 RAG 静态 2/2；e2e workflow 健壮性；规划等待 5/5；composer-keyboard/runbook node 217/217；真实 glm/镜像待 Mac
+  latest_change: 2026-10-09 前端候选 pilot-9e78810 + 后端 pilot-42ccf1f 配对冒烟 PASS 零残留；local_acceptance 报告六项摘要改为运行时读取 git/阶段/镜像状态（tooling/hygiene PASS）；2026-10-08 本机修复演练自测 SIGPIPE 误报与候选冒烟残留匿名卷（冒烟单测 9/9、tooling PASS、冒烟 PASS 零残留）；local_acceptance.sh 统一本机验收入口；dry-run 自测通过；试点部署/恢复演练工具包；目标任务验收模板与 export 静态 1/1；真实业务 RAG 静态 2/2；e2e workflow 健壮性；规划等待 5/5；composer-keyboard/runbook node 217/217；真实 glm/镜像待 Mac
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -138,6 +138,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 当前验证基线
 
+- 本轮候选（本机）：用干净 `9e78810` 工作树按 `frontend/Dockerfile.pilot` 重建前端候选 `insightagent-frontend:pilot-9e78810`（revision label `9e78810`，ID `sha256:010b1e01…583e`，ARM64，用户 `node`，API 地址 `https://api.pilot.example.com`），包含 #3 前端改动；后端运行时自 `42ccf1f` 无变化，继续用 `pilot-42ccf1f`。`smoke_pilot_images.py --with-agent-fixture` 配对 **PASS**（7 场景：5 完成/2 失败替身，13 规划/5 回答请求），前后卷/网络/镜像零新增，来源 `/tmp/insightagent-pilot-9e78810-{frontend-build,smoke}.log`。候选未推送、未部署。
 - 本轮收尾（本机）：`local_acceptance.sh` 报告的“六项汇报摘要”不再写死历史 PR 文字，改为运行时读取 git 分支/提交/upstream ahead-behind/相对 origin/main 提交数/工作区改动计数/备份计划是否改动，以及阶段 pass/fail/skipped/manual 计数与本机 `pilot-*` 候选镜像；新增 `--report-json`，JSON 同步带 `git` 字段；非 git 目录降级为 unknown。`test_local_acceptance.sh` 覆盖运行时字段、过时文字守卫与非 git 降级；tooling 门禁 PASS、hygiene PASS、`local_acceptance.sh --skip-gate` 无失败阶段，来源 `/tmp/insightagent-report-runtime-tooling.log`、`/tmp/insightagent-report-runtime-local-acceptance.md` / `.json`。
 - 本轮收尾（本机）：修复本机验收两处 Mac 问题。`test_pilot_drill_scripts.sh` 改为先捕获演练 dry-run 输出再匹配（原 `| grep -q` 在 `pipefail` 下 grep 提前退出，上游 SIGPIPE 退出 141，旧写法 Mac 5/5 复现），并把 dry-run 打印的恢复项目名校正为与实际执行一致的 `<project>-restored`；`smoke_pilot_images.py` 清理改为 `docker rm -f -v`，并逐个核对本轮容器挂载的卷（postgres 镜像声明 VOLUME，此前残留匿名卷），不 prune、不碰命名卷与 5432/8001 数据。冒烟无服务单测 **9/9**、tooling 门禁 PASS、`local_acceptance.sh --skip-gate` 无失败阶段；`pilot-42ccf1f` + `pilot-218f94d` `--with-agent-fixture` 冒烟 PASS，前后卷/网络零差异，来源 `/tmp/insightagent-pilot-42ccf1f-cleanup-smoke.log`、`/tmp/insightagent-sigpipe-tooling.log`、`/tmp/insightagent-sigpipe-local-acceptance.md`。
 - 本轮收尾：清理本文件 frontmatter 合并残留的冲突标记；hygiene 增加行首冲突标记扫描。本地 hygiene **4/4 PASS**，来源 `/tmp/insightagent-conflict-hygiene.md` / `.json`。`data/insightagent.plan.back.md` 未改。
