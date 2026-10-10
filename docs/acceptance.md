@@ -92,6 +92,14 @@ hygiene 4/4，原始计划 SHA256 未变；摘要 `/tmp/insightagent-showcase-fo
 
 hygiene 4/4，受影响文档本地链接 94 项无缺失，原始计划 SHA256 未变；摘要 `/tmp/insightagent-showcase-case-autoplay-hygiene.{md,json}`、`/tmp/insightagent-showcase-case-autoplay-links.json`。复用已有 3101 静态服务，三个 README、展示运行说明与固定范围按影响同步。本地提交范围为四段首页、交互架构、案例自动回放、对应验证脚本与文档；未启动完整应用、调用模型、修改容器或存储，推送与部署尚未执行。不作为新 CI、镜像、供应商或外部验收结果。
 
+#### GitHub Pages 发布适配（2026-10-10，本地验证基线）
+
+维护者选择同仓库 GitHub Pages 替代 Vercel 作为当前静态展示发布目标。展示构建新增 `NEXT_PUBLIC_BASE_PATH`，默认根路径不变；Pages 按仓库名设置 `/InsightAgent`，页面链接与公开截图使用同一前缀。新增 `showcase-pages` 工作流：push/PR 仅检查、构建并上传 `showcase/out` 静态产物，只有 main 手动运行才进入部署任务；部署配置不自动启用 Pages。不增加依赖、页面、案例或原应用能力。
+
+展示应用 typecheck、lint、格式检查、Node tests 6/6 通过，根路径与 Pages 子路径的 Next.js 16.3.5 静态构建均通过。复用 3101 根路径预览，另用固定静态快照在 3102 模拟 `/InsightAgent/`。两种路径各运行 Chromium / Firefox / WebKit × 1440px / 390px，共 12/12；覆盖图片、首页与案例跳转、案例直接访问/刷新、懒加载执行图与流程图、自动/手动回放及既有交互，未发现横向溢出、控制台错误、HTTP 错误或外部/API 请求。根路径与 Pages 导出 HTML 各核对 31 个本地素材/导航目标存在；浏览器结果 `/tmp/insightagent-showcase-browser.json`、`/tmp/insightagent-showcase-browser-pages.json`。首轮检查受共享构建输出切换干扰，随后改用固定快照；检查脚本区分正常导航取消的预取与网络错误后复验通过。
+
+工作流仅完成本地 YAML 解析及触发条件、权限、依赖与产物目录检查，未在 GitHub 运行。三个 README、展示运行说明和固定范围已同步；hygiene 4/4、文档本地链接无缺失，原始计划 SHA256 未变。摘要 `/tmp/insightagent-pages-hygiene.{md,json}`、`/tmp/insightagent-pages-links.json`。检查后恢复根路径导出，停止本轮 3102 静态服务，保留既有 3101 预览；未启动完整应用、调用模型或修改容器/存储。推送、Pages 启用、公开发布和目标环境验收尚未执行，默认项目地址仅为预计地址；上线实测后再添加正式链接。不沿用旧 CI 或历史镜像作为本次发布证据。
+
 ## 本机检查入口
 
 ```bash

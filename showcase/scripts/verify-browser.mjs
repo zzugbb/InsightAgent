@@ -1,4 +1,4 @@
-// Explicit local QA against the exported static site on port 3101.
+// Local QA against a root or project-path static export (default port 3101).
 // Uses the parent repository's existing Playwright dependency; never shipped at runtime.
 import {
   chromium,
@@ -10,6 +10,16 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 const scriptDirectory = fileURLToPath(new URL(".", import.meta.url));
+const siteUrl = new URL(
+  process.env.SHOWCASE_BASE_URL || "http://127.0.0.1:3101/",
+);
+if (siteUrl.protocol !== "http:" || siteUrl.hostname !== "127.0.0.1") {
+  throw new Error("SHOWCASE_BASE_URL must target the local static preview.");
+}
+if (!siteUrl.pathname.endsWith("/")) siteUrl.pathname += "/";
+const baseUrl = siteUrl.href;
+const demoUrl = new URL("demo/", baseUrl).href;
+const resultSuffix = siteUrl.pathname === "/" ? "" : "-pages";
 const runs = JSON.parse(
   fs.readFileSync(path.join(scriptDirectory, "../data/cases.json"), "utf8"),
 );
@@ -32,15 +42,26 @@ let activePage;
         if (e.type() === "error") errors.push(e.text());
       });
       page.on("request", (r) => {
-        if (!r.url().startsWith("http://127.0.0.1:3101/"))
-          unexpected.push(r.url());
+        if (!r.url().startsWith(baseUrl)) unexpected.push(r.url());
         if (/\/api\//.test(r.url())) unexpected.push("API_REQUEST");
+      });
+      page.on("response", (r) => {
+        if (r.status() >= 400) errors.push(`HTTP ${r.status()}: ${r.url()}`);
+      });
+      page.on("requestfailed", (r) => {
+        const reason = r.failure()?.errorText || "unknown";
+        // Navigation/refresh cancels pending Next.js prefetches normally.
+        if (
+          !/ERR_ABORTED|NS_BINDING_ABORTED|cancelled|canceled/i.test(reason)
+        ) {
+          errors.push(`FAILED (${reason}): ${r.url()}`);
+        }
       });
       const noOverflow = async () =>
         expect(
           await page.evaluate(() => document.documentElement.scrollWidth),
         ).toBeLessThanOrEqual(width);
-      await page.goto("http://127.0.0.1:3101/");
+      await page.goto(baseUrl);
       await expect(page.getByRole("heading", { level: 1 })).toContainText(
         "InsightAgent",
       );
@@ -51,7 +72,7 @@ let activePage;
       ).toBe(true);
       await noOverflow();
       expect(await page.title()).toBe("InsightAgent · 可视化 AI Agent 工作台");
-      expect(page.url()).toBe("http://127.0.0.1:3101/");
+      expect(page.url()).toBe(baseUrl);
       await expect(page.locator("[data-nextjs-dialog]")).toHaveCount(0);
       if (name === "chromium") {
         await page.screenshot({
@@ -293,7 +314,7 @@ let activePage;
         "展开一次执行",
       );
       expect(await page.title()).toBe("案例体验 · InsightAgent");
-      expect(page.url()).toBe("http://127.0.0.1:3101/demo/");
+      expect(page.url()).toBe(demoUrl);
       await expect(page.locator("[data-nextjs-dialog]")).toHaveCount(0);
       await expect(page.locator(".case-observation")).toContainText("14 万元");
       const progress = page.getByRole("progressbar", { name: "回放进度" });
@@ -497,6 +518,17 @@ let activePage;
       await page.clock.runFor(3000);
       await expect(progress).toHaveAttribute("aria-valuenow", "2");
       await noOverflow();
+      // Direct nested-route access and refresh must also work on project Pages.
+      await page.goto(demoUrl);
+      await page.reload();
+      await expect(page.getByRole("heading", { level: 1 })).toContainText(
+        "展开一次执行",
+      );
+      await page.getByRole("link", { name: "InsightAgent 首页" }).click();
+      await expect(page.getByRole("heading", { level: 1 })).toContainText(
+        "InsightAgent",
+      );
+      expect(page.url()).toBe(baseUrl);
       expect(errors).toEqual([]);
       expect(unexpected).toEqual([]);
       result.push({
@@ -512,7 +544,7 @@ let activePage;
     await browser.close();
   }
   fs.writeFileSync(
-    "/tmp/insightagent-showcase-browser.json",
+    `/tmp/insightagent-showcase-browser${resultSuffix}.json`,
     JSON.stringify(result, null, 2),
   );
   console.log(JSON.stringify({ passed: result.length, results: result }));

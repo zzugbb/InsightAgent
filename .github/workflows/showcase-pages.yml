@@ -1,0 +1,68 @@
+name: showcase-pages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "showcase/**"
+      - ".github/workflows/showcase-pages.yml"
+  pull_request:
+    paths:
+      - "showcase/**"
+      - ".github/workflows/showcase-pages.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: showcase-pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
+    defaults:
+      run:
+        working-directory: showcase
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: showcase/package-lock.json
+      - run: npm ci
+      - name: Check showcase
+        run: |
+          npm run typecheck
+          npm run lint
+          npm run format:check
+          npm test
+      - name: Export static site
+        run: npm run build
+      - name: Upload static site only
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: showcase/out
+
+  deploy:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check Pages configuration
+        uses: actions/configure-pages@v5
+      - name: Publish static site
+        id: deployment
+        uses: actions/deploy-pages@v4

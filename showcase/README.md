@@ -49,20 +49,37 @@ node showcase/scripts/verify-browser.mjs
 
 Trace 布局逻辑来自原工作台，相关独立模块在 `lib/`；展示站不从 `frontend/` 或 `backend/` 导入运行时代码。首页执行图在架构区进入视野时加载；案例 React Flow 在访客选择流程图后加载。两处均只读取静态公开数据。
 
-## Vercel 发布配置（尚未发布）
+## GitHub Pages 发布（尚未发布）
 
-单独取得推送/公开发布授权后，使用维护者的 GitHub 与 Vercel Hobby 账号：
+当前选择同一公开仓库的 GitHub Pages，不需要服务器、域名、Vercel 项目或模型 Key。默认项目地址预计为 `https://zzugbb.github.io/InsightAgent/`，只有线上验证通过后才作为有效展示链接添加到仓库介绍和主 README。
 
-| 设置 | 值 |
-| --- | --- |
-| Root Directory | `showcase` |
-| Framework Preset | Next.js |
-| Node.js Version | 24.x |
-| Install Command | `npm ci` |
-| Build Command | `npm run build` |
-| Output Directory | 使用 Next.js 预设；本地静态导出目录是 `out` |
-| Environment Variables | 无需设置模型、鉴权或后端环境变量 |
+[发布工作流](../.github/workflows/showcase-pages.yml)使用 Node 24、`npm ci` 和现有检查，构建时按仓库名设置 `NEXT_PUBLIC_BASE_PATH=/InsightAgent`，只上传 `showcase/out`。该变量是公开路径前缀，不是凭据；Next.js 页面链接自动加前缀，公开图片显式使用相同前缀。不提交构建产物或添加后端环境配置。
 
-使用 Vercel 默认地址即可，无需购买域名或配置数据库。关联 Git 仓库后，推送可能触发自动发布，需要按公开发布授权处理。部署完成后再实测两条路由、素材、浏览器控制台、案例交互和外部请求，并添加实际有效的线上链接。
+- 推送 main 或创建涉及展示源码的 PR：检查和构建，**不发布**。
+- 取得推送授权并上传本次提交后，检查对应工作流结果；不能沿用旧 CI。
+- 单独取得公开发布授权后，在仓库 `Settings → Pages → Build and deployment → Source` 选择 `GitHub Actions`。
+- 在 `Actions → showcase-pages → Run workflow` 选择 `main`，手动触发构建和发布。只有 main 的手动运行才进入 `github-pages` 部署环境；配置步骤不会自动启用 Pages。
+- 实测首页、`/demo/` 直接访问与刷新、图片、懒加载图、回放、移动布局、控制台及外部请求后，再添加实际链接。
+- 后续修复仍手动发布；回滚时将所需修复或 revert 提交纳入 main，再运行同一工作流。无需新增展示版本或功能。
 
-当前实现与本地静态验证不能替代 Vercel 账号连接、免费额度核对和目标环境验证。参考[Vercel Next.js 支持](https://vercel.com/docs/frameworks/full-stack/nextjs)、[Node.js 版本](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions)、[Hobby 使用规则](https://vercel.com/docs/plans/hobby)。
+本地根路径开发和构建不设置前缀。模拟 Pages 项目路径时，从仓库根目录执行：
+
+```bash
+NEXT_PUBLIC_BASE_PATH=/InsightAgent npm --prefix showcase run build
+pages_preview="$(mktemp -d /tmp/insightagent-pages.XXXXXX)"
+mkdir "$pages_preview/InsightAgent"
+cp -R showcase/out/. "$pages_preview/InsightAgent/"
+backend/.venv/bin/python -m http.server 3102 --bind 127.0.0.1 --directory "$pages_preview"
+```
+
+另一个终端运行浏览器检查：
+
+```bash
+SHOWCASE_BASE_URL=http://127.0.0.1:3102/InsightAgent/ node showcase/scripts/verify-browser.mjs
+```
+
+预览前核对端口并按本机访问权限流程执行；结果写入 `/tmp/insightagent-showcase-browser-pages.json`。项目路径构建不能直接用于根路径预览；如需恢复 3101 预览，重新执行不带前缀的 `npm --prefix showcase run build`。静态预览和工作流配置检查不等于 GitHub Pages 已发布成功。
+
+GitHub Free 支持公开仓库的 Pages。依据：[GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages)、[自定义发布工作流](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)、[Next.js 子路径](https://nextjs.org/docs/app/api-reference/config/next-config-js/basePath)。
+
+Vercel 仍可作为备选：项目根目录 `showcase`、Node 24、安装 `npm ci`、构建 `npm run build`，不设置 `NEXT_PUBLIC_BASE_PATH` 或模型变量；关联和发布同样需要授权。当前未创建或关联 Vercel 项目。

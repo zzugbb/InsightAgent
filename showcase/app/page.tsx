@@ -52,7 +52,7 @@ export default function Home() {
           {/* A real screenshot of the existing workbench with dedicated public fixture data. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/workbench.png"
+            src={`${process.env.NEXT_PUBLIC_BASE_PATH || ""}/workbench.png`}
             alt="InsightAgent 工作台：合成预算问题、回答、工具执行记录与引用来源"
             width={1600}
             height={980}
