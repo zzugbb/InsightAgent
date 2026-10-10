@@ -9,6 +9,7 @@
 | 本地实现与工程收尾 | 已完成，后续按可复现问题维护；源码与检查范围见[验证基线](#验证基线) |
 | 真实 GLM 复验 | 最近原四场景 **3/4** 完整通过，明确表达式的独立分支恢复 **1/1**；历史 RAG 严格三场景 **2/3**，见[真实模型记录](#真实模型记录) |
 | 已知模型问题 | 出现约 60 秒规划超时与规则回退；同会话续算曾回答正确但未执行要求的计算工具。独立分支通过不覆盖原失败 |
+| 公开静态展示 | GitHub Pages 已发布，线上三浏览器/两尺寸 6/6；仅预设记录回放，见[公开项目展示](#公开项目展示)，不等于完整应用部署 |
 | 外部试点与生产就绪 | 真实业务资料、目标用户签收与部署环境待提供，尚未验收 |
 
 用量只汇总已记录字段，未知消耗不补零，配置费用估算不等于供应商账单。没有提供输入或仅得到 skipped/manual 结果的阶段，不计作验收通过。
@@ -99,6 +100,16 @@ hygiene 4/4，受影响文档本地链接 94 项无缺失，原始计划 SHA256 
 展示应用 typecheck、lint、格式检查、Node tests 6/6 通过，根路径与 Pages 子路径的 Next.js 16.3.5 静态构建均通过。复用 3101 根路径预览，另用固定静态快照在 3102 模拟 `/InsightAgent/`。两种路径各运行 Chromium / Firefox / WebKit × 1440px / 390px，共 12/12；覆盖图片、首页与案例跳转、案例直接访问/刷新、懒加载执行图与流程图、自动/手动回放及既有交互，未发现横向溢出、控制台错误、HTTP 错误或外部/API 请求。根路径与 Pages 导出 HTML 各核对 31 个本地素材/导航目标存在；浏览器结果 `/tmp/insightagent-showcase-browser.json`、`/tmp/insightagent-showcase-browser-pages.json`。首轮检查受共享构建输出切换干扰，随后改用固定快照；检查脚本区分正常导航取消的预取与网络错误后复验通过。
 
 工作流仅完成本地 YAML 解析及触发条件、权限、依赖与产物目录检查，未在 GitHub 运行。三个 README、展示运行说明和固定范围已同步；hygiene 4/4、文档本地链接无缺失，原始计划 SHA256 未变。摘要 `/tmp/insightagent-pages-hygiene.{md,json}`、`/tmp/insightagent-pages-links.json`。检查后恢复根路径导出，停止本轮 3102 静态服务，保留既有 3101 预览；未启动完整应用、调用模型或修改容器/存储。推送、Pages 启用、公开发布和目标环境验收尚未执行，默认项目地址仅为预计地址；上线实测后再添加正式链接。不沿用旧 CI 或历史镜像作为本次发布证据。
+
+#### GitHub Pages 自动发布与线上检查（2026-10-10）
+
+维护者明确授权推送、公开发布及改为自动发布，并要求本轮不更新 README 或仓库展示链接。已核对远端 main 为 `2b0fddf`，将路径适配提交 `87cc558` 与自动发布提交 `d514e30` 推送到 main；Pages 来源在已登录的 GitHub 设置页保存为 GitHub Actions，默认域名强制 HTTPS，未配置自定义域名、Vercel 项目或付费资源。工作流对 main 上 `showcase/**` 或自身配置变更自动发布，PR 仅检查，保留 main 手动运行用于重试；本地 YAML 条件检查、格式与 hygiene 4/4 通过。
+
+独立查询本次 `d514e30` 的[showcase-pages #1](https://github.com/zzugbb/InsightAgent/actions/runs/38020458507)，build 与 deploy 均成功，包括 npm ci、展示检查、静态导出、产物上传与发布。[release-gate #67](https://github.com/zzugbb/InsightAgent/actions/runs/38020458522)也已通过；[backend-e2e #234](https://github.com/zzugbb/InsightAgent/actions/runs/38020458657)已通过；最终记录时[frontend-e2e #217](https://github.com/zzugbb/InsightAgent/actions/runs/38020458515)仍在运行，不将其计为已通过。本机公开 API 查询曾返回匿名请求限流，随后用已连接 GitHub 的工作流 job 查询及页面核对，未读取或输出凭据，未沿用旧 CI。
+
+已实测 `https://zzugbb.github.io/InsightAgent/` 与 `/demo/`。复用现有浏览器回归逻辑，临时脚本仅将目标固定为已授权的公开 Pages 地址，不改变仓库本机 QA 入口。Chromium / Firefox / WebKit × 1440px / 390px 共 6/6，覆盖截图加载、首页四段与两图、懒加载图、节点职责/详情、自动与手动回放、案例/恢复分支切换、减少动态效果、直接访问与刷新、返回首页；无页面横向溢出、控制台/HTTP 错误或外部/API 请求。后台暂停仍用模拟可见性事件核对，不等于操作系统后台调度全面验收。结果 `/tmp/insightagent-showcase-browser-online.json`，临时入口 `/tmp/insightagent-showcase-online-verify.mjs`，线上首屏桌面/手机截图已目视复核；Codex 内置浏览器也核对了首页与进入案例的自动回放。
+
+本次仅发布经过复核的静态展示产物；没有启动完整应用、调用模型、上传私人数据/密钥、修改容器/存储或执行数据迁移。原始计划 SHA256 保持既有值。README 中此前的未发布/手动发布说明按维护者要求暂缓同步，本节与展示专题记录实际状态；未更新仓库 About/Website 或添加 README 线上链接。公开展示上线不替代真实业务签收、完整应用部署及备份恢复验收。
 
 ## 本机检查入口
 
