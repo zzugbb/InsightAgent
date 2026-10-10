@@ -6,7 +6,7 @@
 
 - Python 使用 `backend/.venv/bin/python`（Python 3.14）；前端使用已安装的 Node 24+ 与 npm，不为常规检查重装依赖。
 - slice / Node tests / lint / 静态检查通常不需提权。Docker、本机监听/访问、浏览器 e2e、写 `.git/index` 通常需提权；不要用首次失败反复探测权限。
-- 原始完整计划 `data/insightagent.plan.back.md` 永远只读。开发实时计划已删除，不重新创建；同步三个 README、受影响专题和验证基线。
+- 原始完整计划 `data/insightagent.plan.back.md` 永远只读。开发实时计划已删除，不重新创建；同步根、受影响模块的 README、专题和验证基线。
 - 现有服务先查端口和健康；测试用独立 fixture，不重建开发 PostgreSQL/Chroma。旧 Chroma `/chroma/chroma` 挂载可能漏掉实际 `/data`，先按[备份说明](pilot-deployment-preflight.md#开发栈备份恢复)保护数据。
 - 沿用主题模块与 facade；后端 slice 主题 <=2500 行，临近上限拆 `_partN.py`。更改数量级或接口时同步审查调用方和契约。
 - 不输出真实 env、Key、密码、token、业务正文和原始异常。审批通道连接失败时重试同一必要操作，不绕过拒绝。
@@ -139,6 +139,10 @@ CI=1 npx playwright test e2e/composer-keyboard.spec.ts --project=chromium
 | [规划等待与恢复](acceptance.md#真实模型记录) | `test_provider_planning_wait_postgres.py` |
 
 这些场景已接入 backend-e2e；前端 Trace/导入/恢复/回答 fixture 由 full Chromium 发现。备份自测、生产镜像锁定依赖/embedding、试点 Compose、真实模型与业务工具分别见[恢复](pilot-deployment-preflight.md#开发栈备份恢复)、[部署](pilot-deployment-preflight.md)、[验收](acceptance.md)，不混算。
+
+## 展示站维护
+
+独立展示站的依赖、静态构建、根路径 / Pages 子路径预览和浏览器检查集中于[展示 README](../showcase/README.md)。无需启动完整应用或重新采集模型案例；素材更新须单独明确数据与用量范围。main 上展示目录或发布工作流改动会自动发布，PR 只检查；实际结果按对应提交核对。
 
 ## 提交路径
 

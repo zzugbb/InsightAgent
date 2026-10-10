@@ -4,6 +4,8 @@ InsightAgent 围绕“执行可观察、依据可复核、历史可回放”组�
 
 ## 系统分层
 
+以下为完整应用。独立的 `showcase/` 经静态导出发布至 GitHub Pages，只读取公开案例 JSON 和图片；交互图与回放不连接此处的 API、模型或存储。展示结构与发布规则见[公开展示](showcase.md)。
+
 ```mermaid
 flowchart TB
     UI[Next.js 工作台] -->|鉴权 REST / SSE| API[FastAPI 路由]
@@ -68,9 +70,7 @@ Chroma 不可达时 Memory/RAG 请求返回 503；成功回答之后的 Memory �
 
 ## 运行时模块化决策
 
-早期 tool-runtime-productionization 的长期结论是：把注册表、规划、单工具策略、结果投影与副作用编排按主题分开，保留旧导出 facade；停止没有调用收益的 wrapper 搬移。新增需求由实际问题驱动，优先复用最近的 typed seam，避免多次 hydration / dict 转换和同族包装层膨胀。
-
-2026-05 的设计/交接流水账已退出当前文档树；原记录可从 Git 历史查看。本节保留有效决策，当前行为以[运行时契约](runtime-contracts.md)、代码和[验证基线](acceptance.md#验证基线)为准。原始完整计划 `data/insightagent.plan.back.md` 始终只读，不因历史目标自动扩大当前实现。
+注册表、规划、单工具策略、结果投影与副作用编排按主题分开，保留兼容 facade。维护优先复用已有类型与职责边界，避免重复转换和无调用收益的包装层。当前行为以[运行时契约](runtime-contracts.md)、代码和[验证基线](acceptance.md#验证基线)为准，设计历史从 Git 查询。
 
 ## Agent 上下文与反馈
 

@@ -32,84 +32,44 @@
 | 隔离验收工具 | RAG 静态 17/17、独立 PostgreSQL/Chroma 1/1，规划等待/取消/迟到结果/重跑 5/5，导出静态 1/1 与 drill 自测 | `/tmp/insightagent-oct09-{rag-static,rag-postgres,planning-postgres}.log`、`insightagent-finalcheck-*` |
 | 真实 GLM | 原四场景 3/4 完整通过，编辑表达式的独立分支恢复 1/1；原续算回退未实际调用计算工具 | [真实模型验收](acceptance.md#真实模型记录) |
 
-tooling 首跑受沙箱 `/dev/fd` 限制，同命令提权复跑通过。后端定位摘要修复与开发 Compose loopback 定义已落源码；`bc1346f` 检查时未重启服务/容器，不能把运行实例视为已加载这些修改。端口 8000/3001 当时 HTTP 200、Chroma reachable。
+表中 `/tmp` 文件是历史临时证据，可能已清理；已有记录不因文件消失而失效，复验使用下方入口。源码检查不证明已有运行实例加载了修改；服务与存储状态须在操作前另查。
 
 ### 工具与页面维护结论
 
 - 检索调用真实 Chroma，计算使用 AST 白名单，HTTP 工具按显式配置执行；remote 缺连接值明确失败。canonical mock、协议 fixture 和历史名称兼容属于必要演示/测试路径，不是实际工具假结果。
 - 普通 prompt 的测试故障标记已不影响生产 runner；登录中英文改为实际能力与估算费用，窄屏筛选、任务抽屉、发送按钮和长 ID 展示已修复。完整标识仍保留在 API/路由/导出和排障元数据中。
-- 当前界面维护调整桌面登录比例与 420px 表单上限、深色主题、弹窗宽度和内部滚动；模型连接优先展示，工具与诊断折叠，保存/验证保留在底部。知识库 Collection 移入可展开详情，完整值仍可复制；用量先显示概览，高级筛选/趋势/明细折叠；空 Trace 提供任务入口，任务中心收起高级筛选并限制长标题行数。后端接口与模型调用逻辑未改；本机 8000/3001 健康检查 HTTP 200，实际 Chrome 只读核对了模型设置与知识库弹窗，未保存配置或调用供应商。
+- 当前界面维护调整桌面登录比例与 420px 表单上限、深色主题、弹窗宽度和内部滚动；模型连接优先展示，工具与诊断折叠，保存/验证保留在底部。知识库 Collection 移入可展开详情，完整值仍可复制；用量先显示概览，高级筛选/趋势/明细折叠；空 Trace 提供任务入口，任务中心收起高级筛选并限制长标题行数。后端接口与模型调用逻辑未改；当时 Chrome 只读核对了模型设置与知识库弹窗，未保存配置或调用供应商。
 - 已检查跟踪文件，无真实 env、数据库、缓存、构建结果、日志或私钥产物；常见秘密特征扫描无命中，不等于完整 Git 历史或所有凭据类型已审计。`data/insightagent.plan.back.md` SHA256 保持 `5f6f79c4c7faf8a3becad7e6d7805fd86304425a2319b2702730fd4a54e4525d`。
 
 ### 镜像、CI 与外部验收
 
-- 历史配对 `pilot-42ccf1f` / `pilot-9e78810` 未包含 `103ea1f` 页面/工具维护与 `bc1346f` 摘要修复。旧 `0209651` / `218f94d` 配对有 ARM64 构建、禁网 384 维 embedding、生产 PostgreSQL/Chroma、SSE/Trace/导出、恢复/取消及 Agent HTTP 协议 7/7 证据；旧 `218f94d` 配对隔离 Compose 重建后数据保留通过。均为本地模型替身，最新镜像未重建。历史摘要/配方来源可从 `65f1fde` 与 `bc1346f` 的 Git 文档查询，不沿用旧 tag 直接发布。
+- 历史配对 `pilot-42ccf1f` / `pilot-9e78810` 未包含 `103ea1f` 页面/工具维护与 `bc1346f` 摘要修复。旧 `0209651` / `218f94d` 配对有 ARM64 构建、禁网 384 维 embedding、生产 PostgreSQL/Chroma、SSE/Trace/导出、恢复/取消及 Agent HTTP 协议 7/7 证据；旧 `218f94d` 配对隔离 Compose 重建后数据保留通过。均为本地模型替身。历史候选应用镜像已从本机删除，最新源码须重新构建和验证，不能假设旧 tag 仍存在。历史摘要/配方来源可从 `65f1fde` 与 `bc1346f` 的 Git 文档查询，不沿用旧 tag 直接发布。
 - 维护者于 2026-10-09 确认 `b255509` 已推送且 CI 绿色；本机检查时 `main` 与本地记录的 `origin/main` 一致、工作区干净。CI 状态由维护者提供，本轮未独立查询远端运行详情；后续文档提交不据此宣称获得新的 CI 验证。
 - 真实业务引用/冲突版本/无依据回答、目标任务签收与供应商账单按[验收指南](acceptance.md)另行核对；HTTPS/访问边界、升级回滚、双存储恢复、RPO/RTO 与责任人按[部署指南](pilot-deployment-preflight.md)实测。配置 PASS 不改变未验收结论。
 
 ### 公开项目展示
 
-2026-10-09 已整理[固定交付范围](showcase.md)：同仓库独立 `showcase/`，首页与两个预设案例的交互回放，目标为 Vercel Hobby 默认地址；不制作视频、不开放实时调用、不预设后续版本。维护者已授权案例准备阶段使用已保存的真实模型 Key，公开站不使用该 Key。
+截至 2026-10-10，[首页](https://zzugbb.github.io/InsightAgent/)与[案例页](https://zzugbb.github.io/InsightAgent/demo/)已在 GitHub Pages 发布。展示源码基线为 `d514e30`；完整应用执行代码与公开素材采集基线为 `58fabc3`。当前页面与发布规则见[展示说明](showcase.md)，维护命令见[展示 README](../showcase/README.md)。开发过程和被替代的阶段记录从 Git 查询。
 
-展示应用、公开截图与案例记录已实现。首页与 `/demo/` 为独立静态页面，不依赖完整应用后端；Vercel/云资源未创建，源码未推送，站点未公开发布。本轮结果不扩大完整应用的业务签收、CI、镜像或部署验收结论。
-
-| 本轮范围 | 核对结果 | 证据与限制 |
+| 范围 | 已完成结果 | 证据与限制 |
 | --- | --- | --- |
-| 独立展示源码 | Node 24.14.0；typecheck、lint、格式检查通过；Node tests 6/6；Next.js 16.3.5 生产静态构建通过 | `showcase/` 与 `out/`；只验证本地静态导出，没有执行 Vercel 部署 |
-| 浏览器交互 | Chromium / Firefox / WebKit × 1440px / 390px 共 6/6；播放、暂停、复位、重新播放、案例/分支切换、时间线/流程图、键盘节点选择与减少动态效果通过 | `/tmp/insightagent-showcase-browser.json`；生产 `out/` 静态服务，无页面横向溢出、控制台错误或外部/API 请求，截图已目视复核 |
-| 知识检索与计算 | 专用合成资料；真实 glm-5.3 首轮规划、`task_retrieve`、`calc_eval` 完成；回答 14 万元，引用 `budget.md` 版本 | `showcase/data/cases.json`；原始耗时 95.246 秒，已记录总 tokens 7079 |
-| 受控失败与独立恢复 | 原任务 fixture failed，实际计算后后续决策注入 429，没有最终回答；独立分支真实模型规划与计算 `(2+3)*2` 完成，回答 10 | fixture 不是供应商故障；失败 Trace 不伪造错误节点。恢复原始耗时 31.695 秒，已记录总 tokens 1838；恢复成功不覆盖原失败 |
-| 公开素材 | 字段白名单、标识别名、来源检查与敏感字段断言通过；工作台截图只含专用合成内容 | 截图通过隔离 HTTP fixture 加载公开记录，不是后端端到端浏览器验收；素材说明见[来源文档](../showcase/data/README.md) |
+| 静态源码 | Node 24.14.0、Next.js 16.3.5；typecheck、lint、格式检查、Node tests 6/6；根路径与 Pages 子路径构建通过 | 独立 `showcase/`，静态 `out/` 不提交，无完整应用运行时依赖 |
+| 本地浏览器 | 根路径与 `/InsightAgent/` 各三浏览器 × 1440/390px，共 12/12；各导出 31 个素材/导航目标存在 | `/tmp/insightagent-showcase-browser.json`、`/tmp/insightagent-showcase-browser-pages.json`；固定静态快照复验，区分正常导航取消与请求错误 |
+| GitHub 发布 | `d514e30` 的 [showcase-pages #1](https://github.com/zzugbb/InsightAgent/actions/runs/38020458507) build / deploy 均成功 | 独立查询工作流；Pages 来源为 GitHub Actions，默认域名 HTTPS。main 相关改动自动发布，PR 只检查 |
+| 线上浏览器 | Chromium / Firefox / WebKit × 1440/390px 共 6/6 | `/tmp/insightagent-showcase-browser-online.json`；首页四段、两图、截图、懒加载、回放、节点/分支、键盘、减少动态效果、直接访问/刷新与返回首页通过；无页面横向溢出、控制台/HTTP 错误或外部/API 请求 |
+| 知识检索与计算 | 真实 glm-5.3 规划、`task_retrieve`、`calc_eval`，回答 14 万元，保留 `budget.md` 版本 | 原始 95.246 秒，已记录总 tokens 7079；专用合成资料，非业务签收 |
+| 失败与独立恢复 | fixture 原任务实际计算后决策注入 429，无最终回答；真实模型独立分支计算 `(2+3)*2`，回答 10 | fixture 不是供应商故障，不伪造失败工具节点；恢复 31.695 秒、已记录总 tokens 1838，成功不覆盖原失败 |
+| 公开素材 | 字段白名单、公开标识别名、来源与敏感字段检查通过 | [来源说明](../showcase/data/README.md)；真实工作台截图通过隔离 HTTP fixture 加载公开记录，不是完整后端浏览器验收 |
 
-执行源码基线 `58fabc3`；后台应用源码未变更。采集先按授权启动原有 PostgreSQL/Chroma 容器，未重建或删除容器/卷，采集完成后恢复停止；工作台截图用的 3001 服务和展示开发 3100 服务已停止。没有迁移/导出私人会话、数据库或完整配置，也没有进行备份/恢复演练。专用合成演示数据留在本机现有存储中。
+后台暂停与返回不重启通过模拟 `document.hidden` / `visibilitychange` 核对，不等于操作系统后台调度全面验收。架构动画是概念示意，案例自动回放一次且不循环；阅读节奏与原始耗时分开。
 
-准备过程曾出现约 60 秒规划超时、网络失败，以及未满足实际计算或专用来源断言的尝试；均未计作公开成功案例。上述 tokens 仅对应两份最终成功记录，不能代替全部准备尝试用量或供应商账单。模型回答可靠性的既有边界继续保留。
+素材准备曾出现约 60 秒规划超时、网络失败及不满足实际计算/专用来源断言的尝试，均未计入公开成功案例。两份成功记录的 tokens 不包含全部准备消耗或供应商账单；模型可靠性的既有边界继续保留。采集仅创建专用合成会话/知识库，没有迁移或导出私人数据、数据库、Key 或完整配置，没有进行备份/恢复演练。旧存储容器未重建或删除，合成数据留在本机存储中。
 
-原工作台与新展示应用的验证范围独立；本轮未重跑无关后端全量或沿用旧 CI 作为新应用通过证据。本轮 hygiene 4/4，受影响文档本地链接 95 项无缺失，新增展示源码冲突标记与采集脚本语法检查通过；原始计划 SHA256 未变。摘要 `/tmp/insightagent-showcase-hygiene.{md,json}`。浏览器路径：本会话没有 Browser 插件（`Browser plugin not available`），复用仓库已有 Playwright；复验入口 `node showcase/scripts/verify-browser.mjs`。
+独立核对 `d514e30` 的 [release-gate #67](https://github.com/zzugbb/InsightAgent/actions/runs/38020458522)、[backend-e2e #234](https://github.com/zzugbb/InsightAgent/actions/runs/38020458657) 和 [frontend-e2e #217](https://github.com/zzugbb/InsightAgent/actions/runs/38020458515) 均通过；后者于 2026-10-10 补查确认。结果仅对应该源码，不作为后续文档提交的 CI 结果。公开静态展示上线不替代完整应用部署、真实业务签收或双存储恢复验收。
 
-范围文档检查：本地链接 107 项无缺失，hygiene 4/4，`git diff --check` 通过；原始计划 SHA256 保持既有值。摘要 `/tmp/insightagent-showcase-scope-hygiene.{md,json}`。这些结果仅为文档检查，不计作展示应用验收。
+### 文档维护核对
 
-#### 初版架构交互与阅读引导（2026-10-10，历史验证）
-
-在展示源码 `0b77318` 基础上按维护者需求完善既有两页：原 Next.js → FastAPI → 模型 API / PostgreSQL / Chroma 总览保留为“系统分层”；新增“任务执行”视图、八步显式讲解、节点职责/源码依据、路径高亮、手机节点聚焦与全图查看。案例增加观察重点与明确“查看全图”按钮。保持现有深色/绿色视觉，不新增页面、案例、视频或 Agent 能力。
-
-展示应用 typecheck、lint、格式检查、Node tests 6/6 与生产静态构建通过。Chromium / Firefox / WebKit × 1440px / 390px 共 6/6，覆盖原图五模块保留、节点鼠标/键盘选择、八步播放/暂停/复位/结束、视图切换停止播放、手机节点清晰度、减少动态效果，以及既有案例/分支回放与全图操作；无页面横向溢出、控制台错误或外部/API 请求。验证中补齐受控图的节点尺寸同步，使聚焦与全图缩放使用实际渲染尺寸，保持记录顺序/声明依赖的既有布局契约。结果 `/tmp/insightagent-showcase-browser.json`；架构、原图与案例截图已目视复核，并在 Codex 内置浏览器核对桌面/手机预览。复验入口仍为 `node showcase/scripts/verify-browser.mjs`。
-
-本轮 hygiene 4/4，受影响文档与架构源码入口的本地路径共 107 项无缺失，原始计划 SHA256 未变；摘要 `/tmp/insightagent-architecture-hygiene.{md,json}`、`/tmp/insightagent-architecture-links.json`。架构动画是概念示意，未请求真实模型、修改公开案例记录或原应用代码；复用已有 3101 静态服务。三个 README、展示运行说明与固定范围已同步；本轮变更尚未提交、推送或部署，不作为新 CI、镜像或业务验收结果。
-
-#### 四段首页与自动架构讲解（2026-10-10，上一轮本地验证）
-
-按维护者确认将首页组织为 01 核心能力、02 系统架构、03 任务执行、04 工程实践：原系统总览与执行图直接显示，无需切换；工程内容顺延，不增加第五段。保留原五模块、深色/绿色样式和节点职责，工程区内部编号改为图标。执行图完成加载与初始聚焦且至少四分之一进入视野后自动讲解一次（1.8 秒/步），结束停留；离开视野或页面切至后台即暂停，返回不自动恢复，手动操作优先。减少动态效果时只手动播放，并显示对应提示；画布上的滚轮允许继续滚动页面。案例播放方式本轮仍为手动。
-
-最终源码 typecheck、lint、格式检查、Node tests 6/6、Next.js 16.3.5 静态生产构建通过。Chromium / Firefox / WebKit × 1440px / 390px 共 6/6，覆盖四段顺序、两图无需切换、原五模块、鼠标/键盘节点选择、手机节点聚焦、首次进入视野自动播放/结束不循环、离屏暂停且返回不重启、手动播放/暂停/复位、减少动态效果禁自动播放与动态切换后暂停、画布滚轮不阻断页面，以及原有案例/分支回放与全图操作。无页面横向溢出、控制台错误或外部/API 请求；结果 `/tmp/insightagent-showcase-browser.json`，系统架构与执行区桌面/手机截图已目视复核，Codex 内置浏览器复核了页面衔接与滚动。
-
-hygiene 4/4，原始计划 SHA256 未变；摘要 `/tmp/insightagent-showcase-four-sections-hygiene.{md,json}`。同步三个 README、展示运行说明与固定范围，复用已有 3101 静态服务。既有暂存内容保留，本次调整未暂存、提交、推送或部署；没有更改原应用、公开案例数据、容器或存储，没有调用模型，不作为新 CI、镜像或业务验收结果。
-
-#### 案例进入与切换自动回放（2026-10-10，本地验证基线）
-
-按维护者明确需求，案例页进入时自动播放默认知识检索/计算记录，主动切换案例或原任务/恢复分支后复位并播放对应记录一次；重复点击当前案例/分支不重播。查看时间线或流程图节点时暂停，复位后停止，结束后停留，不循环或自动跳转案例/分支；后台可见性事件或启用减少动态效果时暂停，返回不自动恢复。减少动态效果时只手动播放，页面提示同步切换；播放节奏保持原有 1.1 秒/步。仅调整公开回放交互和空状态文案，不更改公开记录、来源或模型/后端契约。
-
-展示应用 typecheck、lint、格式检查、Node tests 6/6、Next.js 16.3.5 静态生产构建通过。Chromium / Firefox / WebKit × 1440px / 390px 共 6/6，覆盖页面/切换自动回放、原任务与恢复分支独立结论、结束不循环或自动切换、重复点击不重播、节点鼠标/键盘查看、暂停/重播/复位、减少动态效果禁自动播放及动态切换后暂停、时间线/流程图和既有首页架构回归；无页面横向溢出、控制台错误或外部/API 请求。后台暂停与返回不重启使用模拟 `document.hidden` / `visibilitychange` 事件核对，不等于完整操作系统后台调度验收。浏览器结果 `/tmp/insightagent-showcase-browser.json`；桌面/手机截图目视核对，并使用 Codex 内置浏览器核对进入与切换回放。Browser 插件未列出，复用仓库既有 Playwright 验证入口。
-
-hygiene 4/4，受影响文档本地链接 94 项无缺失，原始计划 SHA256 未变；摘要 `/tmp/insightagent-showcase-case-autoplay-hygiene.{md,json}`、`/tmp/insightagent-showcase-case-autoplay-links.json`。复用已有 3101 静态服务，三个 README、展示运行说明与固定范围按影响同步。本地提交范围为四段首页、交互架构、案例自动回放、对应验证脚本与文档；未启动完整应用、调用模型、修改容器或存储，推送与部署尚未执行。不作为新 CI、镜像、供应商或外部验收结果。
-
-#### GitHub Pages 发布适配（2026-10-10，本地验证基线）
-
-维护者选择同仓库 GitHub Pages 替代 Vercel 作为当前静态展示发布目标。展示构建新增 `NEXT_PUBLIC_BASE_PATH`，默认根路径不变；Pages 按仓库名设置 `/InsightAgent`，页面链接与公开截图使用同一前缀。新增 `showcase-pages` 工作流：push/PR 仅检查、构建并上传 `showcase/out` 静态产物，只有 main 手动运行才进入部署任务；部署配置不自动启用 Pages。不增加依赖、页面、案例或原应用能力。
-
-展示应用 typecheck、lint、格式检查、Node tests 6/6 通过，根路径与 Pages 子路径的 Next.js 16.3.5 静态构建均通过。复用 3101 根路径预览，另用固定静态快照在 3102 模拟 `/InsightAgent/`。两种路径各运行 Chromium / Firefox / WebKit × 1440px / 390px，共 12/12；覆盖图片、首页与案例跳转、案例直接访问/刷新、懒加载执行图与流程图、自动/手动回放及既有交互，未发现横向溢出、控制台错误、HTTP 错误或外部/API 请求。根路径与 Pages 导出 HTML 各核对 31 个本地素材/导航目标存在；浏览器结果 `/tmp/insightagent-showcase-browser.json`、`/tmp/insightagent-showcase-browser-pages.json`。首轮检查受共享构建输出切换干扰，随后改用固定快照；检查脚本区分正常导航取消的预取与网络错误后复验通过。
-
-工作流仅完成本地 YAML 解析及触发条件、权限、依赖与产物目录检查，未在 GitHub 运行。三个 README、展示运行说明和固定范围已同步；hygiene 4/4、文档本地链接无缺失，原始计划 SHA256 未变。摘要 `/tmp/insightagent-pages-hygiene.{md,json}`、`/tmp/insightagent-pages-links.json`。检查后恢复根路径导出，停止本轮 3102 静态服务，保留既有 3101 预览；未启动完整应用、调用模型或修改容器/存储。推送、Pages 启用、公开发布和目标环境验收尚未执行，默认项目地址仅为预计地址；上线实测后再添加正式链接。不沿用旧 CI 或历史镜像作为本次发布证据。
-
-#### GitHub Pages 自动发布与线上检查（2026-10-10）
-
-维护者明确授权推送、公开发布及改为自动发布，并要求本轮不更新 README 或仓库展示链接。已核对远端 main 为 `2b0fddf`，将路径适配提交 `87cc558` 与自动发布提交 `d514e30` 推送到 main；Pages 来源在已登录的 GitHub 设置页保存为 GitHub Actions，默认域名强制 HTTPS，未配置自定义域名、Vercel 项目或付费资源。工作流对 main 上 `showcase/**` 或自身配置变更自动发布，PR 仅检查，保留 main 手动运行用于重试；本地 YAML 条件检查、格式与 hygiene 4/4 通过。
-
-独立查询本次 `d514e30` 的[showcase-pages #1](https://github.com/zzugbb/InsightAgent/actions/runs/38020458507)，build 与 deploy 均成功，包括 npm ci、展示检查、静态导出、产物上传与发布。[release-gate #67](https://github.com/zzugbb/InsightAgent/actions/runs/38020458522)也已通过；[backend-e2e #234](https://github.com/zzugbb/InsightAgent/actions/runs/38020458657)已通过；最终记录时[frontend-e2e #217](https://github.com/zzugbb/InsightAgent/actions/runs/38020458515)仍在运行，不将其计为已通过。本机公开 API 查询曾返回匿名请求限流，随后用已连接 GitHub 的工作流 job 查询及页面核对，未读取或输出凭据，未沿用旧 CI。
-
-已实测 `https://zzugbb.github.io/InsightAgent/` 与 `/demo/`。复用现有浏览器回归逻辑，临时脚本仅将目标固定为已授权的公开 Pages 地址，不改变仓库本机 QA 入口。Chromium / Firefox / WebKit × 1440px / 390px 共 6/6，覆盖截图加载、首页四段与两图、懒加载图、节点职责/详情、自动与手动回放、案例/恢复分支切换、减少动态效果、直接访问与刷新、返回首页；无页面横向溢出、控制台/HTTP 错误或外部/API 请求。后台暂停仍用模拟可见性事件核对，不等于操作系统后台调度全面验收。结果 `/tmp/insightagent-showcase-browser-online.json`，临时入口 `/tmp/insightagent-showcase-online-verify.mjs`，线上首屏桌面/手机截图已目视复核；Codex 内置浏览器也核对了首页与进入案例的自动回放。
-
-本次仅发布经过复核的静态展示产物；没有启动完整应用、调用模型、上传私人数据/密钥、修改容器/存储或执行数据迁移。原始计划 SHA256 保持既有值。README 中此前的未发布/手动发布说明按维护者要求暂缓同步，本节与展示专题记录实际状态；未更新仓库 About/Website 或添加 README 线上链接。公开展示上线不替代真实业务签收、完整应用部署及备份恢复验收。
+2026-10-10：更新项目入口与上线状态，将展示规划和重复阶段记录合并为维护说明及当前基线。22 份跟踪 Markdown 的 221 个本地链接/锚点有效，513 份跟踪文本的对外文案已核对；原应用与展示源码、案例数据未修改。hygiene 4/4，原始只读计划 SHA256 不变。未重跑无关应用全量、调用模型或操作数据服务；此项仅为文档核对，不扩大运行与部署验收范围。
 
 ## 本机检查入口
 
@@ -174,7 +134,7 @@ backend/.venv/bin/python scripts/export_acceptance_evidence.py \
 
 更新：2026-10-09。使用已保存的智谱 `glm-5.3` remote 设置，服务为本机 `8000` / `3001` 与真实 PostgreSQL/Chroma；不记录凭据或私人对话，不计作镜像或目标部署实测。历史验收会话与独立合成库保留，临时日志消失不推翻本文件记录。
 
-**最近原四场景 3/4 完整通过，明确表达式的独立分支恢复 1/1。** 同会话续算回答正确但规划回退未调用要求的计算工具，成功分支不覆盖该结果。业务资料、目标用户、供应商账单及部署未验收，范围见[验证基线](acceptance.md#验证基线)。
+**最近原四场景 3/4 完整通过，明确表达式的独立分支恢复 1/1。** 同会话续算回答正确但规划回退未调用要求的计算工具，成功分支不覆盖该结果。业务资料、目标用户、供应商账单及完整应用部署未验收，范围见[验证基线](acceptance.md#验证基线)。
 
 ### 最近复验（2026-10-09）
 

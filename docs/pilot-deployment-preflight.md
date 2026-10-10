@@ -1,5 +1,7 @@
 # 试点部署指南
 
+本指南用于完整应用；已上线的 GitHub Pages 静态展示不需要这些服务，发布维护见[展示说明](showcase.md)。
+
 此流程用于单机试点的配置、镜像与环境验证；目标部署尚未验收。仓库中的 `compose.full.yml` 是开发栈，包含 `--reload`、`npm run dev`、启动时安装依赖及默认 PostgreSQL 密码，不作为试点部署文件。单机试点使用 `compose.pilot.yml` 和 `scripts/pilot_compose.py`；目标主机需要另行提供 HTTPS 代理、证书及访问控制。
 
 已有候选的本地联调属于历史替身证据，不包含最新源码维护。实际发布须从待发布源码重新构建配对，记录仓库镜像摘要并联调；本指南不默认认可任何旧 tag。范围见[验证基线](acceptance.md#验证基线)。

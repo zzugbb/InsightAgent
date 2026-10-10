@@ -4,7 +4,13 @@
 
 InsightAgent 把对话、知识检索、工具执行和结果回放放在同一个工作台中。用户可以查看一项任务如何规划、调用了哪些工具、检索到哪些来源，以及回答如何流式生成；任务结束后，执行轨迹与用量仍可查询、导出和复核。
 
-[快速开始](#快速开始) · [使用示例](#使用示例) · [架构](docs/architecture.md) · [配置](docs/configuration.md) · [文档](docs/README.md) · [贡献](CONTRIBUTING.md)
+[在线展示](https://zzugbb.github.io/InsightAgent/) · [案例回放](https://zzugbb.github.io/InsightAgent/demo/) · [快速开始](#快速开始) · [架构](docs/architecture.md) · [文档](docs/README.md) · [贡献](CONTRIBUTING.md)
+
+无需安装即可在展示站查看系统分层、任务执行流程，以及知识检索/计算和失败分支恢复的交互回放。展示站读取预设公开记录；实际提问、导入资料和调用模型请运行完整工作台。
+
+![InsightAgent 工作台：对话与执行轨迹](showcase/public/workbench.png)
+
+截图使用真实工作台界面，通过隔离 HTTP fixture 加载公开案例；素材来源见[说明](showcase/data/README.md)。
 
 ## 核心能力
 
@@ -57,6 +63,7 @@ flowchart LR
 InsightAgent/
 ├── backend/       FastAPI、执行器、持久化、Provider 与回归测试
 ├── frontend/      工作台、Trace、治理页面与浏览器测试
+├── showcase/      GitHub Pages 静态展示、交互架构与公开案例回放
 ├── scripts/       发布门禁、验收、镜像与备份演练工具
 └── docs/          架构、契约、操作指南与验收证据
 ```
@@ -114,14 +121,14 @@ PostgreSQL 保存消息、任务、Trace 和用量；Chroma 保存会话级 Memo
 
 ## 项目状态
 
-独立[公开展示应用](showcase/README.md)已实现首页与两个预设案例的交互回放：真实知识检索/计算，以及受控失败与真实模型独立恢复分支。首页按核心能力、系统架构、任务执行与工程实践四段组织，两张图直接展示、节点可点击；执行图进入视野播放一次；案例进入或主动切换后自动回放一次，提供暂停、观察提示和查看全图。无需登录、后端或模型 Key，可静态构建，目标为同仓库 GitHub Pages（推送只检查，main 手动运行才发布）；本地结果见[验收基线](docs/acceptance.md#公开项目展示)，当前尚未公开发布，不代表完整应用已部署。固定范围见[展示说明](docs/showcase.md)。
+[公开展示站](https://zzugbb.github.io/InsightAgent/)已部署至 GitHub Pages。main 上展示目录或发布工作流的改动自动检查、构建并发布，PR 只检查。站点无需登录、后端或模型 Key；[展示说明](docs/showcase.md)记录页面与素材边界，[展示 README](showcase/README.md)提供本地运行与发布命令，[验收基线](docs/acceptance.md#公开项目展示)记录线上验证。
 
-本地实现与工程收尾完成，现阶段按可复现问题维护。后端、前端、浏览器、隔离存储、真实 GLM 与候选镜像各有独立验证范围，详见[验证基线](docs/acceptance.md#验证基线)与[真实模型记录](docs/acceptance.md#真实模型记录)。真实业务资料、目标用户签收和部署环境尚未验收，外部试点/生产就绪未获验证。
+完整应用的本地实现与工程收尾已完成，现阶段按可复现问题维护。后端、前端、浏览器、隔离存储、真实 GLM 与历史候选镜像各有独立验证范围，详见[验证基线](docs/acceptance.md#验证基线)与[真实模型记录](docs/acceptance.md#真实模型记录)。完整应用的目标部署、真实业务资料和用户签收尚未验收；静态展示上线不代表完整应用已生产就绪。
 
 写入工具并行、HTTP/DAG checkpoint 延期；PDF/Office/OCR 导入、内建网页搜索和图编辑器不在当前实现范围。开发与测试命令见[贡献指南](CONTRIBUTING.md)和[运行手册](docs/development-runbook.md)，业务任务复核见[验收指南](docs/acceptance.md)。
 
 ## 文档与维护
 
-从[文档导航](docs/README.md)按使用、开发、运行或验收查找资料。接口与实现入口分别见[后端 README](backend/README.md)、[前端 README](frontend/README.md)；契约变更记录见[API 变更记录](docs/api-changelog.md)。
+从[文档导航](docs/README.md)按展示、使用、维护或验收查找资料。接口与实现入口分别见[后端 README](backend/README.md)、[前端 README](frontend/README.md)和[展示 README](showcase/README.md)；契约变更记录见[API 变更记录](docs/api-changelog.md)。
 
 README 提供项目与模块入口，专题文档维护稳定行为，验证基线记录当前状态和证据。贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)，安全问题见 [SECURITY.md](SECURITY.md)。项目采用 [MIT License](LICENSE)。

@@ -10,9 +10,12 @@
 | 实际开发配置 | `backend/.env` 或进程环境；进程环境覆盖文件值 | 不提交 |
 | 用户模型设置 | 登录 → 模型设置；用户范围的 PostgreSQL 记录 | 不提交数据库/导出 |
 | 前端 API 地址 | `NEXT_PUBLIC_API_BASE_URL`，浏览器请求地址 | 仅公开地址可进入构建 |
+| 展示路径前缀 | `showcase/` 的 `NEXT_PUBLIC_BASE_PATH`，Pages 使用 `/InsightAgent`，本地默认空 | 公开路径，可进入构建 |
 | 试点部署配置 | 仓库外、仅操作员可读的 env，交给 `pilot_compose.py` | 不提交 |
 
 后端配置由 `app/config.py` 读取，修改进程配置需重启对应实例。用户设置覆盖已保存的 mode/provider/model/profile/source；未设置的连接字段继承服务端默认值。没有用户记录时使用默认配置，provider/model/key 齐备时可自动选择 remote。
+
+静态展示不设置后端 API 地址或模型变量；路径前缀只控制静态链接，不提供模型连接。运行与发布见[展示 README](../showcase/README.md)。
 
 ## 真实模型 Key 的使用路径
 

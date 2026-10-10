@@ -2,7 +2,8 @@
 
 按任务选择阅读入口：
 
-- **开始使用**：[项目 README](../README.md) → [模型与凭据配置](configuration.md)。
+- **先看展示**：[在线展示](https://zzugbb.github.io/InsightAgent/) → [案例回放](https://zzugbb.github.io/InsightAgent/demo/) → [展示与发布](showcase.md)。
+- **运行完整应用**：[项目 README](../README.md#快速开始) → [模型与凭据配置](configuration.md)。
 - **理解与开发**：[架构](architecture.md) → [后端](../backend/README.md) / [前端](../frontend/README.md) → [贡献指南](../CONTRIBUTING.md)。
 - **运行与排障**：[开发手册](development-runbook.md) → [部署与恢复](pilot-deployment-preflight.md)。
 - **核对完成范围**：[验证基线](acceptance.md#验证基线) → [真实模型记录](acceptance.md#真实模型记录) → [业务验收](acceptance.md#业务-rag)。
@@ -17,7 +18,7 @@
 | [RAG导入](rag-background-ingest.md) | 文件预算、持久队列、批次/权限与部分失败 |
 | [开发手册](development-runbook.md) | 检查、服务、Docker/e2e、诊断、权限与提交 |
 | [部署与恢复](pilot-deployment-preflight.md) | 镜像、预检、HTTPS、升级回滚、离线备份/恢复 |
-| [公开项目展示](showcase.md) | 独立展示应用、两个案例交互回放、固定范围与发布边界 |
+| [公开展示与发布](showcase.md) | 已上线静态站、交互与素材边界、自动发布与维护 |
 | [验收](acceptance.md) | 业务复核、签收、验证基线及真实模型证据 |
 | [API变更](api-changelog.md) | OpenAPI指纹与兼容性审查 |
 
