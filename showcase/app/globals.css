@@ -372,9 +372,8 @@ nav a:hover,
   display: flex;
   gap: 22px;
 }
-.engineering-list article > span {
-  font-family: monospace;
-  font-size: 14px;
+.engineering-list article > svg {
+  flex-shrink: 0;
   color: var(--accent);
   padding-top: 4px;
 }
@@ -1379,4 +1378,46 @@ nav a:hover,
   padding: 0 16px 10px;
   font-size: 11px;
   color: var(--muted);
+}
+.graph-fit-button {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+.graph-fit-button:hover {
+  background: var(--elevated);
+}
+.prompt-panel p.case-observation {
+  color: var(--muted);
+  font-size: 12px;
+  padding-top: 14px;
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.case-observation span {
+  display: block;
+  color: var(--accent);
+  font-size: 11px;
+  margin-bottom: 5px;
+}
+
+.demo-heading .replay-autoplay-hint {
+  font-size: 12px;
+  margin-top: 8px;
+}
+.replay-manual-hint {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .replay-auto-hint {
+    display: none;
+  }
+  .replay-manual-hint {
+    display: inline;
+  }
 }

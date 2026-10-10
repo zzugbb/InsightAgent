@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Markdown from "react-markdown";
 import {
@@ -24,6 +24,8 @@ const TraceGraph = dynamic(() => import("./trace-graph"), {
   loading: () => <p className="empty-trace">正在加载流程图…</p>,
 });
 const runs = records as unknown as Run[];
+const mayAutoplay = () =>
+  !document.hidden && !matchMedia("(prefers-reduced-motion: reduce)").matches;
 export function ReplayWorkbench() {
   const [caseId, setCaseId] = useState("rag");
   const [branch, setBranch] = useState("failure");
@@ -31,18 +33,45 @@ export function ReplayWorkbench() {
   const [playing, setPlaying] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [view, setView] = useState("timeline");
+  const initialPlaybackHandled = useRef(false);
   const run = runs.find(
     (item) => item.id === (caseId === "rag" ? "rag" : branch),
   )!;
   const visible = run.steps.slice(0, count);
   const done = count === run.steps.length;
   const activeStep = visible.find((step) => step.id === selected);
-  const reset = () => {
+  const reset = (autoplay = false) => {
+    initialPlaybackHandled.current = true;
     setCount(0);
-    setPlaying(false);
+    setPlaying(autoplay && mayAutoplay());
     setSelected(null);
   };
-  const select = useCallback((id: string) => setSelected(id), []);
+  const select = useCallback((id: string) => {
+    initialPlaybackHandled.current = true;
+    setPlaying(false);
+    setSelected(id);
+  }, []);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      if (initialPlaybackHandled.current) return;
+      initialPlaybackHandled.current = true;
+      setPlaying(mayAutoplay());
+    });
+    const motion = matchMedia("(prefers-reduced-motion: reduce)");
+    const stop = () => {
+      if (document.hidden || motion.matches) {
+        initialPlaybackHandled.current = true;
+        setPlaying(false);
+      }
+    };
+    document.addEventListener("visibilitychange", stop);
+    motion.addEventListener("change", stop);
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener("visibilitychange", stop);
+      motion.removeEventListener("change", stop);
+    };
+  }, []);
   useEffect(() => {
     if (!playing || count >= run.steps.length) return;
     const timer = setTimeout(() => {
@@ -69,6 +98,14 @@ export function ReplayWorkbench() {
         <div>
           <h1>展开一次执行。</h1>
           <p>沿着 Trace 查看任务如何规划、调用工具并形成回答。</p>
+          <p className="replay-autoplay-hint">
+            <span className="replay-auto-hint">
+              进入或切换后播放一次，可随时暂停。
+            </span>
+            <span className="replay-manual-hint">
+              已减少动态效果，点击播放查看记录。
+            </span>
+          </p>
         </div>
         <span className="replay-label">
           <span className="status-dot" />
@@ -80,8 +117,9 @@ export function ReplayWorkbench() {
           aria-pressed={caseId === "rag"}
           className={caseId === "rag" ? "active" : ""}
           onClick={() => {
+            if (caseId === "rag") return;
             setCaseId("rag");
-            reset();
+            reset(true);
           }}
         >
           <span>01</span>知识检索与计算
@@ -90,9 +128,10 @@ export function ReplayWorkbench() {
           aria-pressed={caseId === "recovery"}
           className={caseId === "recovery" ? "active" : ""}
           onClick={() => {
+            if (caseId === "recovery") return;
             setCaseId("recovery");
             setBranch("failure");
-            reset();
+            reset(true);
           }}
         >
           <span>02</span>失败与分支恢复
@@ -105,8 +144,9 @@ export function ReplayWorkbench() {
             <button
               aria-pressed={branch === "failure"}
               onClick={() => {
+                if (branch === "failure") return;
                 setBranch("failure");
-                reset();
+                reset(true);
               }}
             >
               原任务 · 受控失败
@@ -115,8 +155,9 @@ export function ReplayWorkbench() {
             <button
               aria-pressed={branch === "recovery"}
               onClick={() => {
+                if (branch === "recovery") return;
                 setBranch("recovery");
-                reset();
+                reset(true);
               }}
             >
               独立分支 · 真实模型
@@ -128,6 +169,14 @@ export function ReplayWorkbench() {
       <div className="prompt-panel">
         <span className="detail-label">任务输入</span>
         <p>{run.prompt}</p>
+        <p className="case-observation">
+          <span>重点看什么</span>
+          {run.id === "rag"
+            ? "展开检索与计算节点，核对 budget.md 的来源、版本，以及 14 万元对应的工具结果。"
+            : run.id === "failure"
+              ? "先查看原任务在哪一步失败，再切换独立分支；原失败记录不会被恢复结果覆盖。"
+              : "展开计算节点，核对 (2 + 3) × 2 = 10 的实际执行；这个分支重新规划，不是从失败步骤接着运行。"}
+        </p>
       </div>
       <section className="replay-surface" aria-label="执行记录回放">
         <div className="replay-toolbar">
@@ -136,6 +185,7 @@ export function ReplayWorkbench() {
               className="button primary compact"
               aria-label={playing ? "暂停回放" : done ? "重新播放" : "播放回放"}
               onClick={() => {
+                initialPlaybackHandled.current = true;
                 if (done) {
                   setCount(0);
                   setSelected(null);
@@ -149,7 +199,7 @@ export function ReplayWorkbench() {
             <button
               className="icon-button"
               aria-label="复位回放"
-              onClick={reset}
+              onClick={() => reset()}
             >
               <RotateCcw size={17} />
             </button>

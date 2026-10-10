@@ -10,9 +10,7 @@ export function StepDetail({ step }: { step: TraceStepPayload | undefined }) {
       <div className="detail-empty">
         <FileText size={28} />
         <h3>执行记录已准备就绪</h3>
-        <p>
-          点击播放，或选择已经展示的节点，查看这一阶段的实际输入、输出与来源。
-        </p>
+        <p>回放逐步呈现记录；选择已显示的节点，查看实际输入、输出与来源。</p>
       </div>
     );
   const tool = step.meta?.tool;

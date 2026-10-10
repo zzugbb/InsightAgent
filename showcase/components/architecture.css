@@ -1,0 +1,302 @@
+.section.architecture {
+  grid-template-columns: 1fr;
+  gap: 30px;
+}
+.architecture .section-heading {
+  display: block;
+}
+.architecture-explorer {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.architecture-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.architecture-caption {
+  font-size: 12px;
+  color: var(--muted);
+}
+.architecture-reduced-hint {
+  display: none;
+}
+.architecture-canvas,
+.architecture-loading {
+  height: 520px;
+}
+.architecture-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.architecture-graph-node {
+  width: 156px;
+  min-height: 86px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid #37424f;
+  border-radius: 6px;
+  padding: 14px;
+  transition:
+    border-color 160ms,
+    background 160ms,
+    box-shadow 160ms;
+}
+.architecture-graph-node span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+.architecture-graph-node strong {
+  font-size: 16px;
+  font-weight: 600;
+}
+.architecture-graph-node:hover,
+.architecture-graph-node[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: #14281d;
+}
+.architecture-graph-node[aria-pressed="true"] {
+  box-shadow: 0 0 20px #22c55e15;
+}
+.architecture-graph-node[aria-pressed="true"] span {
+  color: #9aefb9;
+}
+.architecture-canvas-label {
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.architecture-canvas-label > span:last-child {
+  margin-left: 12px;
+  font-size: 11px;
+}
+.architecture-zoom {
+  display: flex;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.architecture-zoom button {
+  background: transparent;
+  border: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+.architecture-zoom button:hover {
+  background: var(--elevated);
+}
+.architecture-playback {
+  border-top: 1px solid var(--line);
+  padding: 20px 22px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 30px;
+  align-items: center;
+}
+.architecture-progress {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.architecture-narration {
+  font-size: 13px;
+  line-height: 1.8;
+  min-height: 46px;
+}
+.architecture-steps {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  padding: 0 22px 22px;
+  gap: 8px;
+}
+.architecture-steps button {
+  border: 0;
+  border-top: 2px solid var(--line);
+  background: transparent;
+  text-align: left;
+  padding: 10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.architecture-steps button span {
+  font-size: 10px;
+  display: block;
+  margin-bottom: 4px;
+}
+.architecture-steps button[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.architecture-inspector {
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  display: grid;
+  grid-template-columns: 180px 1fr auto;
+  gap: 30px;
+  padding: 24px 22px;
+  align-items: start;
+  min-height: 148px;
+}
+.architecture-inspector h3 {
+  font-size: 20px;
+  margin-top: 6px;
+}
+.architecture-inspector small {
+  font-size: 11px;
+  color: var(--muted);
+}
+.architecture-inspector p {
+  font-size: 13px;
+  color: var(--text);
+}
+.architecture-inspector .architecture-boundary {
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.architecture-inspector a {
+  font-size: 12px;
+  white-space: nowrap;
+}
+.architecture-explorer > .architecture-note {
+  font-size: 12px;
+  margin: 0;
+  padding: 16px 22px;
+  border-top: 1px solid var(--line);
+}
+.architecture-overview {
+  max-width: 730px;
+  padding: 40px 24px 30px;
+  margin: auto;
+}
+.architecture-overview .arch-branches > button {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid #526071;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  padding: 20px 10px;
+  position: relative;
+}
+.architecture-overview .arch-branches > button:before {
+  content: "";
+  height: 26px;
+  border-left: 1px solid #526071;
+  position: absolute;
+  top: -26px;
+}
+.architecture-overview button:hover,
+.architecture-overview button[aria-pressed="true"] {
+  background: #14281d;
+  border-color: var(--accent);
+}
+@media (max-width: 900px) {
+  .architecture-inspector {
+    grid-template-columns: 145px 1fr;
+    gap: 20px;
+  }
+  .architecture-inspector a {
+    grid-column: 2;
+  }
+  .architecture-playback {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+}
+@media (max-width: 640px) {
+  .architecture .section-heading {
+    display: block;
+  }
+  .architecture .section-heading h2 {
+    font-size: 26px;
+  }
+  .architecture-toolbar {
+    padding: 12px;
+  }
+  .architecture-canvas-label > span:last-child {
+    display: none;
+  }
+  .architecture-toolbar {
+    flex-wrap: wrap;
+    gap: 6px 16px;
+  }
+  .architecture-caption {
+    font-size: 11px;
+  }
+  .architecture-canvas,
+  .architecture-loading {
+    height: 350px;
+  }
+  .architecture-playback,
+  .architecture-inspector {
+    padding: 18px;
+  }
+  .architecture-playback .play-controls {
+    width: auto;
+  }
+  .architecture-progress {
+    margin-left: auto;
+  }
+  .architecture-steps {
+    grid-template-columns: repeat(4, 1fr);
+    padding: 0 18px 18px;
+    row-gap: 14px;
+  }
+  .architecture-inspector {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    min-height: 235px;
+  }
+  .architecture-inspector a {
+    grid-column: 1;
+  }
+  .architecture-inspector h3 {
+    font-size: 18px;
+  }
+  .architecture-explorer > .architecture-note {
+    padding: 14px 18px;
+    font-size: 11px;
+  }
+  .architecture-overview {
+    padding: 30px 14px 24px;
+  }
+  .architecture-overview .arch-branches > button {
+    padding: 15px 3px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .architecture-autoplay-hint {
+    display: none;
+  }
+  .architecture-reduced-hint {
+    display: inline;
+  }
+  .architecture-explorer *,
+  .architecture-explorer *:before,
+  .architecture-explorer *:after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -4,13 +4,14 @@ import {
   Play,
   Layers3,
   GitBranch,
-  Database,
-  Radio,
-  Terminal,
   BookOpen,
   Check,
 } from "lucide-react";
 import { repository } from "../lib/labels";
+import {
+  ArchitectureExplorer,
+  SystemArchitectureExplorer,
+} from "../components/architecture-explorer";
 export default function Home() {
   return (
     <main id="main">
@@ -64,7 +65,7 @@ export default function Home() {
       </section>
       <section className="section capabilities">
         <div className="section-heading">
-          <span className="section-number">01 / 能力</span>
+          <span className="section-number">01 / 核心能力</span>
           <h2>
             回答之外，
             <br />
@@ -103,61 +104,34 @@ export default function Home() {
       </section>
       <section className="section architecture">
         <div className="section-heading">
-          <span className="section-number">02 / 架构</span>
+          <span className="section-number">02 / 系统架构</span>
           <h2>
             界面、执行与存储，
             <br />
             各有清晰边界。
           </h2>
         </div>
-        <div className="architecture-content">
-          <div
-            className="architecture-diagram"
-            aria-label="Next.js 通过 REST 和 SSE 访问 FastAPI；后端调用模型、PostgreSQL 和 Chroma"
-          >
-            <div className="arch-node">
-              <Layers3 />
-              <strong>Next.js</strong>
-              <span>工作台 · Trace</span>
-            </div>
-            <div className="arch-connector">REST / SSE</div>
-            <div className="arch-node">
-              <Terminal />
-              <strong>FastAPI</strong>
-              <span>规划 · 工具 · worker</span>
-            </div>
-            <div className="arch-branches">
-              <div>
-                <Radio />
-                <strong>模型 API</strong>
-                <span>规划 / 流式回答</span>
-              </div>
-              <div>
-                <Database />
-                <strong>PostgreSQL</strong>
-                <span>业务历史 / 执行账本</span>
-              </div>
-              <div>
-                <Database />
-                <strong>Chroma</strong>
-                <span>Memory / RAG 向量</span>
-              </div>
-            </div>
-          </div>
-          <p className="architecture-note">
-            这是完整应用的架构。当前展示站独立静态运行，不连接后端、数据库或模型
-            API。
-          </p>
+        <SystemArchitectureExplorer />
+      </section>
+      <section className="section architecture execution">
+        <div className="section-heading">
+          <span className="section-number">03 / 任务执行</span>
+          <h2>
+            从输入到回答，
+            <br />
+            沿着执行流程看一遍。
+          </h2>
         </div>
+        <ArchitectureExplorer />
       </section>
       <section className="section engineering">
         <div className="section-heading">
-          <span className="section-number">03 / 工程</span>
+          <span className="section-number">04 / 工程实践</span>
           <h2>可展示，也可核查。</h2>
         </div>
         <div className="engineering-list">
           <article>
-            <span>01</span>
+            <Check size={18} />
             <div>
               <h3>实时流与增量同步</h3>
               <p>
@@ -167,7 +141,7 @@ export default function Home() {
             </div>
           </article>
           <article>
-            <span>02</span>
+            <Check size={18} />
             <div>
               <h3>有界执行与恢复</h3>
               <p>
@@ -176,7 +150,7 @@ export default function Home() {
             </div>
           </article>
           <article>
-            <span>03</span>
+            <Check size={18} />
             <div>
               <h3>契约与回归验证</h3>
               <p>
