@@ -12,7 +12,7 @@
 
 ## 目录与运行
 
-展示应用位于同一仓库的 `showcase/`，独立依赖、构建和运行。GitHub Pages 工作流只构建该目录并发布静态导出产物；推送和 PR 只检查，main 手动运行才发布。项目子路径通过构建时的公开前缀适配，本地根路径预览保留。
+展示应用位于同一仓库的 `showcase/`，独立依赖、构建和运行。GitHub Pages 工作流只构建该目录并发布静态导出产物；main 上展示目录或发布工作流改动自动构建并发布，PR 只检查；保留 main 手动运行入口。项目子路径通过构建时的公开前缀适配，本地根路径预览保留。
 
 ```text
 showcase/
@@ -90,10 +90,10 @@ showcase/
 | 隔离 | 静态构建成功，无模型或完整应用 API 请求，不需要登录、Key 或数据服务 |
 | 素材 | 提交与构建无秘密或私人内容，公开截图和案例已复核 |
 | 文档 | 三个 README 按影响同步，运行说明、范围和验证基线一致，源码入口可用 |
-| 发布 | 单独授权后启用 GitHub Pages 并手动公开发布，实测后再添加有效展示链接 |
+| 发布 | 维护者已授权启用 GitHub Pages；main 相关改动自动发布，实测后记录结果，README 与仓库链接按维护者要求暂缓更新 |
 
 按影响验证展示应用和共享组件；纯文档整理检查链接与 hygiene，不重复无关全量测试。旧 CI、真实模型或镜像结果不算新展示应用验证。
 
-交付顺序为范围整理 → 应用与素材制作 → 本地验证 → 单独授权后的推送/公开发布。当前工作流不随 GitHub push 自动发布；只有 main 上手动运行才发布。当前没有为本项目创建云资源或发布。
+交付顺序为范围整理 → 应用与素材制作 → 本地验证 → 单独授权后的推送/公开发布。维护者已授权推送与公开发布；main 上展示目录或发布工作流变更自动发布，PR 不发布，main 手动运行可用于重试。README 与仓库展示链接本轮不更新。当前没有为本项目创建云资源或发布。
 
 平台依据：[GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages)、[发布工作流](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)。免费额度有限，不承诺站点永久可用。
