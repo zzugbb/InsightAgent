@@ -8,6 +8,14 @@ InsightAgent 把对话、知识检索、工具执行和结果回放放在同一�
 
 无需安装即可在展示站查看系统分层、任务执行流程，以及知识检索/计算和失败分支恢复的交互回放。展示站读取预设公开记录；实际提问、导入资料和调用模型请运行完整工作台。
 
+## 项目演示
+
+74 秒动画概览，介绍项目架构、知识检索、工具执行与轨迹复核。下方可直接播放 720p 版本（约 9.3 MB）。
+
+https://github.com/user-attachments/assets/4693b09a-d3b0-4af6-a1ee-d9c25a971a72
+
+[下载 1080p 原片（约 28 MB）](https://github.com/zzugbb/InsightAgent/raw/refs/heads/main/docs/assets/insightagent-demo-1080p.mp4) · [打开交互展示](https://zzugbb.github.io/InsightAgent/)
+
 ![InsightAgent 工作台：对话与执行轨迹](showcase/public/workbench.png)
 
 截图使用真实工作台界面，通过隔离 HTTP fixture 加载公开案例；素材来源见[说明](showcase/data/README.md)。
