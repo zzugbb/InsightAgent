@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 使用与排障指南
+    url: https://github.com/zzugbb/InsightAgent/blob/main/SUPPORT.md
+    about: 先查文档与已有问题，区分完整应用和静态展示。
+  - name: 安全漏洞报告
+    url: https://github.com/zzugbb/InsightAgent/security/policy
+    about: 按安全政策联系维护者，不在公开 Issue 中披露漏洞细节或凭据。

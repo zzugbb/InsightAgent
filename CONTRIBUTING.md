@@ -33,6 +33,8 @@ backend/.venv/bin/python backend/scripts/check_api_surface.py
 
 ## 问题报告与审查
 
+先按[求助说明](SUPPORT.md)查文档和已有 Issue，再从[Issue 入口](https://github.com/zzugbb/InsightAgent/issues/new/choose)选择缺陷报告、改进建议或使用问题模板。仍保留空白 Issue 供其他协作事项及不含敏感细节的联系请求使用。
+
 普通问题记录源码提交、环境类别、脱敏的复现步骤、预期/实际结果及相关检查。不要上传真实 env、API Key、登录 token、密码、数据库备份或私人会话；安全问题先按 [SECURITY.md](SECURITY.md) 私密披露。
 
-PR 描述以问题和最终行为开头，附实际完成的验证及边界；未执行的检查明确标注。贡献遵循项目现有 [MIT License](LICENSE)。
+创建 PR 时使用[仓库模板](.github/pull_request_template.md)，描述以问题和最终行为开头，附实际完成的验证及边界；未执行的检查明确标注。贡献遵循项目现有 [MIT License](LICENSE)。

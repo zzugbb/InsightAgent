@@ -7,6 +7,7 @@
 - **理解与开发**：[架构](architecture.md) → [后端](../backend/README.md) / [前端](../frontend/README.md) → [贡献指南](../CONTRIBUTING.md)。
 - **运行与排障**：[开发手册](development-runbook.md) → [部署与恢复](pilot-deployment-preflight.md)。
 - **核对完成范围**：[验证基线](acceptance.md#验证基线) → [真实模型记录](acceptance.md#真实模型记录) → [业务验收](acceptance.md#业务-rag)。
+- **求助与反馈**：[求助说明](../SUPPORT.md) → [Issue 入口](https://github.com/zzugbb/InsightAgent/issues/new/choose)；提交变更见[贡献指南](../CONTRIBUTING.md)。
 
 | 文档 | 用途 |
 | --- | --- |

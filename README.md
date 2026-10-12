@@ -175,4 +175,4 @@ PostgreSQL 保存消息、任务、Trace 和用量；Chroma 保存会话级 Memo
 
 从[文档导航](docs/README.md)按展示、使用、维护或验收查找资料。接口与实现入口分别见[后端 README](backend/README.md)、[前端 README](frontend/README.md)和[展示 README](showcase/README.md)；契约变更记录见[API 变更记录](docs/api-changelog.md)。
 
-README 提供项目与模块入口，专题文档维护稳定行为，验证基线记录当前状态和证据。贡献流程见[贡献指南](CONTRIBUTING.md)，社区协作遵循[行为准则](CODE_OF_CONDUCT.md)，安全问题见 [SECURITY.md](SECURITY.md)。项目采用 [MIT License](LICENSE)。
+README 提供项目与模块入口，专题文档维护稳定行为，验证基线记录当前状态和证据。使用问题与反馈入口见[求助说明](SUPPORT.md)，贡献流程见[贡献指南](CONTRIBUTING.md)，社区协作遵循[行为准则](CODE_OF_CONDUCT.md)，安全问题见 [SECURITY.md](SECURITY.md)。项目采用 [MIT License](LICENSE)。
