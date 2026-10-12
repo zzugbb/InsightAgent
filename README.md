@@ -1,19 +1,30 @@
-# InsightAgent
+<h1 align="center">InsightAgent</h1>
 
-[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![CI](https://github.com/zzugbb/InsightAgent/actions/workflows/release-gate.yml/badge.svg?branch=main&event=push)](https://github.com/zzugbb/InsightAgent/actions/workflows/release-gate.yml?query=branch%3Amain "main 最近一次发布门禁运行")
-[![Backend E2E](https://github.com/zzugbb/InsightAgent/actions/workflows/backend-e2e.yml/badge.svg?branch=main&event=push)](https://github.com/zzugbb/InsightAgent/actions/workflows/backend-e2e.yml?query=branch%3Amain "main 最近一次后端 E2E 运行")
-[![Frontend E2E](https://github.com/zzugbb/InsightAgent/actions/workflows/frontend-e2e.yml/badge.svg?branch=main&event=push)](https://github.com/zzugbb/InsightAgent/actions/workflows/frontend-e2e.yml?query=branch%3Amain "main 最近一次前端 E2E 运行")
-[![Pages](https://github.com/zzugbb/InsightAgent/actions/workflows/showcase-pages.yml/badge.svg?branch=main&event=push)](https://github.com/zzugbb/InsightAgent/actions/workflows/showcase-pages.yml?query=branch%3Amain "main 最近一次静态展示发布运行")
-[![Live Demo](https://img.shields.io/badge/Demo-Live-0ea5e9.svg)](https://zzugbb.github.io/InsightAgent/)
+<p align="center">
+  <strong>可视化、可解释、工具驱动的 AI Agent 工作台</strong>
+</p>
 
-**可视化、可解释、工具驱动的 AI Agent 工作台。**
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License"></a>
+  <a href="https://zzugbb.github.io/InsightAgent/"><img src="https://img.shields.io/badge/Demo-Live-0ea5e9.svg" alt="Live Demo"></a>
+  <a href="https://github.com/zzugbb/InsightAgent/actions/workflows/showcase-pages.yml?query=branch%3Amain" title="main 最近一次静态展示发布运行"><img src="https://github.com/zzugbb/InsightAgent/actions/workflows/showcase-pages.yml/badge.svg?branch=main&amp;event=push" alt="Pages"></a>
+  <br>
+  <a href="https://github.com/zzugbb/InsightAgent/actions/workflows/release-gate.yml?query=branch%3Amain" title="main 最近一次发布门禁运行"><img src="https://github.com/zzugbb/InsightAgent/actions/workflows/release-gate.yml/badge.svg?branch=main&amp;event=push" alt="CI"></a>
+  <a href="https://github.com/zzugbb/InsightAgent/actions/workflows/backend-e2e.yml?query=branch%3Amain" title="main 最近一次后端 E2E 运行"><img src="https://github.com/zzugbb/InsightAgent/actions/workflows/backend-e2e.yml/badge.svg?branch=main&amp;event=push" alt="Backend E2E"></a>
+  <a href="https://github.com/zzugbb/InsightAgent/actions/workflows/frontend-e2e.yml?query=branch%3Amain" title="main 最近一次前端 E2E 运行"><img src="https://github.com/zzugbb/InsightAgent/actions/workflows/frontend-e2e.yml/badge.svg?branch=main&amp;event=push" alt="Frontend E2E"></a>
+</p>
 
-InsightAgent 把对话、知识检索、工具执行和结果回放放在同一个工作台中。用户可以查看一项任务如何规划、调用了哪些工具、检索到哪些来源，以及回答如何流式生成；任务结束后，执行轨迹与用量仍可查询、导出和复核。
+<p align="center">
+  <a href="https://zzugbb.github.io/InsightAgent/">在线展示</a> ·
+  <a href="#项目演示">视频演示</a> ·
+  <a href="https://zzugbb.github.io/InsightAgent/demo/">案例回放</a> ·
+  <a href="#快速开始">快速开始</a> ·
+  <a href="docs/architecture.md">架构</a> ·
+  <a href="docs/README.md">文档</a> ·
+  <a href="CONTRIBUTING.md">贡献</a>
+</p>
 
-[在线展示](https://zzugbb.github.io/InsightAgent/) · [视频演示](#项目演示) · [案例回放](https://zzugbb.github.io/InsightAgent/demo/) · [快速开始](#快速开始) · [架构](docs/architecture.md) · [文档](docs/README.md) · [贡献](CONTRIBUTING.md)
-
-无需安装即可在展示站查看系统分层、任务执行流程，以及知识检索/计算和失败分支恢复的交互回放。展示站读取预设公开记录；实际提问、导入资料和调用模型请运行完整工作台。
+---
 
 ## 项目演示
 
@@ -23,11 +34,22 @@ https://github.com/user-attachments/assets/4693b09a-d3b0-4af6-a1ee-d9c25a971a72
 
 [下载 1080p 原片（约 28 MB）](https://github.com/zzugbb/InsightAgent/raw/refs/heads/main/docs/assets/insightagent-demo-1080p.mp4) · [打开交互展示](https://zzugbb.github.io/InsightAgent/)
 
+### 交互展示与工作台
+
+无需安装即可在展示站查看系统分层、任务执行流程，以及知识检索/计算和失败分支恢复的交互回放。展示站读取预设公开记录；实际提问、导入资料和调用模型请运行完整工作台。
+
+<details>
+<summary>查看工作台截图：对话与执行轨迹</summary>
+
 ![InsightAgent 工作台：对话与执行轨迹](showcase/public/workbench.png)
 
 截图使用真实工作台界面，通过隔离 HTTP fixture 加载公开案例；素材来源见[说明](showcase/data/README.md)。
 
+</details>
+
 ## 核心能力
+
+InsightAgent 把对话、知识检索、工具执行和结果回放放在同一个工作台中。用户可以查看一项任务如何规划、调用了哪些工具、检索到哪些来源，以及回答如何流式生成；任务结束后，执行轨迹与用量仍可查询、导出和复核。
 
 | 能力 | 当前实现 |
 | --- | --- |
@@ -89,6 +111,8 @@ InsightAgent/
 
 本地基线：Python 3.14、Node.js 24+、Docker Desktop / Docker Compose，以及可用的 PostgreSQL 和 Chroma。以下命令在项目根目录执行；首次安装需联网。
 
+### 1. 安装依赖
+
 ```bash
 python3.14 -m venv backend/.venv
 backend/.venv/bin/python -m pip install -r backend/requirements.txt
@@ -96,21 +120,31 @@ npm --prefix frontend ci
 cp backend/.env.example backend/.env
 ```
 
+### 2. 准备存储
+
 **已有运行实例时先检查端口与健康状态，不要重复启动或重建存储。** 首次使用、没有既有数据容器时启动依赖：
 
 ```bash
 docker compose -f compose.full.yml up -d postgres chroma
 ```
 
+### 3. 启动应用
+
 分别在两个终端启动应用：
+
+**后端**
 
 ```bash
 backend/.venv/bin/python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
 ```
 
+**前端**
+
 ```bash
 npm --prefix frontend run dev
 ```
+
+### 4. 登录与模型配置
 
 打开 [工作台](http://127.0.0.1:3001/)，注册并登录；首个注册账号具有管理员角色。默认 mock 模式可验证离线演示路径。使用真实模型时，在“模型设置”中填写 remote、模型、兼容 API 地址和 Key，校验后保存。Key 仅发送给后端，不进入前端构建；连接校验不等于真实任务验收。
 
