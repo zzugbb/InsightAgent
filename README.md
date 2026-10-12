@@ -1,5 +1,12 @@
 # InsightAgent
 
+[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/zzugbb/InsightAgent/actions/workflows/release-gate.yml/badge.svg?branch=main&event=push)](https://github.com/zzugbb/InsightAgent/actions/workflows/release-gate.yml?query=branch%3Amain "main 最近一次发布门禁运行")
+[![Backend E2E](https://github.com/zzugbb/InsightAgent/actions/workflows/backend-e2e.yml/badge.svg?branch=main&event=push)](https://github.com/zzugbb/InsightAgent/actions/workflows/backend-e2e.yml?query=branch%3Amain "main 最近一次后端 E2E 运行")
+[![Frontend E2E](https://github.com/zzugbb/InsightAgent/actions/workflows/frontend-e2e.yml/badge.svg?branch=main&event=push)](https://github.com/zzugbb/InsightAgent/actions/workflows/frontend-e2e.yml?query=branch%3Amain "main 最近一次前端 E2E 运行")
+[![Pages](https://github.com/zzugbb/InsightAgent/actions/workflows/showcase-pages.yml/badge.svg?branch=main&event=push)](https://github.com/zzugbb/InsightAgent/actions/workflows/showcase-pages.yml?query=branch%3Amain "main 最近一次静态展示发布运行")
+[![Live Demo](https://img.shields.io/badge/Demo-Live-0ea5e9.svg)](https://zzugbb.github.io/InsightAgent/)
+
 **可视化、可解释、工具驱动的 AI Agent 工作台。**
 
 InsightAgent 把对话、知识检索、工具执行和结果回放放在同一个工作台中。用户可以查看一项任务如何规划、调用了哪些工具、检索到哪些来源，以及回答如何流式生成；任务结束后，执行轨迹与用量仍可查询、导出和复核。
