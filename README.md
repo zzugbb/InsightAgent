@@ -4,7 +4,7 @@
 
 InsightAgent 把对话、知识检索、工具执行和结果回放放在同一个工作台中。用户可以查看一项任务如何规划、调用了哪些工具、检索到哪些来源，以及回答如何流式生成；任务结束后，执行轨迹与用量仍可查询、导出和复核。
 
-[在线展示](https://zzugbb.github.io/InsightAgent/) · [案例回放](https://zzugbb.github.io/InsightAgent/demo/) · [快速开始](#快速开始) · [架构](docs/architecture.md) · [文档](docs/README.md) · [贡献](CONTRIBUTING.md)
+[在线展示](https://zzugbb.github.io/InsightAgent/) · [视频演示](#项目演示) · [案例回放](https://zzugbb.github.io/InsightAgent/demo/) · [快速开始](#快速开始) · [架构](docs/architecture.md) · [文档](docs/README.md) · [贡献](CONTRIBUTING.md)
 
 无需安装即可在展示站查看系统分层、任务执行流程，以及知识检索/计算和失败分支恢复的交互回放。展示站读取预设公开记录；实际提问、导入资料和调用模型请运行完整工作台。
 
