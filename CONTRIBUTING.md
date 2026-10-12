@@ -2,6 +2,8 @@
 
 欢迎提交可复现问题、文档修正和围绕项目定位的改进。新功能先说明真实使用场景、外部契约影响及验证方式；当前维护以既有能力的问题修复为主。
 
+参与 Issue、PR、代码审查和其他项目交流时，请遵循[行为准则](CODE_OF_CONDUCT.md)，尊重参与者并围绕问题和证据讨论。
+
 ## 开发准备
 
 按照[根 README](README.md#快速开始)准备 Python 3.14、Node.js 24+ 与本地依赖。运行前阅读 [AGENTS.md](AGENTS.md) 和[开发运行手册](docs/development-runbook.md)。已有 PostgreSQL / Chroma 数据需保留；不要为了测试重建开发数据库，集成测试使用独立 fixture。

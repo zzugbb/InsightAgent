@@ -22,4 +22,4 @@
 | [验收](acceptance.md) | 业务复核、签收、验证基线及真实模型证据 |
 | [API变更](api-changelog.md) | OpenAPI指纹与兼容性审查 |
 
-README 提供使用与模块入口，专题维护稳定行为，验收文档记录验证范围和证据。变更时更新受影响主题；开发过程从 Git 历史查询。维护规则见 [AGENTS](../AGENTS.md)，授权与安全问题见 [LICENSE](../LICENSE)、[SECURITY](../SECURITY.md)。
+README 提供使用与模块入口，专题维护稳定行为，验收文档记录验证范围和证据。变更时更新受影响主题；开发过程从 Git 历史查询。维护规则见 [AGENTS](../AGENTS.md)，社区协作见[行为准则](../CODE_OF_CONDUCT.md)，授权与安全问题见 [LICENSE](../LICENSE)、[SECURITY](../SECURITY.md)。

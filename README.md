@@ -38,14 +38,9 @@ https://github.com/user-attachments/assets/4693b09a-d3b0-4af6-a1ee-d9c25a971a72
 
 无需安装即可在展示站查看系统分层、任务执行流程，以及知识检索/计算和失败分支恢复的交互回放。展示站读取预设公开记录；实际提问、导入资料和调用模型请运行完整工作台。
 
-<details>
-<summary>查看工作台截图：对话与执行轨迹</summary>
-
 ![InsightAgent 工作台：对话与执行轨迹](showcase/public/workbench.png)
 
 截图使用真实工作台界面，通过隔离 HTTP fixture 加载公开案例；素材来源见[说明](showcase/data/README.md)。
-
-</details>
 
 ## 核心能力
 
@@ -180,4 +175,4 @@ PostgreSQL 保存消息、任务、Trace 和用量；Chroma 保存会话级 Memo
 
 从[文档导航](docs/README.md)按展示、使用、维护或验收查找资料。接口与实现入口分别见[后端 README](backend/README.md)、[前端 README](frontend/README.md)和[展示 README](showcase/README.md)；契约变更记录见[API 变更记录](docs/api-changelog.md)。
 
-README 提供项目与模块入口，专题文档维护稳定行为，验证基线记录当前状态和证据。贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)，安全问题见 [SECURITY.md](SECURITY.md)。项目采用 [MIT License](LICENSE)。
+README 提供项目与模块入口，专题文档维护稳定行为，验证基线记录当前状态和证据。贡献流程见[贡献指南](CONTRIBUTING.md)，社区协作遵循[行为准则](CODE_OF_CONDUCT.md)，安全问题见 [SECURITY.md](SECURITY.md)。项目采用 [MIT License](LICENSE)。
